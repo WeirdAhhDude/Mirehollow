@@ -15,6 +15,11 @@ reputations evolve on their own. You're the only human in town.
 
 Updates install over the previous version and keep your save (all builds are signed with the same key).
 
+**Backups:** ⚙️ → Settings & AI → **Export backup** saves one `.json` file wherever you choose (Downloads, Drive…).
+It holds everything: your game (bonds, memories, money, items, reputation, story log, plans, parties, followers,
+time of day), every character edit, uploaded portraits and your settings. Your API key is never included.
+**Import backup** (also reachable from the title screen) restores it on any phone; older pasted exports still work.
+
 ## Turning on the AI villagers (OpenRouter)
 
 The game works offline with simple canned dialogue, but it's meant to be played with AI:

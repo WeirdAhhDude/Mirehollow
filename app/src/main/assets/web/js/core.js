@@ -189,6 +189,53 @@ window.MH = window.MH || {};
     await MH.idb.del('portrait_' + id);
     MH.applyCharEdits(id);
   };
+  // ---------- full backup: game + character edits + uploaded portraits + settings (never the API key) ----------
+  MH.backup = {
+    async build() {
+      MH.save();
+      const state = (MH.state && !MH.titleMode) ? MH.state : MH.store.get('save', null);
+      const portraits = {};
+      for (const id in MH.charEdits) if (MH.charEdits[id].customPortrait) { const url = await MH.idb.get('portrait_' + id); if (url) portraits[id] = url; }
+      const settings = Object.assign({}, MH.settings); delete settings.apiKey;
+      return { format: 'mirehollow-backup', version: 1, exported: new Date().toISOString(), state, charEdits: MH.charEdits, portraits, settings };
+    },
+    async export() {
+      const b = await MH.backup.build();
+      const text = JSON.stringify(b);
+      const day = b.state && b.state.time ? b.state.time.day + 1 : 0;
+      const name = 'mirehollow-backup' + (day ? '-day' + day : '') + '.json';
+      if (MH.isNative() && window.AndroidBridge.saveFile) window.AndroidBridge.saveFile(name, text);
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+      return Object.keys(b.portraits).length;
+    },
+    async import(text) {
+      const data = JSON.parse(text);
+      if (data && data.format === 'mirehollow-backup') {
+        if (data.state && (!data.state.npcs || !data.state.player)) throw new Error('bad backup');
+        // character edits & portraits
+        for (const id in MH.charEdits) if (MH.charEdits[id].customPortrait) await MH.idb.del('portrait_' + id);
+        MH.charEdits = data.charEdits || {};
+        MH.store.set('charEdits', MH.charEdits);
+        for (const id in data.portraits || {}) await MH.idb.set('portrait_' + id, data.portraits[id]);
+        Object.keys(MH.CHAR).forEach((id) => { if (MH.CHAR[id]._orig) MH.CHAR[id].portrait = MH.CHAR[id]._orig.portrait; });
+        MH.applyCharEdits();
+        await MH.loadCustomPortraits();
+        // settings (keep this device's API key)
+        if (data.settings) { const key = MH.settings.apiKey; Object.assign(MH.settings, data.settings); MH.settings.apiKey = key; MH.saveSettings(); }
+        if (data.state) MH.backup.loadGame(data.state);
+        return !!data.state;
+      }
+      if (!data || !data.npcs || !data.player) throw new Error('bad save');
+      MH.backup.loadGame(data); // older export: just the game
+      return true;
+    },
+    loadGame(st) {
+      if (MH.chat && MH.chat.active) MH.chat.end();
+      MH.loadState(st);
+      MH.save();
+    },
+  };
+
   MH.loadCustomPortraits = async function () {
     for (const id in MH.charEdits) {
       if (!MH.charEdits[id].customPortrait || !MH.CHAR[id]) continue;

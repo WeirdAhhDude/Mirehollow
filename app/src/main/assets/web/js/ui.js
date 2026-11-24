@@ -581,7 +581,8 @@
       <label>Time speed (game minutes per real second)</label>
       <select id="sTime"><option value="0.5">0.5 (relaxed)</option><option value="1">1 (default — a day lasts 24 min)</option><option value="2">2 (fast)</option></select>
       <h4>Save data</h4>
-      <div class="row wrap"><button class="btn small ghost" id="sExport">Export save</button><button class="btn small ghost" id="sImport">Import save</button><button class="btn small danger" id="sReset">Delete save</button></div>
+      <div class="row wrap"><button class="btn small ghost" id="sExport">Export backup</button><button class="btn small ghost" id="sImport">Import backup</button><button class="btn small danger" id="sReset">Delete save</button></div>
+      <p class="muted small">The backup holds everything: your game (bonds, memories, money, items, reputation, story log, plans, parties, followers), all character edits, uploaded portraits and settings — but not your API key.</p>
       <p class="muted small">AI calls this session: <span id="sCalls">${MH.ai.stats.calls}</span> · tokens: ${MH.ai.stats.tokens}</p>
       <div class="row"><button class="btn" id="sDone">Save settings</button></div></div>`);
     body.querySelector('#sAmb').value = S.ambient;
@@ -642,19 +643,29 @@
       box.querySelector('#mSearch').oninput = (e) => render(e.target.value);
       render('');
     };
-    body.querySelector('#sExport').onclick = () => {
-      MH.save();
-      const data = JSON.stringify(MH.state);
-      if (MH.isNative() && window.AndroidBridge.share) window.AndroidBridge.share(data);
-      else { const ta = h(`<textarea class="dump" readonly></textarea>`); ta.value = data; body.appendChild(ta); ta.select(); }
+    body.querySelector('#sExport').onclick = async () => {
+      apply();
+      const n = await MH.backup.export();
+      ui.toast(MH.isNative() ? `Choose where to save the backup (${n} custom portrait${n === 1 ? '' : 's'} included)` : 'Backup downloaded', 4);
     };
     body.querySelector('#sImport').onclick = () => {
-      const f = h(`<div class="form"><p>Paste an exported save below. This replaces your current game.</p><textarea class="dump" id="impTa"></textarea><div class="row"><button class="btn" id="impGo">Import</button></div></div>`);
-      ui.modal('Import save', f);
-      f.querySelector('#impGo').onclick = () => {
-        try { const st = JSON.parse(f.querySelector('#impTa').value); if (!st.npcs || !st.player) throw new Error('bad'); MH.loadState(st); ui.closeModal(); ui.toast('Save imported!'); }
-        catch (e) { ui.toast('That does not look like a Mirehollow save.'); }
+      const f = h(`<div class="form"><p>Load a Mirehollow backup file. This replaces your current game, character edits, portraits and settings (your API key is kept).</p>
+        <label class="btn" id="impFileL">📂 Choose backup file<input type="file" id="impFile" accept=".json,application/json,text/plain,*/*" hidden></label>
+        <p class="muted small">Older exports (text you copied) can still be pasted here:</p><textarea class="dump" id="impTa"></textarea><div class="row"><button class="btn small ghost" id="impGo">Import pasted text</button></div></div>`);
+      ui.modal('Import backup', f, { keep: true, onClose: () => ui.openSettings(fromTitle) });
+      const go = async (text) => {
+        if (!text || !text.trim()) return;
+        const ok = await ui.confirm('Replace your current game with this backup?', 'Import', 'Cancel');
+        if (!ok) return;
+        try {
+          const hadGame = await MH.backup.import(text);
+          if (hadGame) { ui.lockModal = false; ui.closeModal(); ui.renderParty && ui.renderParty(); }
+          else fromTitle ? ui.showTitle() : ui.closeModal();
+          ui.toast(hadGame ? 'Backup imported!' : 'Character edits & settings imported', 3);
+        } catch (e) { console.error(e); ui.toast('That does not look like a Mirehollow backup.'); }
       };
+      f.querySelector('#impFile').onchange = (e) => { const file = e.target.files && e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => go(String(r.result)); r.readAsText(file); };
+      f.querySelector('#impGo').onclick = () => go(f.querySelector('#impTa').value);
     };
     body.querySelector('#sReset').onclick = () => {
       if (!confirm('Delete your Mirehollow save? This cannot be undone.')) return;

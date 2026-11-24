@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private ValueCallback<Uri[]> fileCallback;
     private static final int PICK_FILE = 4242;
+    private static final int SAVE_FILE = 4243;
+    private String pendingSave;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -75,16 +77,22 @@ public class MainActivity extends Activity {
                 return true;
             }
 
-            // <input type="file"> → the system photo / file picker (used to upload portraits)
+            // <input type="file"> → the system photo / file picker (portrait uploads, backup import)
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
+                boolean image = false;
+                String[] accept = params != null ? params.getAcceptTypes() : null;
+                if (accept != null && accept.length > 0) {
+                    image = true;
+                    for (String a : accept) if (a == null || !a.startsWith("image")) { image = false; break; }
+                }
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType("image/*");
+                intent.setType(image ? "image/*" : "*/*");
                 try {
-                    startActivityForResult(Intent.createChooser(intent, "Choose a portrait"), PICK_FILE);
+                    startActivityForResult(Intent.createChooser(intent, image ? "Choose a portrait" : "Choose a Mirehollow backup"), PICK_FILE);
                 } catch (Exception e) {
                     fileCallback = null;
                     return false;
@@ -134,6 +142,25 @@ public class MainActivity extends Activity {
             if (resultCode == RESULT_OK && data != null && data.getData() != null) result = new Uri[]{data.getData()};
             fileCallback.onReceiveValue(result);
             fileCallback = null;
+            return;
+        }
+        if (requestCode == SAVE_FILE) {
+            final String content = pendingSave;
+            pendingSave = null;
+            if (resultCode != RESULT_OK || data == null || data.getData() == null || content == null) {
+                callJs("window.MH && MH.ui && MH.ui.toast('Backup not saved')");
+                return;
+            }
+            final Uri uri = data.getData();
+            new Thread(() -> {
+                boolean ok = false;
+                try (OutputStream os = getContentResolver().openOutputStream(uri, "wt")) {
+                    if (os != null) { os.write(content.getBytes(StandardCharsets.UTF_8)); ok = true; }
+                } catch (Exception e) {
+                    android.util.Log.e("Mirehollow", "save failed", e);
+                }
+                callJs("window.MH && MH.ui && MH.ui.toast(" + JSONObject.quote(ok ? "Backup saved ✔" : "Could not save the backup") + ", 3)");
+            }).start();
             return;
         }
         super.onActivityResult(requestCode, resultCode, data);
@@ -208,6 +235,24 @@ public class MainActivity extends Activity {
                 i.setType("text/plain");
                 i.putExtra(Intent.EXTRA_TEXT, text);
                 startActivity(Intent.createChooser(i, "Export Mirehollow save"));
+            });
+        }
+
+        /** Opens Android's "save as" screen (pick Downloads, Drive…) and writes the text there. */
+        @JavascriptInterface
+        public void saveFile(final String name, final String content) {
+            runOnUiThread(() -> {
+                pendingSave = content;
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("application/json");
+                i.putExtra(Intent.EXTRA_TITLE, name);
+                try {
+                    startActivityForResult(i, SAVE_FILE);
+                } catch (Exception e) {
+                    pendingSave = null;
+                    share(content);
+                }
             });
         }
 

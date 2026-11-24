@@ -30,7 +30,7 @@ The game works offline with simple canned dialogue, but it's meant to be played 
 4. Optionally tap **Browse** to pick a different model (default: `google/gemini-2.5-flash`, fast and cheap).
 5. **Content rules**: *Cozy (PG-13)*, *Mature (16+)* (strong language, darker themes, heavier drama, romance can go
    further, anything sexual fades to black instead of being refused) or *Custom*, where you type your own rules
-   in-game to test wording without rebuilding. In every mode a fixed rule is added: nothing sexual involving minors.
+   in-game to test wording without rebuilding. Custom rules are placed at the very top of the prompt as the highest-priority instruction and repeated at the end of every request, so they override the default cozy tone. In every mode a fixed rule is added: nothing sexual involving minors.
 6. **Model thinking**: keep it *Off* for fast replies (and so the model's reasoning never leaks into dialogue).
    *Prefer the fastest provider* asks OpenRouter for the lowest-latency host of your model.
 
@@ -60,15 +60,19 @@ Settings if you want to save credit.
 | **Your house** | Right by the west railway crossing. Inside: sleep on the futon, raid the fridge once a day, and plan parties on the low table. |
 | **Parties** | Pick a theme, place, time and guest list. Mailman Mole delivers the invitations (occasionally to the wrong house); RSVP notes trickle back; guests show up and the party becomes one big group chat. Don't skip your own party. |
 | **Events** | Weekly gatherings (Sunday Potluck, LAN Night, Lantern Evening at the shrine…). Just show up to join. See Journal → Plans. |
-| **Journal** | 📖 — every villager's bond, mood, what they think of your reputation, and what they remember about you. Also your reputation, pocket and the town map. |
+| **Jobs** | Ask for work at a shop counter (bakery, gym, General Store, club, lab, town hall, clinic, barbershop) or at the Post Office / Maggie's Stilt House: bread deliveries, litter patrol, restocking shelves, kneading dough and mixing drinks (timing minigames), being Penelope's test subject, and Maggie's very questionable blood drive. Pay depends on how well you do; one job at a time, each once a day. |
+| **Shopping** | Counters at the bakery, General Store and club bar, plus **Mirehollow Mall** (south of the square, by the park) with five kiosks: food, gifts, clothes you actually wear, home decor that appears in your house, and fun stuff (fireworks, energy drinks, lottery tickets, bug spray, party kits). Sable buys what you forage. |
+| **Favours** | Villagers sometimes ask for help (in conversation, or by walking up to you). Accept or decline; bring items with 🎁, deliver packages to the right person, go where they asked. Journal → Favours. |
+| **Reset today** | ⚙️ → 🔁 Reset today: rewind the whole day to how it started, or only make everyone forget what happened today. |
+| **Journal** | 📖 — every villager's bond, mood, what they think of your reputation, and what they remember about you. Also favours, jobs, your reputation, pocket (wardrobe & decor) and the town map. |
 | **Log** | 💬 — full history of conversations, overheard chatter and events. |
 
 ### What's simulated
 
-- **Memories** — each villager keeps their own memories of you (things you did, said, and things they heard).
+- **Memories** — each villager keeps their own memories of you (things you did, said, and things they heard). When a list gets long, the oldest memories are fused into a few summary lines overnight (by the AI if you have a key) instead of being forgotten.
 - **Mood** — changes through conversations, drifts back overnight.
 - **Bonds** — per villager, from *Nemesis* to *Best Friend*, plus free-form labels the AI can set ("rivals", "crush", "grudging respect"…).
-- **Reputation** — six traits (kind, funny, chaotic, generous, brave, rude). Each villager only knows what they **witnessed** or **heard through gossip**, and each one values different traits — Dionne loves chaos, Kira hates it. One villager can like you *because* of your reputation while another can't stand you for the same thing.
+- **Reputation** — seven traits (kind, funny, chaotic, generous, brave, rude, violent). A good name builds slowly (good deeds count for about half) and a bad one spreads fast (bad deeds count almost double). Hurting someone is never laughed off: the victim and witnesses react for real, and villagers who think you're violent become **afraid of you** — they flinch, run when you get close, and may refuse to talk. Each villager only knows what they **witnessed** or **heard through gossip**, and each one values different traits — Dionne loves chaos, Kira hates it. One villager can like you *because* of your reputation while another can't stand you for the same thing.
 - **Witnesses & gossip** — anyone nearby sees what you do. Villagers who bump into each other chat (you can overhear) and pass gossip along, shifting each other's opinion of you.
 - **Approaches** — now and then (not often) a villager walks up to you on purpose: to bring up something they heard, or because they really like (or really don't like) you.
 - **Schedules** — everyone has a routine but roams between favourite haunts, so you'll have to go looking for people. Friend groups head out together (the Party Crew at the river, the nap rotation in the park…). Visitors like Nimbus and Solaris only show up some days.
@@ -93,7 +97,9 @@ keep things PG-13 and to have villagers deflect in character if pushed.
 
 ## Editing characters & portraits (in-game)
 
-Journal → Villagers → tap someone → **✏️ Edit character & portrait**. You can change their name, title,
+Journal → Villagers → tap someone → **✏️ Edit character & portrait**. **✨ Auto-fill with AI**: describe the
+character in your own words and the AI rewrites every box (title, species, bio, voice, quirks, relationships,
+notes) to match — nothing is saved until you tap Save. You can also change their name, title,
 species, personality/backstory, how they talk, quirks, relationships and extra notes for the AI, and
 **👁 Preview what the AI reads** shows the exact text sent to the model. **📷 Upload portrait** picks an image
 from your phone; sliders adjust its size and position. Edits are stored on the device (they survive new
@@ -145,6 +151,9 @@ app/src/main/assets/web/
   js/ai.js          OpenRouter client, prompt building, JSON parsing, offline fallback
   js/chat.js        conversations: chat bar, portraits, speech bubbles, group joins/leaves
   js/ui.js          HUD, journal, settings, title screen, character creator
+  js/shop.js        shops & the mall, wardrobe, home decor, usable items, selling forage
+  js/jobs.js        jobs, the timing minigame, job markers
+  js/quests.js      favours villagers ask for (accept/decline, completion checks)
   js/main.js        boot, game loop, save/load
 ```
 

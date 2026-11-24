@@ -403,8 +403,13 @@
   MH.CHAR = {};
   MH.CHARS.forEach((c) => (MH.CHAR[c.id] = c));
 
-  MH.TRAITS = ['kind', 'funny', 'chaotic', 'generous', 'brave', 'rude'];
-  MH.TRAIT_LABEL = { kind: 'Kind', funny: 'Funny', chaotic: 'Chaotic', generous: 'Generous', brave: 'Brave', rude: 'Rude' };
+  MH.TRAITS = ['kind', 'funny', 'chaotic', 'generous', 'brave', 'rude', 'violent'];
+  MH.TRAIT_LABEL = { kind: 'Kind', funny: 'Funny', chaotic: 'Chaotic', generous: 'Generous', brave: 'Brave', rude: 'Rude', violent: 'Violent' };
+  // how much each villager minds a violent player (everyone else: -2)
+  const VIOLENT = { kira: -0.5, maggie: -0.5, darkborn: 0.5, chuckles: -1, gertie: -1, box: -1, nimbus: -1.5, solaris: -1.5, zahra: -1 };
+  MH.CHARS.forEach((c) => { if (c.values && c.values.violent == null) c.values.violent = VIOLENT[c.id] != null ? VIOLENT[c.id] : -2; });
+  // villagers who don't scare easily (they get angry instead of afraid)
+  MH.TOUGH = ['kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable'];
 
   MH.bondTier = (b) =>
     b <= -60 ? 'Nemesis' : b <= -25 ? 'Hostile' : b <= -6 ? 'Wary' : b < 15 ? 'Acquaintance' : b < 40 ? 'Friendly' : b < 70 ? 'Close Friend' : 'Best Friend';

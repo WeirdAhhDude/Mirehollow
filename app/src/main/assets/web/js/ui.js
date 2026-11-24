@@ -12,6 +12,7 @@
     $('#btnLog').onclick = () => ui.toggleLog();
     $('#btnMenu').onclick = () => ui.openMenu();
     $('#logClose').onclick = () => ui.toggleLog(false);
+    $('#jobPill').onclick = () => ui.openJournal('jobs');
     MH.on('target', (t) => {
       const b = $('#btnA');
       b.classList.toggle('on', !!t);
@@ -178,12 +179,13 @@
 
   // ------------------------------------------------------------ journal
   ui.openJournal = function (tab = 'villagers') {
-    const body = h(`<div class="journal"><nav class="tabs"><button data-t="villagers">Villagers</button><button data-t="plans">Plans</button><button data-t="you">You</button><button data-t="pocket">Pocket</button><button data-t="town">Map</button></nav><div class="tabbody"></div></div>`);
+    const body = h(`<div class="journal"><nav class="tabs"><button data-t="villagers">Villagers</button><button data-t="plans">Plans</button><button data-t="quests">Favours</button><button data-t="jobs">Jobs</button><button data-t="you">You</button><button data-t="pocket">Pocket</button><button data-t="town">Map</button></nav><div class="tabbody"></div></div>`);
     const tb = body.querySelector('.tabbody');
     const show = (t) => {
       body.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.t === t));
       tb.innerHTML = '';
-      tb.appendChild(({ villagers: tabVillagers, plans: tabPlans, you: tabYou, pocket: tabPocket, town: tabTown })[t]());
+      tb.appendChild(({ villagers: tabVillagers, plans: tabPlans, quests: () => MH.quests.tabEl(), jobs: () => MH.jobs.boardEl(null, () => show('jobs')), you: tabYou, pocket: tabPocket, town: tabTown })[t]());
+      const sel = body.querySelector('.tabs .sel'); if (sel) sel.scrollIntoView({ inline: 'center', block: 'nearest' });
     };
     body.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => show(b.dataset.t)));
     ui.modal('Journal', body, { cls: 'wide' });
@@ -345,6 +347,10 @@
       <label>Move left / right <small id="pexV"></small></label><input type="range" id="peX" min="-45" max="45" step="1">
       <p class="muted small">The dashed line is roughly where speech bubbles sit (over the head).</p>
       <h4>What the AI knows about ${MH.esc(ch.name)}</h4>
+      <div class="autofill"><label>✨ Auto-fill with AI <small>(describe them in your own words — the AI rewrites every box below to match)</small></label>
+        <textarea id="peAuto" rows="3" placeholder="e.g. a grumpy retired pirate otter who runs the bait shop, secretly writes poetry and has a crush on Marina…"></textarea>
+        <div class="row wrap"><button class="btn small" id="peAutoGo">✨ Fill all boxes</button><label class="toggle small"><input type="checkbox" id="peKeepName" checked> keep the current name</label></div>
+        <p class="muted small" id="peAutoMsg">Nothing is saved until you tap Save, so you can try again.</p></div>
       <label>Name</label><input id="peName" maxlength="40">
       <label>Title</label><input id="peTitle" maxlength="60">
       <label>Species</label><input id="peSpecies" maxlength="80">
@@ -377,6 +383,28 @@
       catch (err) { ui.toast('Could not read that image.'); }
     };
     $b('#peNoPic').onclick = () => { removePic = true; newPic = null; pic = (ch._orig && ch._orig.portrait) || MH.art.portraitURL(ch); preview(); };
+    $b('#peAutoGo').onclick = async () => {
+      const desc = $b('#peAuto').value.trim();
+      if (!desc) { ui.toast('Describe the character first.'); return; }
+      if (!MH.ai.hasKey()) { ui.toast('Auto-fill needs an OpenRouter key (Settings & AI).', 4); return; }
+      const btn = $b('#peAutoGo'), msg = $b('#peAutoMsg');
+      btn.disabled = true; btn.textContent = '✨ Writing…'; msg.textContent = 'The AI is writing the character sheet…';
+      const cur = { name: $b('#peName').value.trim(), title: $b('#peTitle').value.trim(), species: $b('#peSpecies').value.trim(), bio: $b('#peBio').value.trim() };
+      const r = await MH.ai.autofillChar(id, desc, $b('#peKeepName').checked, cur);
+      btn.disabled = false; btn.textContent = '✨ Fill all boxes';
+      if (r.error) { msg.textContent = '❌ ' + r.error; return; }
+      const f = r.fields;
+      if (f.name && !$b('#peKeepName').checked) $b('#peName').value = f.name;
+      if (f.title) $b('#peTitle').value = f.title;
+      if (f.species) $b('#peSpecies').value = f.species;
+      if (f.bio) $b('#peBio').value = f.bio;
+      if (f.voice) $b('#peVoice').value = f.voice;
+      if (f.quirks) $b('#peQuirks').value = f.quirks;
+      if (f.rel != null) $b('#peRel').value = f.rel;
+      if (f.notes != null) $b('#peNotes').value = f.notes;
+      msg.textContent = '✔ Filled in. Read it over, tweak anything, then tap Save.';
+      $b('#peName').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
     $b('#pePreview').onclick = () => {
       const pre = $b('.pe-ai');
       saveFields(true);
@@ -441,7 +469,7 @@
   function tabYou() {
     const P = MH.state.player;
     const d = h(`<div class="you"><div class="phead"><canvas class="pv"></canvas><div class="pmeta"><h3>${MH.esc(P.name)}</h3><div class="ptitle">${MH.esc(P.pronouns)} · new in town · ${P.coins} coins</div><button class="btn small" id="editLook">Change look</button></div></div>
-      <h4>Your reputation in town</h4><div class="reps"></div><p class="muted small">Everyone only knows what they saw or heard through gossip, so each villager has their own idea of you.</p>
+      <h4>Your reputation in town</h4><div class="reps"></div><p class="muted small">Everyone only knows what they saw or heard through gossip, so each villager has their own idea of you. A good name builds slowly; a bad one spreads fast.</p>${(() => { const sc = MH.ALL.filter((c) => MH.social.isAfraid(c.id)).length; return sc ? `<p class="fearnote">😨 ${sc} villager${sc > 1 ? 's are' : ' is'} afraid of you.</p>` : ''; })()}
       <h4>Things people saw you do</h4><ul class="mems">${P.deeds.slice().reverse().map((x) => `<li><i>${MH.esc(MH.agoStr(x.t))}</i> ${MH.esc(x.text)}</li>`).join('') || '<li class="muted">Nothing noteworthy yet.</li>'}</ul></div>`);
     const reps = d.querySelector('.reps');
     MH.TRAITS.forEach((t) => {
@@ -459,10 +487,35 @@
     const it = d.querySelector('.items');
     if (!P.inv.length) it.appendChild(h(`<div class="empty">Empty. Pick flowers (🌼), berries, mushrooms, seashells… or charm a villager into giving you something.</div>`));
     P.inv.forEach((x, i) => {
-      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}<button class="drop" title="Drop">✕</button></div>`);
-      b.querySelector('.drop').onclick = () => { P.inv.splice(i, 1); ui.openJournal('pocket'); };
+      const use = MH.shop && MH.shop.usable(x);
+      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}${use ? `<button class="use">${use.cat === 'food' ? 'Eat' : 'Use'}</button>` : ''}<button class="drop" title="Drop">✕</button></div>`);
+      b.querySelector('.drop').onclick = async () => { if (x.quest && !(await ui.confirm(`Throw away ${x.name}? It's for a favour you promised.`, 'Throw away', 'Keep'))) return; P.inv.splice(i, 1); ui.openJournal('pocket'); };
+      if (use) b.querySelector('.use').onclick = () => { MH.shop.use(i); if (ui.modalOpen) ui.openJournal('pocket'); };
       it.appendChild(b);
     });
+    // wardrobe: things you bought to wear
+    const wr = (P.wardrobe || []);
+    const ward = h(`<div><h4>👕 Wardrobe</h4><div class="wardrobe"></div></div>`);
+    if (!wr.length) ward.querySelector('.wardrobe').appendChild(h('<p class="muted small">Nothing yet — the Boutique at Mirehollow Mall (south of the square) sells hats, glasses, scarves…</p>'));
+    wr.forEach((acc) => {
+      const item = Object.values(MH.SHOP_ITEMS).find((x) => x.wear === acc); if (!item) return;
+      const on = ((P.look && P.look.acc) || []).includes(acc);
+      const b = h(`<button class="chip ${on ? 'sel' : ''}">${item.icon} ${MH.esc(item.name)}</button>`);
+      b.onclick = () => { MH.shop.wear(acc, !on); ui.openJournal('pocket'); };
+      ward.querySelector('.wardrobe').appendChild(b);
+    });
+    d.appendChild(ward);
+    // home decor
+    const dec = h(`<div><h4>🏠 Home decor</h4><ul class="mems decor"></ul></div>`);
+    const dl = dec.querySelector('.decor');
+    if (!(P.decor || []).length) dl.appendChild(h('<li class="muted">Your house could use some love. Try Home & Decor at the mall.</li>'));
+    (P.decor || []).forEach((id, i) => {
+      const item = MH.SHOP_ITEMS[id]; if (!item) return;
+      const li = h(`<li>${item.icon} ${MH.esc(item.name)} ${MH.shop.decorPlaced(id, i) ? '' : '<i>(in storage — your house is full)</i>'} <button class="btn small ghost">Sell (${Math.floor(item.price / 2)} 🪙)</button></li>`);
+      li.querySelector('button').onclick = () => { MH.shop.sellDecor(i); ui.openJournal('pocket'); };
+      dl.appendChild(li);
+    });
+    d.appendChild(dec);
     return d;
   }
 
@@ -527,7 +580,7 @@
 
   // ------------------------------------------------------------ pause menu & settings
   ui.openMenu = function () {
-    const body = h(`<div class="menu"><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="journal">Journal</button><button class="btn" data-a="settings">Settings & AI</button><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="help">How to play</button><button class="btn ghost" data-a="title">Back to title</button></div>`);
+    const body = h(`<div class="menu"><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="journal">Journal</button><button class="btn" data-a="settings">Settings & AI</button><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="reset">🔁 Reset today</button><button class="btn ghost" data-a="help">How to play</button><button class="btn ghost" data-a="title">Back to title</button></div>`);
     ui.modal('Mirehollow', body);
     body.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
@@ -536,8 +589,27 @@
       if (a === 'settings') ui.openSettings();
       if (a === 'save') { MH.save(); ui.toast('Saved.'); ui.closeModal(); }
       if (a === 'help') ui.openHelp();
+      if (a === 'reset') ui.openDayReset();
       if (a === 'title') { MH.save(); ui.closeModal(); ui.showTitle(); }
     }));
+  };
+
+  ui.openDayReset = function () {
+    const can = MH.dayReset.canRewind();
+    const body = h(`<div class="form"><p>Did today go sideways? Two ways to start over:</p>
+      <button class="btn" id="drRewind" ${can ? '' : 'disabled'}>⏪ Rewind the whole day</button>
+      <p class="muted small">${can ? 'Back to how everything was when this day started: memories, bonds, money, reputation, items, plans — all of it.' : 'No snapshot of this morning yet (it is taken when a new day starts or you load the game).'}</p>
+      <button class="btn ghost" id="drForget">🧠 Only forget today's memories</button>
+      <p class="muted small">Villagers forget what happened today (and today's gossip and rumours), but you keep your money, items, bonds and reputation.</p></div>`);
+    ui.modal('🔁 Reset today', body);
+    body.querySelector('#drRewind').onclick = async () => {
+      if (!(await ui.confirm('Rewind to the start of today? Everything since then is undone.', 'Rewind', 'Cancel'))) return;
+      ui.closeModal(); if (MH.dayReset.rewind()) { ui.renderParty(); ui.toast('⏪ Rewound to the start of the day.', 3); }
+    };
+    body.querySelector('#drForget').onclick = async () => {
+      if (!(await ui.confirm('Make everyone forget what happened today?', 'Forget', 'Cancel'))) return;
+      const n = MH.dayReset.forget(); ui.closeModal(); ui.toast(`🧠 ${n} memor${n === 1 ? 'y' : 'ies'} from today forgotten.`, 3);
+    };
   };
 
   ui.openHelp = function () {
@@ -546,7 +618,9 @@
       <p><b>Interact</b>: the round button on the right (or E / Space) — talk, knock on doors, pick flowers, read the board, toss a wish in the well, rest at home.</p>
       <p><b>Chat like a role-play</b>: type anything. Put actions in asterisks: <i>*offers a handshake*</i>, <i>*hides behind Vix*</i>. Villagers answer with their own actions too.</p>
       <p><b>Group chats</b>: villagers nearby can overhear and wander in (and leave when they have somewhere to be). Tap a portrait to talk to just that person; tap it again to talk to everyone. <b>… Listen</b> lets them talk among themselves. <b>📜 Log</b> shows everything that was said.</p>
-      <p><b>Shops</b>: the bakery, gym, bookstore, general store, club, town hall, clinic and barbershop can be entered during opening hours.</p>
+      <p><b>Shops</b>: the bakery, gym, bookstore, general store, club, town hall, clinic and barbershop can be entered during opening hours. Buy things at the counters; <b>Mirehollow Mall</b> (south of the square, by the park) has five kiosks: food, gifts, clothes you can wear, home decor and fun stuff. Sable at the General Store buys what you forage.</p>
+      <p><b>Jobs</b>: ask for work at a shop's counter (or at the Post Office / Maggie's Stilt House) for coins. Journal → Jobs lists them all.</p>
+      <p><b>Favours</b>: villagers sometimes ask you for help — accept or decline. Journal → Favours tracks them.</p>
       <p><b>Bonds & reputation</b>: everyone remembers what you do. Witnesses gossip. Some villagers will like you just for your reputation, others will hate you for the same thing.</p>
       <p><b>Your house</b>: it's right by the west railway crossing. Go inside to sleep, raid the fridge, and plan parties on the low table. Invite people over (or to meet somewhere) with the 🏠 button while chatting.</p>
       <p><b>Events</b>: towns gatherings happen every week (see Journal → Plans). Just show up to join.</p>

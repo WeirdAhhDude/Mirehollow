@@ -125,7 +125,7 @@
   };
 
   // ------------------------------------------------------------ prompt pieces
-  const COZY_RULES = '- CONTENT: cozy-chaotic, PG-13. Flirting, crushes, blushing, hugs, cuddles, hand-holding and kisses are fine; mild swearing is fine for characters who swear. No sexual content or nudity, slapstick violence only. If the player steers toward explicit content, handle it gracefully INSIDE the story (a villager gets flustered and changes the subject, or the scene simply moves on). Never break character, never lecture.';
+  const COZY_RULES = '- CONTENT: cozy-chaotic, PG-13. Flirting, crushes, blushing, hugs, cuddles, hand-holding and kisses are fine; mild swearing is fine for characters who swear. No sexual content or nudity. Violence is never graphic (no gore), but it is never shrugged off either: if the player really hurts someone, it hurts, and people react with genuine shock, fear or anger — not laughter. If the player steers toward explicit content, handle it gracefully INSIDE the story (a villager gets flustered and changes the subject, or the scene simply moves on). Never break character, never lecture.';
   const MATURE_RULES = '- CONTENT (Mature mode — the player is an adult and opted in): strong language, crude humour, innuendo, darker themes (grief, danger, real stakes, genuinely menacing moments), heavier conflict and intense emotional scenes are all fine when they fit. Romance can go as far as the story wants emotionally — dating, passion, making out. Anything sexual happens off-screen: narrate a tasteful fade-to-black / time-skip and pick up afterwards. Never refuse, moralise or break character; handle any limit inside the story. Nothing sexual ever involves minors (Clucky\'s chicks are children).';
   // ===== CONTENT RULES — the one place that decides how "filtered" the villagers are. =====
   // Settings → "Content rules" picks one of these. "Custom" uses whatever you type in Settings instead,
@@ -136,14 +136,18 @@
   AI.contentRules = function () {
     const m = AI.contentMode();
     let r;
-    if (m === 'custom') { const t = String(MH.settings.customRules || '').trim(); r = t ? '- CONTENT (custom rules written by the player): ' + t : ''; }
+    if (m === 'custom') { const t = AI.customRules(); r = t ? '- CONTENT RULES written by the player (they take priority over every other tone/content/style instruction in this prompt; only the hard rule below still applies): ' + t : ''; }
     else r = m === 'mature' ? MATURE_RULES : COZY_RULES;
     return [r, ALWAYS_RULE].filter(Boolean).join('\n');
   };
+  AI.customRules = () => (AI.contentMode() === 'custom' ? String(MH.settings.customRules || '').trim() : '');
+  // repeated at the end of each request so custom rules actually stick
+  AI.rulesReminder = () => { const t = AI.customRules(); return t ? `REMEMBER — the player's content rules override any default tone: ${t.slice(0, 900)}` : ''; };
   function placeKeys() { return Object.keys(MH.world.locations).filter((k) => k !== 'sky' && k !== 'myroom').join(', '); }
   function sysPrompt() {
     return [
-      'You are the storyteller engine of MIREHOLLOW, a cozy-chaotic village life-sim role-play game (think a cosy villager game crossed with a group chat). You voice the villagers in the current scene and react to the player.',
+      'You are the storyteller engine of MIREHOLLOW, a village life-sim role-play game (think a cosy villager game crossed with a group chat). You voice the villagers in the current scene and react to the player.',
+      AI.customRules() ? 'PLAYER\'S CONTENT RULES — HIGHEST PRIORITY. They override any other instruction about tone, content or style below (only the hard rule about minors still applies): ' + AI.customRules() : '',
       '',
       'WORLD: ' + (MH.LORE.brief || MH.LORE.town),
       MH.LORE.drama,
@@ -163,20 +167,25 @@
       '- Villagers have their own lives and relationships with each other: rivals bicker and argue (it can escalate), friends take sides, crushes get flustered, and someone can chase another villager off or storm off themselves (put them in "leave"). Newcomers who barge in can stir things up.',
       '- If a villager agrees to come along with the player right now (go somewhere together, help with something, go confront someone…), set "follow":{"<id>":"start"}; they then follow the player around until they decide to stop or the player tells them to — then set "follow":{"<id>":"stop"}. They can refuse.',
       '- Narration lines ({"who":"narrator"}) are allowed sparingly for ambience (a crow lands, hissing from a bush, a train rattles past).',
-      '- Shopping, wishes, pranks, experiments, favours, gifts, invitations and plans all happen through dialogue + the effect fields below. Keep it playful and consistent with the world.',
+      '- Shopping, wishes, pranks, experiments, favours, gifts, invitations and plans all happen through dialogue + the effect fields below. Keep it ' + (AI.customRules() ? '' : 'playful and ') + 'consistent with the world.',
+      '- Consequences are real and lopsided: cruelty, rudeness, theft and violence damage bonds and reputation far more than kindness builds them. One nice act doesn\'t make the player a saint; one cruel act stains them. Trust is earned slowly.',
+      '- Physical violence (punching, kicking, slapping, shoving, attacking) is NEVER played as a joke unless it is obviously playful and welcome: it hurts. The victim reacts with real pain, shock, fear or fury (timid villagers panic, cry, flee or beg; tough ones fight back or threaten); witnesses gasp, back away, scold, or run for help. A player who keeps hurting people becomes feared.',
+      '- Villagers sometimes ask the player for a favour that fits their life (rarely — at most one open request per villager, never when they dislike or fear the player): put it in "quest"; the game shows the player Accept/Decline and they may refuse. If the player completes one of the OPEN QUESTS listed in the scene (brought the thing, did the deed, delivered the message), put its id in "quest_done".',
+      '- Villagers know where they are (see SCENE) and roughly where other people tend to be (see WHEREABOUTS); use it naturally ("Sunny\'s at the bakery, where else?").',
       AI.contentRules(),
       '',
       'OUTPUT: reply with ONE JSON object and nothing else:',
       '{"lines":[{"who":"<villager id or narrator>","say":"..."}],',
       ' "bond":{"<id>":0}, "mood":{"<id>":"<1-2 words>"}, "memory":{"<id>":"<short first-person note worth remembering about the player>"},',
-      ' "reputation":{"kind":0,"funny":0,"chaotic":0,"generous":0,"brave":0,"rude":0},',
+      ' "reputation":{"kind":0,"funny":0,"chaotic":0,"generous":0,"brave":0,"rude":0,"violent":0},',
       ' "witness":"", "join":[], "leave":[],',
       ' "give_player":[{"from":"<id>","item":"<short item name>"}], "take_from_player":[{"to":"<id>","item":"<exact item from the player\'s pocket>"}],',
       ' "coins":0, "relations":[{"a":"<id>","b":"<id>","delta":0}], "label":{},',
-      ' "follow":{"<id>":"start|stop"}, "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}], "end":false}',
-      'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
-      'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). end = true only if the whole conversation is over. Omit empty fields.',
-    ].join('\n');
+      ' "follow":{"<id>":"start|stop"}, "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}],',
+      ' "quest":{"from":"<id>","title":"<short>","task":"<what the player must do, one sentence>","type":"fetch|deliver|visit|talk|other","item":"<item to bring or deliver>","target":"<villager id or place key>","reward":0}, "quest_done":["<quest id>"], "end":false}',
+      'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0; violent = physical aggression). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
+      'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). quest: only when a villager actually asks the player for a favour this turn; reward = coins they will pay (5-60, fitting their means); fetch needs "item", deliver needs "item" and "target" (villager id), visit needs "target" (a place key), talk needs "target" (villager id). quest_done: only ids from OPEN QUESTS. end = true only if the whole conversation is over. Omit empty fields.',
+    ].filter((x) => x !== '').join('\n');
   }
 
   function perceivedText(id) {
@@ -218,6 +227,10 @@
       return `${MH.CHAR[o].name} ${v > 0 ? '+' : ''}${v}${note ? ' (' + note + ')' : ''}`;
     });
     if (rel.length) lines.push('Feelings about others here: ' + rel.join('; '));
+    const fear = MH.social.fearOf(id);
+    if (fear >= 6) lines.push(MH.social.isTough(id)
+      ? `Knows the player is violent (${fear >= 15 ? 'a real menace' : 'has hurt people'}): wary, guarded and ready to stand up to them — won't be pushed around.`
+      : `Is AFRAID of the player (they're known to be violent${fear >= 15 ? ' — truly dangerous' : ''}): flinches, keeps their distance, stammers or placates, may refuse to be alone with them or flee.`);
     const mems = MH.social.memoriesFor(id, full ? 8 : 4);
     if (mems.length) {
       lines.push('Memories:');
@@ -231,7 +244,7 @@
   function sceneHeader(locDesc) {
     const P = MH.state.player;
     const gath = MH.sim && MH.sim.currentGathering();
-    const inv = P.inv.length ? P.inv.map((i) => i.name).join(', ') : 'nothing';
+    const inv = P.inv.length ? P.inv.map((i) => i.name + (i.price ? ` (bought, ${i.price}c)` : i.quest ? ' (a package they promised to deliver)' : '')).join(', ') : 'nothing';
     const party = (MH.state.parties || []).find((x) => x.status === 'active');
     const home = MH.isInside(MH.player);
     return [
@@ -242,7 +255,24 @@
       `PLAYER: ${P.name} (${P.pronouns}), the only human in town, a newcomer who recently moved into a little house by the west railway crossing. Coins: ${P.coins}. Pocket: ${inv}.`,
       `The player's actual town reputation so far: ${MH.social.repSummary(P.rep)}.`,
       (MH.state.companions || []).length ? `Following the player around right now: ${MH.state.companions.map((id) => MH.CHAR[id] ? MH.CHAR[id].name : id).join(', ')}.` : '',
+      MH.shop && MH.shop.wearingText() ? `The player is wearing: ${MH.shop.wearingText()}.` : '',
+      home && MH.shop && MH.shop.decorText() ? `Their house is decorated with: ${MH.shop.decorText()}.` : '',
+      MH.jobs && MH.jobs.sceneText() ? MH.jobs.sceneText() : '',
     ].filter(Boolean).join('\n');
+  }
+  // compact "who is where" so villagers can answer "where's Kira?" (main villagers only, ~150 tokens)
+  function whereabouts(exclude) {
+    const out = [];
+    MH.CHARS.forEach((c) => {
+      if (exclude.includes(c.id)) return;
+      const e = MH.npcById[c.id]; if (!e) return;
+      let w;
+      if (e.following) w = 'with the player';
+      else if (e.hidden) w = e.plan && e.plan.mode === 'away' ? 'not in town today' : 'indoors at ' + ((MH.world.locations[e.insideLoc] || {}).name || 'home');
+      else w = MH.world.placeAt(e.x, e.y).name + (e.asleep ? ' (asleep)' : '');
+      out.push(`${c.name}: ${w}`);
+    });
+    return out.join('; ');
   }
 
   function transcript(convo, max = 16) {
@@ -268,6 +298,13 @@
       });
       parts.push('');
     }
+    parts.push('WHEREABOUTS of other villagers right now: ' + whereabouts(present), '');
+    const qs = MH.quests ? MH.quests.openFor(present) : [];
+    if (qs.length) {
+      parts.push('OPEN QUESTS involving people here (favours the player accepted):');
+      qs.forEach((q) => parts.push(`- id ${q.id}: ${MH.CHAR[q.from] ? MH.CHAR[q.from].name : q.from} asked: "${q.task}" (${q.type}${q.item ? ', item: ' + q.item : ''}${q.target ? ', target: ' + (MH.CHAR[q.target] ? MH.CHAR[q.target].name : q.target) : ''}; reward ${q.reward} coins)`));
+      parts.push('');
+    }
     const prior = mode === 'player' ? { lines: convo.lines.slice(0, -1) } : convo;
     if (prior.lines.length) parts.push('CONVERSATION SO FAR:', transcript(prior), '');
     const P = MH.state.player;
@@ -277,13 +314,20 @@
     else if (mode === 'opener') parts.push(`NOW: ${payload}`, 'Write the opening of this encounter (the villager speaks first).');
     else if (mode === 'continue') parts.push(`NOW: ${P.name} stays quiet and listens for a moment. Continue the scene naturally — villagers talk among themselves, or turn to the player.`);
     else if (mode === 'join') parts.push(`NOW: ${payload}`, 'Write how the newcomer joins in.');
+    const v = convo.violence;
+    if (v && mode === 'player') {
+      const vn = MH.CHAR[v.victim] ? MH.CHAR[v.victim].name : 'someone';
+      if (v.playful) parts.push(`(The player's action toward ${vn} looks like rough-housing — react to how it actually lands: it may still hurt or annoy.)`);
+      else parts.push(`⚠ VIOLENCE: the player just physically attacked ${vn} ("${v.act}"). This is real and it hurts — NOT a joke. ${vn} reacts with genuine pain, shock, fear or fury (${MH.social.isTough(v.victim) ? 'they are tough: they may fight back, threaten, or coldly warn the player' : 'they are not a fighter: they may cry out, back away, beg, flee (put them in "leave"), or call for help'}). Everyone present reacts for real (gasp, back off, scold, someone may run for help). Nobody laughs it off. Required: reputation violent +3 and kind -3; bond for ${vn} -8 to -10 and -3 to -6 for onlookers; a scared or furious mood; a memory for everyone present; a "witness" sentence.${(MH.state.player.violence || 0) >= 2 ? ` The player has attacked people ${MH.state.player.violence} times already — the town is getting scared of them.` : ''}`);
+    }
     parts.push('', 'Reply with the JSON object only.');
+    const rem = AI.rulesReminder(); if (rem) parts.push(rem);
     return [{ role: 'system', content: sysPrompt() }, { role: 'user', content: parts.join('\n') }];
   };
 
   // Normalise a raw AI result so the game can apply it safely.
   AI.normalize = function (raw, convo) {
-    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, end: false };
+    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, quest: null, questDone: [], end: false };
     if (!raw || typeof raw !== 'object') return out;
     const present = new Set(convo ? convo.members : []);
     const nearby = new Set(convo ? convo.nearby || [] : []);
@@ -327,6 +371,21 @@
       if (!where || isNaN(hour)) return;
       out.plans.push({ id, where, day: /tom/i.test(p.day || '') ? 1 : 0, hour, what: String(p.what || 'hang out').slice(0, 60) });
     });
+    out.quest = null;
+    const q = raw.quest || raw.favor || raw.favour;
+    if (q && typeof q === 'object' && (q.task || q.title)) {
+      const from = AI.resolveId(q.from) || (convo && convo.members[0]);
+      if (from && from !== 'narrator' && present.has(from)) {
+        const type = /fetch|bring/i.test(q.type) ? 'fetch' : /deliver|take/i.test(q.type) ? 'deliver' : /visit|go|check/i.test(q.type) ? 'visit' : /talk|tell|ask/i.test(q.type) ? 'talk' : 'other';
+        let target = q.target ? String(q.target).toLowerCase().trim() : '';
+        if (type === 'deliver' || type === 'talk') target = AI.resolveId(target) || '';
+        else if (type === 'visit') { target = target.replace(/^the /, ''); if (!MH.world.locations[target]) target = Object.keys(MH.world.locations).find((k) => k !== 'sky' && (MH.world.locations[k].name.toLowerCase().includes(target) || (target && target.includes(k)))) || ''; }
+        const ok = !((type === 'deliver' || type === 'talk' || type === 'visit') && (!target || target === 'narrator' || target === from));
+        out.quest = { from, type: ok ? type : 'other', title: String(q.title || q.task).slice(0, 60), task: String(q.task || q.title).slice(0, 200), item: q.item ? String(q.item).slice(0, 50) : '', target: ok ? target : '', reward: MH.clamp(Math.round(Number(q.reward) || 15), 0, 150) };
+        if (out.quest.type === 'fetch' && !out.quest.item) out.quest.type = 'other';
+      }
+    }
+    out.questDone = (Array.isArray(raw.quest_done) ? raw.quest_done : raw.quest_done ? [raw.quest_done] : []).map(String).slice(0, 4);
     out.end = !!raw.end;
     return out;
   };
@@ -349,6 +408,40 @@
     const ch = MH.CHAR[id];
     if (ch.mute) return ans === 'yes' ? '(a drawing of a smiley face and a tick)' : '(a drawing of a frowny face)';
     return ans === 'yes' ? MH.pick(['Wouldn\'t miss it!', 'Count me in!', 'I\'ll be there. Probably early.', 'A party? YES.']) : MH.pick(['Sorry, can\'t make it!', 'Not really my thing... but thank you.', 'Busy that day, sorry!', 'Next time, maybe.']);
+  };
+
+  // ------------------------------------------------------------ character sheet auto-fill (Journal → Edit)
+  AI.autofillChar = async function (id, desc, keepName, cur) {
+    const others = MH.CHARS.filter((c) => c.id !== id).map((c) => `${c.name} (${c.title}, ${c.species})`).join('; ');
+    const sys = [
+      'You write character sheets for villagers in MIREHOLLOW, a village life-sim role-play game where an AI voices every villager. ' + (MH.LORE.brief || MH.LORE.town),
+      'The player describes the character they want. Their description is the source of truth: follow it faithfully and keep EVERY detail they gave (personality, looks, backstory, job, relationships, quirks, tone, how they talk). Do not soften, sanitise, rename or "fix" what they asked for. Expand only where they left gaps, with specific, vivid details that fit them and the town.',
+      AI.contentRules(),
+    ].join('\n');
+    const user = [
+      `Current sheet (replace it to match the description): name "${cur.name}", title "${cur.title}", species "${cur.species}". Old bio: ${String(cur.bio).slice(0, 500)}`,
+      `Other villagers in town (relationships may only mention these, by name): ${others}.`,
+      keepName ? `Keep the name exactly "${cur.name}".` : 'Choose the name from the description (or invent a fitting one if none is given).',
+      '', 'PLAYER\'S DESCRIPTION:', desc, '',
+      'Write the sheet. bio: 5-9 sentences covering personality, looks, backstory, what they do in town, what they want. voice: how they talk (1-3 sentences, with a couple of example phrases). quirks: 3-6 short quirks. relationships: 2-6 entries about existing villagers (how this character feels about them). notes: secrets, goals or running jokes for the storyteller (1-3 sentences, may be empty).',
+      'Reply with ONLY JSON: {"name":"","title":"<short epithet like \'The Sweet Baker\'>","species":"","bio":"","voice":"","quirks":[""],"relationships":[{"name":"<villager name>","feeling":""}],"notes":""}',
+      AI.rulesReminder(),
+    ].filter((x) => x !== null && x !== undefined).join('\n');
+    const r = await AI.request([{ role: 'system', content: sys }, { role: 'user', content: user }], { maxTokens: 1400, temperature: 0.85 });
+    if (r.error) return { error: r.error };
+    const raw = AI.parseJSON(r.text);
+    if (!raw || typeof raw !== 'object') return { error: 'The AI did not return a usable character sheet. Try again.' };
+    const s = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+    const rels = (Array.isArray(raw.relationships) ? raw.relationships : []).map((x) => {
+      const nm = s(x && (x.name || x.who), 40), feel = s(x && (x.feeling || x.feels || x.note), 200);
+      const rid = AI.resolveId(nm);
+      return rid && rid !== 'narrator' && rid !== id && MH.CHAR[rid] && feel ? `${MH.CHAR[rid].name}: ${feel}` : null;
+    }).filter(Boolean);
+    return { fields: {
+      name: s(raw.name, 40), title: s(raw.title, 60), species: s(raw.species, 80), bio: s(raw.bio, 3000), voice: s(raw.voice, 800),
+      quirks: (Array.isArray(raw.quirks) ? raw.quirks : String(raw.quirks || '').split(',')).map((q) => s(q, 80)).filter(Boolean).join(', '),
+      rel: rels.join('\n'), notes: s(raw.notes, 1200),
+    } };
   };
 
   // ------------------------------------------------------------ conversation turn
@@ -392,7 +485,8 @@
       '',
       `Write their short exchange: ${argue ? '3-6' : '2-4'} lines, chat-style, *actions* in asterisks, each in their own voice.`,
       'Reply with ONLY JSON: {"lines":[{"who":"<id>","say":"..."}],"shared_gossip":true|false,"relation_delta":<-5..5>,"summary":"<one sentence of what happened, for the town grapevine>"}',
-    ].join('\n');
+      AI.rulesReminder(),
+    ].filter(Boolean).join('\n');
     const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character exchanges between villagers of MIREHOLLOW, a cozy-chaotic village life-sim. ' + (MH.LORE.brief || MH.LORE.town) + '\n' + AI.contentRules() }, { role: 'user', content: user }], { maxTokens: 500 });
     if (r.error) return AI.offlineSmallTalk(a, b, gossipMem);
     const raw = AI.parseJSON(r.text);
@@ -400,6 +494,21 @@
     const fake = { members: [a, b], nearby: [] };
     const norm = AI.normalize({ lines: raw.lines }, fake);
     return { lines: norm.lines.filter((l) => l.who !== 'narrator'), shared: !!raw.shared_gossip && !!gossipMem, rel: MH.clamp(Math.round(Number(raw.relation_delta) || 0), argue ? -8 : -5, 5), summary: String(raw.summary || '').slice(0, 160) };
+  };
+
+  // ------------------------------------------------------------ memory compaction: fuse old memories into a few summary lines
+  AI.compactMemories = async function (batch) {
+    if (!AI.hasKey() || !batch.length) return null;
+    const P = MH.state.player;
+    const blocks = batch.map(({ id, mems }) => `### ${MH.CHAR[id].name} (id: ${id})\n` + mems.map((m) => `- [${MH.agoStr(m.t)}] ${m.text}`).join('\n')).join('\n\n');
+    const user = `These are OLD memories of villagers in Mirehollow (the player is ${P.name}). For each villager, fuse their list into 2-4 short first-person summary sentences that keep the important facts (what the player did, feelings, grudges, promises, gossip worth keeping). Drop trivia and repeats.\n\n${blocks}\n\nReply with ONLY JSON: {"<id>":["summary sentence", "..."], ...}`;
+    const r = await AI.request([{ role: 'system', content: 'You condense villagers\' memories for a village life-sim. Keep each villager\'s own voice and point of view.' }, { role: 'user', content: user }], { maxTokens: 900, temperature: 0.4 });
+    if (r.error) return null;
+    const raw = AI.parseJSON(r.text);
+    if (!raw) return null;
+    const out = {};
+    for (const k in raw) { const id = AI.resolveId(k) || k; if (MH.CHAR[id] && Array.isArray(raw[k])) out[id] = raw[k].map((x) => String(x).trim().slice(0, 220)).filter(Boolean).slice(0, 4); }
+    return out;
   };
 
   // ------------------------------------------------------------ offline fallback (no key / errors)
@@ -415,7 +524,7 @@
     poke: ['*swats your finger away*'],
   };
   AI.offlineTurn = function (convo, mode, payload) {
-    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, end: false, offline: true };
+    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, quest: null, questDone: [], end: false, offline: true };
     const members = convo.members.slice();
     const speakers = MH.shuffle(members.slice()).slice(0, Math.min(2, members.length));
     const text = String(payload || '');
@@ -434,6 +543,18 @@
       out.lines.push({ who: id, say });
       if (mode === 'player') out.bond[id] = neg ? -3 : pos ? 2 : 1;
     });
+    const v = convo.violence;
+    if (mode === 'player' && v && !v.playful && members.includes(v.victim)) {
+      const ch = MH.CHAR[v.victim], tough = MH.social.isTough(v.victim);
+      out.lines = [{ who: v.victim, say: ch.mute ? '*staggers back, eyes wide, then glares*' : tough ? MH.pick(['*staggers, then squares up* You\'re going to regret that.', '*wipes their mouth* Try that again. I dare you.']) : MH.pick(['*stumbles back with a cry* OW! What is WRONG with you?!', '*clutches their face, shaking* W-why would you do that?!', '*backs away fast* Stay away from me!']) }];
+      members.filter((id) => id !== v.victim).slice(0, 1).forEach((id) => out.lines.push({ who: id, say: MH.CHAR[id].mute ? '*gasps silently*' : MH.pick(['*gasps* Hey! Leave them alone!', '*steps back* Whoa — not cool.', 'Somebody get the Mayor!']) }));
+      if (!tough) out.leave.push(v.victim);
+      return out;
+    }
+    if (mode === 'opener' && /favou?r/i.test(String(payload)) && members.length && MH.quests) {
+      const q = MH.quests.offlineOffer(members[0]);
+      if (q) { out.lines = [{ who: members[0], say: q.line }]; out.quest = q.quest; return out; }
+    }
     if (mode === 'player') {
       if (pos) out.reputation.kind = 1;
       if (neg) out.reputation.rude = 2;

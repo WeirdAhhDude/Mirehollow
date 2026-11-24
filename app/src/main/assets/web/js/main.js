@@ -22,7 +22,10 @@
     st.grapevine = st.grapevine || [];
     st.picked = st.picked || {};
     st.player.deeds = st.player.deeds || [];
-    st.player.rep = Object.assign({ kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 }, st.player.rep || {});
+    st.player.rep = Object.assign({ kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0, violent: 0 }, st.player.rep || {});
+    for (const id in st.npcs) { const n = st.npcs[id]; n.perceived = Object.assign({ violent: 0 }, n.perceived || {}); }
+    st.player.wardrobe = st.player.wardrobe || []; st.player.decor = st.player.decor || []; st.player.violence = st.player.violence || 0;
+    st.quests = st.quests || []; st.jobsDone = st.jobsDone || {}; if (st.job === undefined) st.job = null;
     st.plans = st.plans || []; st.parties = st.parties || []; st.joined = st.joined || {}; st.companions = st.companions || [];
     if (st.lastApproach == null) st.lastApproach = -99999;
     if ((st.version || 1) < 2) { st.version = 2; st.player.tx = 37; st.player.ty = 33; } // new, bigger town
@@ -40,8 +43,43 @@
     MH.render.clearFocus();
     MH.render.snap();
     document.body.classList.remove('title');
+    afterLoad();
     MH.ui.updateHud();
     MH.emit('companions');
+  };
+  // things that live in the world but are driven by the save (decor, job litter)
+  function afterLoad() {
+    MH.shop && MH.shop.placeDecor();
+    MH.jobs && MH.jobs.restore();
+    const snap = MH.store.get('dayStart', null);
+    if (!snap || snap.day !== MH.state.time.day || snap.created !== MH.state.created) MH.daySnapshot();
+  }
+
+  // ---------- "Reset today": a snapshot of the game at the start of each day
+  MH.daySnapshot = function () {
+    if (!MH.state || MH.titleMode) return;
+    try { MH.store.set('dayStart', { day: MH.state.time.day, created: MH.state.created, state: JSON.parse(JSON.stringify(MH.state)) }); } catch (e) { console.warn('snapshot', e); }
+  };
+  MH.dayReset = {
+    canRewind() { const s2 = MH.store.get('dayStart', null); return !!(s2 && s2.state && s2.day === MH.state.time.day && s2.created === MH.state.created); },
+    // undo everything since the start of the day
+    rewind() {
+      const s2 = MH.store.get('dayStart', null); if (!s2 || !s2.state) return false;
+      if (MH.chat.active) MH.chat.end();
+      MH.loadState(JSON.parse(JSON.stringify(s2.state)));
+      MH.save();
+      return true;
+    },
+    // keep money, items, bonds etc. — only forget what was remembered today
+    forget() {
+      const st = MH.state, from = st.time.day * 1440;
+      let n = 0;
+      for (const id in st.npcs) { const m = st.npcs[id].memories; const keep = m.filter((x) => x.t < from || x.kind === 'summary'); n += m.length - keep.length; st.npcs[id].memories = keep; }
+      st.grapevine = (st.grapevine || []).filter((g) => g.t < from);
+      st.player.deeds = (st.player.deeds || []).filter((d) => d.t < from);
+      MH.save();
+      return n;
+    },
   };
 
   MH.startGame = function (st) {
@@ -60,6 +98,7 @@
     MH.render.clearFocus();
     MH.render.snap();
     document.body.classList.remove('title');
+    afterLoad();
     MH.save();
     MH.ui.updateHud();
     setTimeout(() => MH.ui.vibe('You\'ve just moved into a little house by the railway crossing in Mirehollow. The swamp is past the last lamp post. Bring bug spray.'), 500);

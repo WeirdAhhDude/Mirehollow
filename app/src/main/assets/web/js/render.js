@@ -280,6 +280,7 @@
     }
 
     drawSwarm();
+    if (MH.jobs && !MH.titleMode) MH.jobs.drawWorld(ctx, t);
     drawFx();
 
     // cloud shadows drifting over the town (outdoors only)

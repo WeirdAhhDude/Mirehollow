@@ -37,6 +37,7 @@
     club: { x0: 170, y0: 18, x1: 185, y1: 29, floor: G.CARPET, wall: '#3a2448', building: 'club', open: [18, 4], name: 'inside the Velvet Antler', desc: 'inside the Velvet Antler: thumping music, a glowing dance floor, a neon bar, a DJ booth and a hanging chair' },
     townhall: { x0: 188, y0: 18, x1: 201, y1: 27, floor: G.FLOOR, wall: '#e4dccb', building: 'townhall', open: [8, 18], name: 'inside Town Hall', desc: 'inside the crooked Town Hall: the Mayor\'s cluttered desk, rows of meeting chairs, flags and overflowing notice boards' },
     clinic: { x0: 204, y0: 18, x1: 215, y1: 26, floor: G.TILEF, wall: '#eef2f0', building: 'clinic', open: [0, 24], name: 'inside the clinic', desc: 'inside Doctor Owl\'s clinic: two patient beds, a cabinet of remedies, a desk with immaculate notes' },
+    mall: { x0: 154, y0: 43, x1: 175, y1: 55, floor: G.TILEF, wall: '#f0e6dc', building: 'mall', open: [9, 21], name: 'inside Mirehollow Mall', desc: 'inside Mirehollow Mall: a bright little shopping arcade with striped kiosks (food court, gift corner, fashion boutique, home & decor, fun zone), café tables and soft muzak' },
     barber: { x0: 154, y0: 32, x1: 163, y1: 39, floor: G.TILEF, wall: '#f2e8f2', building: 'barber', open: [9, 18], name: 'inside the barbershop', desc: 'inside the barbershop: three barber chairs, mirrors, a waiting sofa and a lot of questionable hair on the floor' },
   };
   for (const id in ROOMS) { const R = ROOMS[id]; R.id = id; R.doorX = Math.floor((R.x0 + R.x1) / 2); }
@@ -70,6 +71,7 @@
     B('den', 'Kira\'s Den', 25, 6, 7, 4, { kind: 'cave' }),
     B('station', 'Mirehollow Station', 87, 28, 10, 6, { roof: ROOF.teal, wall: '#ece4d4', kind: 'station', sign: 'MIREHOLLOW' }),
     B('shrine', 'The Old Shrine', 70, 3, 9, 5, { roof: '#4a4046', wall: '#b04a34', kind: 'shrine' }),
+    B('mall', 'Mirehollow Mall', 64, 78, 12, 6, { roof: ROOF.teal, wall: '#f2ece2', kind: 'shop', sign: 'MIREHOLLOW MALL', awning: ['#e0604a', '#fff4e8'], storeys: 2 }),
   ];
   // Generic houses for the townsfolk.
   const HOUSES = [
@@ -93,6 +95,7 @@
     store: { name: 'the General Store', r: [63, 68, 71, 69], desc: 'outside Sable\'s General Store' },
     barber: { name: 'the Barbershop', r: [84, 68, 89, 69], desc: 'outside the barbershop' },
     clinic: { name: 'the Clinic', r: [90, 68, 96, 69], desc: 'outside Doctor Owl\'s clinic' },
+    mall: { name: 'Mirehollow Mall', r: [64, 84, 76, 85], desc: 'on the forecourt of Mirehollow Mall, automatic doors whooshing' },
     coop: { name: 'the Coop', r: [6, 58, 24, 60], desc: 'in front of the Coop on Clutch Lane, chicks somewhere nearby' },
     honeycomb: { name: 'the Honeycomb', r: [25, 58, 32, 59], desc: 'outside the Honeycomb, gaming noises leaking out' },
     gym: { name: 'the Burrow Gym', r: [5, 68, 14, 70], desc: 'outside the Burrow Gym, weights clanking' },
@@ -122,7 +125,7 @@
     sky: { name: 'the sky', r: [76, 55, 80, 58], desc: 'somewhere above the clouds' },
   };
   // Public places townsfolk wander between.
-  world.PUBLIC = ['square', 'well', 'bakery', 'station', 'crossing', 'northlane', 'lanes', 'park', 'river', 'pond', 'sunflowers', 'paddies', 'busstop', 'shrine', 'store', 'postoffice', 'club'];
+  world.PUBLIC = ['square', 'well', 'bakery', 'station', 'crossing', 'northlane', 'lanes', 'park', 'river', 'pond', 'sunflowers', 'paddies', 'busstop', 'shrine', 'store', 'postoffice', 'club', 'mall', 'mall'];
 
   // ---------------------------------------------------------------- painting helpers
   function rect(x0, y0, x1, y1, fn) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (inB(x, y)) fn(x, y); }
@@ -248,6 +251,8 @@
     }
     [[42, 'West Crossing'], [79, 'Main Crossing'], [116, 'East Crossing']].forEach(([x, name]) => world.crossings.push({ x0: x, x1: x + 1, y0: 36, y1: 37, name, active: false }));
 
+    // mall forecourt + a path to the main road
+    rect(63, 84, 78, 85, (x, y) => setG(x, y, G.PLAZA));
     // --- buildings
     const addBuilding = (b) => {
       const bb = Object.assign({}, b);
@@ -343,6 +348,26 @@
     fur('barberchair', 156, 35); fur('barberchair', 158, 35); fur('barberchair', 160, 35); deco('mirror', 156, 33); deco('mirror', 158, 33); deco('mirror', 160, 33);
     prop('sofa', 161, 37, { solid: true, w: 2, interior: true }); setSolid(162, 37); fur('plant', 155, 38);
     ROOMS.barber.staff = [[157, 36], [159, 36]];
+    // the mall: five striped kiosks, a little food court
+    const KIOSKS = [['mall_food', 157, '#e0604a'], ['mall_gift', 161, '#f07ac0'], ['mall_fashion', 165, '#8a6ae0'], ['mall_home', 169, '#3fa07a'], ['mall_fun', 173, '#f0b030']];
+    KIOSKS.forEach(([shop, x, color]) => {
+      prop('stall', x, 47, { color, interior: true }); setSolid(x - 1, 47); setSolid(x + 1, 47);
+      for (const dx of [-1, 0, 1]) world.interactables.push({ type: 'counter', tx: x + dx, ty: 48, shop, label: '🛍️ ' + (MH.SHOPS && MH.SHOPS[shop] ? MH.SHOPS[shop].name : 'Shop') });
+    });
+    [[158, 51], [162, 51], [168, 51]].forEach(([x, y]) => { fur('cafetable', x, y); deco('chair', x - 1, y); deco('chair', x + 1, y); });
+    fur('plant', 155, 54); fur('plant', 174, 54); fur('plant', 155, 46); fur('plant', 174, 46); fur('drinkfridge', 172, 51);
+    prop('bench', 157, 54, { interior: true }); prop('bench', 171, 54, { interior: true });
+    ROOMS.mall.staff = [];
+    // counters: buy things and/or ask for work
+    const counter = (room, tiles, shop) => tiles.forEach(([x, y]) => world.interactables.push({ type: 'counter', tx: x, ty: y, room, shop: shop || null, label: shop ? '🛒 Counter' : '💼 Ask for work' }));
+    counter('bakery', [[174, 9], [175, 9]], 'bakery');
+    counter('store', [[160, 22], [161, 22]], 'store');
+    counter('club', [[172, 22], [173, 22]], 'club');
+    fur('desk', 188, 13, 2); counter('gym', [[188, 14], [189, 14]]);
+    counter('lab', [[210, 9], [211, 9]]);
+    counter('townhall', [[194, 22], [195, 22]]);
+    counter('clinic', [[208, 22], [209, 22]]);
+    counter('barber', [[156, 37], [157, 37]]);
     // where each room's inside counts as a location
     for (const id in ROOMS) { const R = ROOMS[id]; LOCS['in_' + id] = { name: R.name, r: [R.x0 + 1, R.y0 + 2, R.x1 - 1, R.y1 - 1], desc: R.desc, room: id }; }
 

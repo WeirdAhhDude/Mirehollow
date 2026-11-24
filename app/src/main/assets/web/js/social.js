@@ -2,7 +2,7 @@
 'use strict';
 (function (MH) {
   const S = (MH.social = {});
-  const MAX_MEM = 40;
+  const MAX_MEM = 40, COMPACT_AT = 30;
 
   // ------------------------------------------------------------ time helpers
   MH.timeOf = () => MH.state.time;
@@ -34,7 +34,7 @@
       created: Date.now(),
       player: Object.assign({
         name: 'Newcomer', pronouns: 'they/them', look: {}, tx: 37, ty: 33, coins: 40, inv: [],
-        rep: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 }, deeds: [],
+        rep: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0, violent: 0 }, deeds: [], wardrobe: [], decor: [], violence: 0,
       }, playerOpts || {}),
       time: { day: 0, minutes: 8 * 60 },
       weather: 'sunny',
@@ -48,11 +48,14 @@
       parties: [],    // parties the player is hosting
       joined: {},     // gatherings the player has attended (key: day|name)
       lastApproach: -99999,
+      quests: [],     // favours villagers asked for
+      job: null,      // the job in progress
+      jobsDone: {},   // day|jobId -> true
     };
     MH.ALL.forEach((c) => {
       st.npcs[c.id] = {
         bond: c.start.bond, mood: c.start.mood, label: '', met: false,
-        memories: [], perceived: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 },
+        memories: [], perceived: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0, violent: 0 },
         rel: Object.fromEntries(Object.entries(c.relations || {}).map(([k, v]) => [k, v[0]])),
         lastTalk: -99999, talks: 0, lastApproach: -99999,
       };
@@ -67,7 +70,7 @@
     const ch = MH.CHAR[id], n = S.npc(id);
     if (!ch || !n) return 0;
     let s = 0;
-    for (const t of MH.TRAITS) s += (ch.values[t] || 0) * (n.perceived[t] || 0);
+    for (const t of MH.TRAITS) s += (ch.values[t] != null ? ch.values[t] : t === 'violent' ? -2 : 0) * (n.perceived[t] || 0);
     return MH.clamp(Math.round(s / 3), -40, 40);
   };
   S.attitude = (id) => MH.clamp(S.npc(id).bond + S.repOpinion(id), -100, 100);
@@ -77,7 +80,7 @@
     return parts.slice(0, 4).map((t) => {
       const v = rep[t];
       const amt = Math.abs(v) >= 25 ? 'very ' : Math.abs(v) >= 10 ? '' : 'a bit ';
-      return v > 0 ? amt + t : (t === 'rude' ? 'polite' : t === 'kind' ? amt + 'unkind' : 'not ' + t);
+      return v > 0 ? amt + t : (t === 'rude' ? 'polite' : t === 'kind' ? amt + 'unkind' : t === 'violent' ? 'gentle' : 'not ' + t);
     }).join(', ');
   };
   S.opinionWords = function (id) {
@@ -99,16 +102,30 @@
     if (tierBefore !== tierAfter) MH.emit('tier', { id, from: tierBefore, to: tierAfter, up: n.bond > before });
   };
 
-  S.applyRep = function (deltas, observers) {
+  // A good name is slow to build and quick to lose: "good" changes count for half (rounded by chance,
+  // so small kindnesses still add up), "bad" ones count almost double. Chaotic is neither.
+  const GOOD = { kind: 1, funny: 1, generous: 1, brave: 1, rude: -1, violent: -1 };
+  S.scaleRep = function (deltas) {
+    const out = {};
+    if (!deltas) return out;
+    for (const t of MH.TRAITS) {
+      let d = Number(deltas[t]) || 0; if (!d) continue;
+      if (GOOD[t]) d *= Math.sign(d) === GOOD[t] ? 0.5 : 1.75;
+      const a = Math.abs(d), r = Math.floor(a) + (Math.random() < a % 1 ? 1 : 0);
+      if (r) out[t] = Math.sign(d) * Math.min(6, r);
+    }
+    return out;
+  };
+  S.isTough = (id) => MH.TOUGH.includes(id);
+  S.fearOf = (id) => { const n = S.npc(id); return n ? Math.max(0, n.perceived.violent || 0) : 0; };
+  S.isAfraid = (id) => !S.isTough(id) && S.fearOf(id) >= 6;
+
+  // deltas are the AI's raw numbers; they are scaled here (pass raw=false if already scaled)
+  S.applyRep = function (deltas, observers, scaled) {
     if (!deltas) return;
     const rep = MH.state.player.rep;
-    const clean = {};
-    for (const t of MH.TRAITS) {
-      const d = MH.clamp(Math.round(Number(deltas[t]) || 0), -4, 4);
-      if (!d) continue;
-      clean[t] = d;
-      rep[t] = MH.clamp((rep[t] || 0) + d, -60, 60);
-    }
+    const clean = scaled ? deltas : S.scaleRep(deltas);
+    for (const t in clean) rep[t] = MH.clamp((rep[t] || 0) + clean[t], -60, 60);
     (observers || []).forEach((id) => {
       const n = S.npc(id); if (!n) return;
       for (const t in clean) n.perceived[t] = MH.clamp((n.perceived[t] || 0) + clean[t], -60, 60);
@@ -124,17 +141,51 @@
     // avoid near-duplicates
     if (n.memories.slice(-6).some((m) => m.text === text)) return;
     n.memories.push({ t: MH.absMinutes(), text, imp: opts.imp || 1, kind: opts.kind || 'self', about: opts.about || 'player', from: opts.from || null, shared: 0 });
-    if (n.memories.length > MAX_MEM) {
-      // drop the least important old memory
-      let worst = 0, ws = 1e9;
-      n.memories.forEach((m, i) => {
-        if (i > n.memories.length - 8) return;
-        const age = (MH.absMinutes() - m.t) / 1440;
-        const s = m.imp * 3 - age - (m.kind === 'gossip' ? 1 : 0);
-        if (s < ws) { ws = s; worst = i; }
-      });
-      n.memories.splice(worst, 1);
+    if (n.memories.length >= MAX_MEM) S.fuseOldMemories(id); // never just forget: fuse the oldest ones
+  };
+  // Fuse the oldest memories into one condensed note (offline fallback; the AI version runs overnight).
+  S.oldestForCompaction = function (id, k = 14) {
+    const n = S.npc(id); if (!n) return [];
+    return n.memories.filter((m) => m.kind !== 'summary').slice(0, k);
+  };
+  S.fuseOldMemories = function (id, summaries) {
+    const n = S.npc(id); if (!n) return;
+    const old = S.oldestForCompaction(id);
+    if (old.length < 4) return;
+    const t = old[old.length - 1].t;
+    const seen = new Set();
+    const bits = old.filter((m) => { const k = m.text.toLowerCase().replace(/^(saw it myself|heard from [^:]+): /, '').slice(0, 40); if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => b.imp - a.imp).map((m) => m.text.replace(/^Saw it myself: /, '').slice(0, 90));
+    const lines = summaries && summaries.length ? summaries : ['Older memories, half-remembered: ' + bits.slice(0, 8).join(' · ').slice(0, 600)];
+    n.memories = n.memories.filter((m) => !old.includes(m));
+    const fused = lines.map((text) => ({ t, text: String(text).slice(0, 620), imp: 3, kind: 'summary', about: old.some((m) => m.about === 'player') ? 'player' : 'town', from: null, shared: 0 }));
+    // keep older summaries first, then the new ones, then everything newer
+    const sums = n.memories.filter((m) => m.kind === 'summary');
+    const rest = n.memories.filter((m) => m.kind !== 'summary');
+    n.memories = sums.concat(fused, rest);
+    // too many summaries: merge the oldest two
+    while (n.memories.filter((m) => m.kind === 'summary').length > 6) {
+      const s2 = n.memories.filter((m) => m.kind === 'summary');
+      s2[1].text = (s2[0].text + ' / ' + s2[1].text).slice(0, 700); n.memories.splice(n.memories.indexOf(s2[0]), 1);
     }
+  };
+  // overnight: let the AI summarise villagers whose memory lists got long (batched, in the background)
+  S.compactAll = async function () {
+    if (S._compacting) return;
+    const ids = Object.keys(MH.state.npcs).filter((id) => MH.CHAR[id] && S.npc(id).memories.filter((m) => m.kind !== 'summary').length > COMPACT_AT);
+    if (!ids.length) return;
+    S._compacting = true;
+    try {
+      for (let i = 0; i < ids.length; i += 6) {
+        const batch = ids.slice(i, i + 6).map((id) => ({ id, mems: S.oldestForCompaction(id) }));
+        let res = null;
+        try { res = MH.ai.hasKey() ? await MH.ai.compactMemories(batch) : null; } catch (e) { res = null; }
+        batch.forEach(({ id, mems }) => {
+          const n = S.npc(id); if (!n || !mems.every((m) => n.memories.includes(m))) return; // changed meanwhile
+          S.fuseOldMemories(id, res && res[id] && res[id].length ? res[id] : null);
+        });
+      }
+    } finally { S._compacting = false; }
   };
   S.memoriesFor = function (id, max = 12) {
     const n = S.npc(id); if (!n) return [];
@@ -163,7 +214,7 @@
     if (seen.length && repDeltas) {
       for (const id of seen) {
         const n = S.npc(id);
-        for (const t of MH.TRAITS) n.perceived[t] = MH.clamp((n.perceived[t] || 0) + MH.clamp(Math.round(Number(repDeltas[t]) || 0), -4, 4), -60, 60);
+        for (const t of MH.TRAITS) n.perceived[t] = MH.clamp((n.perceived[t] || 0) + MH.clamp(Math.round(Number(repDeltas[t]) || 0), -6, 6), -60, 60);
       }
     }
     if (seen.length) S.grapevine(text, seen);

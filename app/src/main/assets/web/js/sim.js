@@ -26,20 +26,30 @@
     if (!silent) MH.emit('newday', { gatherings: MH.GATHERINGS.filter((x) => x.day === MH.weekday()) });
   };
 
+  // things that happen once per day, after the day has rolled over
+  function dayChores() {
+    const p = MH.state.player;
+    if (p.labHair) { p.look.hair = p.labHair; p.labHair = null; MH.refreshPlayerSprite && MH.player && MH.refreshPlayerSprite(); }
+    MH.quests && MH.quests.tick();
+    MH.social.compactAll(); // fuse long memory lists (AI summary when available), in the background
+    MH.daySnapshot();
+  }
   sim.advance = function (dtReal) {
     const st = MH.state;
     const chatting = MH.chat && MH.chat.active;
     st.time.minutes += dtReal * (MH.settings.timeScale || 1) * (chatting ? 0.35 : 1);
-    if (st.time.minutes >= 1440) { st.time.minutes -= 1440; st.time.day++; sim.newDay(); }
+    if (st.time.minutes >= 1440) { st.time.minutes -= 1440; st.time.day++; sim.newDay(); dayChores(); }
     if (st.stormUntil && MH.absMinutes() > st.stormUntil) { st.weather = 'cloudy'; st.stormUntil = 0; }
   };
 
   sim.sleepUntilMorning = function () {
     const st = MH.state;
     (st.companions || []).slice().forEach((id) => sim.stopFollow(id, 'goes home for the night'));
-    if (st.time.minutes >= 7 * 60) { st.time.day++; sim.newDay(); }
+    const newDay = st.time.minutes >= 7 * 60;
+    if (newDay) { st.time.day++; sim.newDay(); }
     st.time.minutes = 7 * 60;
     sim.placeEveryone();
+    if (newDay) dayChores(); else MH.daySnapshot();
   };
 
   // ------------------------------------------------------------ plans (visits, meetups, parties)
@@ -130,6 +140,7 @@
     }
     if (sim.approaching === e) return updateApproach(e, dt);
     if (e.following) return companionTick(e, dt);
+    if (fearTick(e, dt)) return;
     if (e.seek) return seekTick(e, dt);
     const farFromPlayer = MH.distTiles(e, MH.player) > 50;
     const p = sim.plan(e.id);
@@ -238,6 +249,32 @@
         ? `${e.ch.name} arrives at ${P.name}'s ${party.theme ? '"' + party.theme + '" ' : ''}party at their house.`
         : `${e.ch.name} arrives at ${P.name}'s house for the visit they agreed on, and steps inside.`);
     }
+  };
+
+  // ------------------------------------------------------------ fear: villagers who think you're violent keep their distance
+  function fearTick(e, dt) {
+    if (e.fleeT > 0) {
+      e.fleeT -= dt; e.hurry = true;
+      if (!e.path || !e.path.length || MH.npcWalk(e, dt)) { e.fleeT = 0; e.hurry = false; e.idleT = MH.rand(3, 6); }
+      return true;
+    }
+    if (e.hidden || e.asleep || e.guest || e.staffSpot || e.seek) return false;
+    if (!MH.social.isAfraid(e.id)) return false;
+    const pl = MH.player;
+    if (MH.distTiles(e, pl) > 3.2 || MH.roomOf(e) !== MH.roomOf(pl) || (MH.chat.active && MH.chat.convo && MH.chat.convo.members.includes(e.id))) return false;
+    sim.flee(e);
+    return true;
+  }
+  sim.flee = function (e) {
+    const pl = MH.player, t = e.tile();
+    const dx = e.x - pl.x, dy = e.y - pl.y, L = Math.hypot(dx, dy) || 1;
+    let tx = Math.round(t.tx + (dx / L) * 7), ty = Math.round(t.ty + (dy / L) * 7);
+    const R = MH.world.roomAt(t.tx, t.ty);
+    if (R) { tx = MH.clamp(tx, R.x0 + 1, R.x1 - 1); ty = MH.clamp(ty, R.y0 + 2, R.y1 - 2); }
+    const sp = MH.world.nearestWalkable(tx, ty);
+    MH.npcGoTo(e, sp.tx, sp.ty); e.fleeT = 4; e.hurry = true; e.asleep = false;
+    e.showEmote(Math.random() < 0.5 ? 'sweat' : '!', 1.8);
+    if (Math.random() < 0.35 && !e.ch.mute && !(MH.chat.active)) MH.chat.showBubble(e, MH.pick(['Eek!', 'S-stay back!', '*hurries away*', 'Don\'t hurt me!', 'Nope. Nope nope nope.', '*flinches*']), { dur: 2.2 });
   };
 
   // ------------------------------------------------------------ companions (villagers following the player)
@@ -359,7 +396,7 @@
     const pl = MH.player;
     let best = null, bestScore = 0.9;
     for (const e of MH.npcs) {
-      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest || e.following || e.seek) continue;
+      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest || e.following || e.seek || MH.social.isAfraid(e.id)) continue;
       const d = MH.distTiles(e, pl);
       if (d > 14 || d < 2) continue;
       const n = MH.social.npc(e.id);
@@ -370,14 +407,17 @@
       if (fresh.length) score += 0.55;
       if (att >= 55) score += 0.45;
       if (att <= -40 && fresh.length) score += 0.3;
+      const favour = att >= 8 && MH.quests && MH.quests.canOffer(e.id) && Math.random() < 0.35;
+      if (favour) score += 0.7;
       if (e.ch.mute) score -= 0.4;
-      if (score > bestScore) { bestScore = score; best = { e, fresh, n, att }; }
+      if (score > bestScore) { bestScore = score; best = { e, fresh, n, att, favour }; }
     }
     if (!best || Math.random() < 0.4) return;
-    const { e, fresh, n, att } = best;
+    const { e, fresh, n, att, favour } = best;
     const P = MH.state.player;
     let reason;
-    if (fresh.length) { const m = fresh[fresh.length - 1]; m.discussed = true; reason = `${e.ch.name} walked up to ${P.name} on purpose because of this: "${m.text}". They want to bring it up.`; }
+    if (favour && (!fresh.length || Math.random() < 0.5)) reason = `${e.ch.name} came over because they need a favour from ${P.name}: they ask the player to help with something specific to their life (offer it as a "quest" — the player may refuse).`;
+    else if (fresh.length) { const m = fresh[fresh.length - 1]; m.discussed = true; reason = `${e.ch.name} walked up to ${P.name} on purpose because of this: "${m.text}". They want to bring it up.`; }
     else if (att >= 55) reason = `${e.ch.name} spotted ${P.name}, whom they really like, and came over to chat.`;
     else reason = `${e.ch.name} came over to ${P.name} with something on their mind.`;
     e.approachReason = reason;
@@ -464,6 +504,7 @@
   function swarmBite() {
     const h = MH.hour();
     const place = MH.world.placeAt(MH.player.x, MH.player.y).key;
+    if (MH.state.today.bugspray) return false;
     if (!(h >= 18 || h < 5) || !['swamp', 'stilthouse', 'gatorgrove', 'eastlane', 'pond', 'tower', 'river'].includes(place) || MH.chat.active) return false;
     if (Math.random() < 0.3) {
       sim.vibeNow(MH.pick(['Something bit you. Somewhere, someone giggles.', 'A mosquito lands on your neck. Steve, probably.', 'VRRRMMM. You slap your arm. Too late.']));
@@ -566,7 +607,7 @@
   sim.hostParty = function ({ dayOffset, hour, loc, theme, invited }) {
     const st = MH.state;
     const at = (st.time.day + dayOffset) * 1440 + hour * 60;
-    const party = { id: MH.uid(), at, until: at + 180, loc, theme, invited: invited.slice(), rsvp: {}, status: 'planned', arrived: [] };
+    const party = { id: MH.uid(), at, until: at + 180, loc, theme, invited: invited.slice(), rsvp: {}, status: 'planned', arrived: [], kit: MH.shop ? MH.shop.usePartyKit() : 0 };
     // Mole mixes up an address now and then
     if (invited.length && Math.random() < 0.15) {
       const others = MH.CHARS.filter((c) => !invited.includes(c.id) && !c.mute && !c.visitor);
@@ -589,7 +630,7 @@
         for (const id of due) {
           const ch = MH.CHAR[id], att = MH.social.attitude(id);
           const themeHit = party.theme && ch.bio && party.theme.split(/\s+/).some((w) => w.length > 3 && ch.bio.toLowerCase().includes(w.toLowerCase())) ? 0.2 : 0;
-          const p = 0.45 + att / 120 + (ch.partyLove || 0) * 0.35 + themeHit;
+          const p = 0.45 + att / 120 + (ch.partyLove || 0) * 0.35 + themeHit + (party.kit || 0) - (MH.social.isAfraid(id) ? 0.4 : 0);
           party.rsvp[id] = Math.random() < p ? 'yes' : 'no';
           if (party.rsvp[id] === 'yes') sim.addPlan({ id, kind: 'party', loc: party.loc, at: party.at + MH.randi(0, 40), until: party.until, partyId: party.id, what: 'the player\'s party' });
           MH.social.addMemory(id, `${st.player.name} invited me to a ${party.theme || ''} party ${party.loc === 'home' ? 'at their house' : 'at ' + MH.world.locations[party.loc].name}. I said ${party.rsvp[id]}.`, { imp: 2, kind: 'self' });
@@ -645,6 +686,7 @@
   function findTarget() {
     const pl = MH.player;
     if (MH.chat.active) return null;
+    const jt = MH.jobs && MH.jobs.target(); if (jt) return jt;
     const t = pl.tile();
     // doors / furniture you're standing on (or right next to) win over people nearby
     let door = null, dd = 9;
@@ -663,7 +705,7 @@
     if (best && !doorFirst) return { kind: 'npc', e: best, label: (best.asleep ? 'Wake ' : 'Talk to ') + best.ch.name };
     if (door) {
       const it = door;
-      let label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : 'Knock: ' + it.b.name) : it.label;
+      let label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : (MH.jobs && MH.jobs.listAt(it.b.id).length ? '💼 ' : 'Knock: ') + it.b.name) : it.label;
       if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
       return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
     }
@@ -681,8 +723,12 @@
     const t = sim.target;
     if (!t || MH.chat.active || MH.fading) return;
     const P = MH.state.player;
+    if (t.kind === 'job') { MH.jobs.act(t); return; }
+    if (t.kind === 'counter') { MH.ui.openCounter(t.it); return; }
     if (t.kind === 'npc') {
       const e = t.e;
+      // someone who's scared of you may just bolt
+      if (!e.asleep && MH.social.isAfraid(e.id) && !sim.activePlan(e.id) && Math.random() < 0.45) { sim.flee(e); sim.vibeNow(`${e.ch.name} backs away from you, eyes wide, and hurries off.`); return; }
       if (e.asleep) { e.asleep = false; if (sim.approaching === e) sim.approaching = null; MH.chat.start([e.id], 'opener', `${P.name} just woke ${e.ch.name} up from a nap. ${e.ch.name} reacts in character (Kira HATES being woken).`); return; }
       if (sim.approaching === e) sim.approaching = null;
       const plan = sim.activePlan(e.id); if (plan) plan.met = true;
@@ -701,7 +747,7 @@
     } else if (t.kind === 'sleep') MH.ui.sleepPrompt();
     else if (t.kind === 'board') MH.ui.openGrapevine();
     else if (t.kind === 'well') MH.ui.wellPrompt();
-    else if (t.kind === 'door') sim.knock(t.it.b);
+    else if (t.kind === 'door') { if (MH.jobs && MH.jobs.listAt(t.it.b.id).length) MH.ui.openCounter({ room: t.it.b.id, door: t.it.b }); else sim.knock(t.it.b); }
     else if (t.kind === 'enter') {
       const R = MH.world.rooms[t.it.room];
       if (R.id === 'home') sim.goInside();
@@ -784,7 +830,8 @@
     scarecrowTick(dt);
     trainTick(dt);
     slow += dt;
-    if (slow > 1) { slow = 0; gatheringTick(); partyTick(); }
+    if (slow > 1) { slow = 0; gatheringTick(); partyTick(); MH.jobs && MH.jobs.tick(); MH.quests && MH.quests.tick(); }
+    if (MH.player) MH.player.speed = 74 * ((MH.state.player.buffUntil || 0) > MH.absMinutes() ? 1.35 : 1);
     roomTick();
     if (MH.ui.modalOpen) { sim.target = null; MH.emit('target', null); return; }
     sim.target = findTarget();

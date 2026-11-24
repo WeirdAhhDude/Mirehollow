@@ -144,8 +144,21 @@
     }
     return s;
   }
+  const GHOST_HOLD = 2.2, GHOST_FADE = 4.5; // seconds fully visible, then fading
+  function ghostOf(s) {
+    if (!s.full || !s.d.classList.contains('on')) return;
+    const g = s.d.cloneNode(true);
+    g.classList.remove('latest', 'thinking', 'expand', 'on'); g.classList.add('ghost');
+    g.querySelector('.txt').innerHTML = MH.fmt(s.full);
+    g.style.transform = s.d.style.transform; g.style.zIndex = '1';
+    el.says.appendChild(g);
+    s.ghosts = s.ghosts || [];
+    s.ghosts.unshift({ d: g, born: MH.now });
+    while (s.ghosts.length > 2) s.ghosts.pop().d.remove();
+  }
   function cardSay(id, text) {
     const s = sayFor(id);
+    ghostOf(s);
     s.full = text; s.shown = 0; s.born = MH.now; s.thinking = false; s.rendered = null;
     s.d.classList.remove('thinking', 'expand'); s.d.classList.add('on');
     const card = el.cast.querySelector(`.card[data-id="${id}"]`);
@@ -230,11 +243,25 @@
         d.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
         d.style.setProperty('--tx', Math.round(MH.clamp(it.cx - x, 16, w - 16)) + 'px');
         d.classList.toggle('stacked', y < it.head - h - 16);
+        // that speaker's previous lines sit just above, drifting up and fading out
+        let gy = y;
+        (it.s.ghosts || []).slice().forEach((g) => {
+          const age = MH.now - g.born;
+          const op = age < GHOST_HOLD ? 0.9 : 0.9 * (1 - (age - GHOST_HOLD) / GHOST_FADE);
+          if (op <= 0) { g.d.remove(); it.s.ghosts.splice(it.s.ghosts.indexOf(g), 1); return; }
+          const gw = g.d.offsetWidth, gh = g.d.offsetHeight;
+          gy = gy - gh * 0.94 - 4 - Math.min(10, age * 2);
+          const gx = MH.clamp(x + w / 2 - gw / 2, 8, Math.max(8, W - gw - 8));
+          g.d.style.transform = `translate(${Math.round(gx)}px, ${Math.round(Math.max(40, gy))}px) scale(0.94)`;
+          g.d.style.opacity = op.toFixed(3);
+          g.d.style.zIndex = String(Math.max(1, 50 - i - 20));
+        });
       });
     }
     requestAnimationFrame(layoutLoop);
   }
-  function clearSays() { for (const [, s] of says) s.d.remove(); says.clear(); }
+  function dropGhosts(s) { (s.ghosts || []).forEach((g) => g.d.remove()); s.ghosts = []; }
+  function clearSays() { for (const [, s] of says) { s.d.remove(); dropGhosts(s); } says.clear(); el.says && el.says.querySelectorAll('.ghost').forEach((g) => g.remove()); }
 
   // ------------------------------------------------------------ lifecycle
   function nearbyIds(c) {
@@ -319,7 +346,7 @@
     MH.social.log({ kind: 'sys', text: MH.CHAR[id].name + ' ' + (how || 'left') + '.', convo: c.id });
     MH.ui.toast(MH.CHAR[id].name + ' ' + (how || 'left'));
     if (id === 'scarecrow' && e) MH.render.burst(e.x, e.y - 20, 'crow', 14);
-    const s = says.get(id); if (s) { s.d.remove(); says.delete(id); }
+    const s = says.get(id); if (s) { s.d.remove(); dropGhosts(s); says.delete(id); }
     if (chat.to === id) chat.setTarget(null);
     renderCast();
     if (!c.members.length) setTimeout(() => chat.end(), 1200); else { center(c); chat.setTarget(chat.to); }
@@ -337,6 +364,7 @@
     document.body.classList.remove('chatting');
     el.input.blur(); el.me.classList.remove('on'); chat.meB = null; el.send.classList.remove('queued');
     clearSays();
+    MH.quests && MH.quests.hideCard();
     MH.render.clearFocus();
     MH.ui.closeGivePicker && MH.ui.closeGivePicker();
     if (MH.ui.logOpen) MH.ui.toggleLog(false);
@@ -356,9 +384,45 @@
     chat.meB = { full: (to ? '→ ' + MH.CHAR[to].name + ': ' : '') + text, shown: 0 };
     el.me.innerHTML = ''; el.me.classList.add('on');
     if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
+    c.violence = chat.detectViolence(text, c, to);
     chat.pendingInvite = null;
     chat.runTurn('player', text, to);
   };
+  // *punches Vix* and friends: physical attacks in the player's *actions*
+  const VIOLENCE = /\b(punch\w*|hit|hits|hitting|slap\w*|kick\w*|stab\w*|shov\w*|smack\w*|headbutt\w*|attack\w*|assault\w*|beat\w* (?:up|on)|tackl\w*|bites?|biting|chok\w*|strangl\w*|elbows?|uppercut\w*|socks?|decks?|clobber\w*|wallop\w*|pummel\w*|shoots?|shot|throws? (?:a |the |my )?\w+ at|swings? at|bonks?|whacks?|body ?slam\w*|suplex\w*|karate.?chop\w*|spits? (?:on|at)|trips?|scratch\w*|claws?|kneecap\w*|knees? (?:him|her|them)|stomps? on|pushes|punts?)\b/i;
+  const PLAYFUL = /\b(playful\w*|gentl\w*|lightly|light|pretend\w*|fake\w*|mock\w*|softly|teasing\w*|boops?|pillow|high.?five|fist.?bump|nudges?|pokes?)\b/i;
+  chat.detectViolence = function (text, c, to) {
+    const acts = (String(text).match(/\*([^*]+)\*/g) || []).join(' ');
+    if (!acts || !VIOLENCE.test(acts)) return null;
+    const low = acts.toLowerCase();
+    const named = c.members.find((id) => { const nm = MH.CHAR[id].name.toLowerCase(); return low.includes(nm) || low.includes(nm.split(' ').pop()); });
+    return { victim: to || named || c.members[0], playful: PLAYFUL.test(acts), act: acts.replace(/\*/g, '').trim().slice(0, 160) };
+  };
+  // make sure an attack actually lands in the numbers, whatever the AI wrote
+  function enforceViolence(c, res) {
+    const v = c.violence; if (!v || v.playful || !MH.CHAR[v.victim]) return;
+    const P = MH.state.player, S = MH.social;
+    P.violence = (P.violence || 0) + 1;
+    const vn = MH.CHAR[v.victim].name, tough = S.isTough(v.victim);
+    const R = res.reputation;
+    R.violent = Math.max(R.violent || 0, 3); R.kind = Math.min(R.kind || 0, -2); R.rude = Math.max(R.rude || 0, 1);
+    if (R.funny > 0) R.funny = 0; if (R.brave > 0) R.brave = 0;
+    res.bond[v.victim] = Math.min(res.bond[v.victim] || 0, -8 - Math.min(4, P.violence - 1));
+    c.members.forEach((id) => {
+      if (id === v.victim) return;
+      res.bond[id] = Math.min(res.bond[id] || 0, S.isTough(id) ? -2 : -4);
+      if (!res.mood[id]) res.mood[id] = S.isTough(id) ? 'disgusted' : 'shaken';
+      if (!res.memory[id]) res.memory[id] = `${P.name} attacked ${vn} right in front of me (${v.act}). ${S.isTough(id) ? 'Not okay.' : 'I\'m scared of them now.'}`;
+    });
+    if (!res.mood[v.victim] || /happy|fine|amused|cheer|giggl|laugh/i.test(res.mood[v.victim])) res.mood[v.victim] = tough ? 'furious' : 'terrified';
+    const mem = `${P.name} ATTACKED me (${v.act}). ${tough ? 'They\'ll regret it.' : 'I\'m scared of them.'}`;
+    res.memory[v.victim] = res.memory[v.victim] ? (res.memory[v.victim] + ' ' + mem).slice(0, 220) : mem;
+    if (!res.witness) res.witness = `${P.name} attacked ${vn}${P.violence > 1 ? ' — again' : ''}.`;
+    res.violent = true;
+  }
+
+  // send a line as the player (used by quest Accept/Decline); keeps whatever they were typing
+  chat.sendText = function (text) { if (!chat.active) return; el.input.value = (text + ' ' + el.input.value).trim(); chat.submit(); };
   chat.letThemTalk = function () { if (!chat.waiting && chat.active) chat.runTurn('continue'); };
   chat.setPendingInvite = function (inv, text) { chat.pendingInvite = inv; el.input.value = ''; insertText(text + ' '); };
 
@@ -420,11 +484,12 @@
       cardSay(l.who, l.say);
       reactEmote(e, l.say);
       while (!cardTyped(l.who) && chat.convo === c) await waitFor(0.04);
-      // let the finished line sit for a moment (longer lines a bit longer) before the next one lands
-      await waitFor(MH.clamp(1.1 + l.say.length * 0.028, 1.5, 4.5));
+      // a short beat before the next line lands (the previous one stays readable, floating above)
+      await waitFor(MH.clamp(0.45 + l.say.length * 0.012, 0.6, 2.2));
       chat.skipFlag = false;
     }
     if (chat.convo !== c) return;
+    enforceViolence(c, res); c.violence = null;
     applyEffects(c, res);
     renderCast();
     if (res.end) { setTimeout(() => chat.convo === c && chat.end(), 2600); return; }
@@ -461,17 +526,23 @@
       if (id === 'nimbus' && d <= -2) { MH.state.weather = 'storm'; MH.state.stormUntil = MH.absMinutes() + 90; MH.render.flash = 0.35; MH.sim.vibeNow('Thunder cracks over town. Nimbus is NOT pleased.'); }
     }
     for (const id in res.mood) S.npc(id) && (S.npc(id).mood = res.mood[id]);
-    for (const id in res.memory) S.addMemory(id, res.memory[id], { imp: 2, kind: 'self' });
+    for (const id in res.memory) S.addMemory(id, res.memory[id], { imp: res.violent ? 4 : 2, kind: 'self' });
     for (const id in res.label) { S.npc(id).label = res.label[id]; MH.ui.toast(`${MH.CHAR[id].name}: “${res.label[id]}”`); }
     const rep = S.applyRep(res.reputation, c.members);
     if (res.witness) {
-      const seen = S.witness(res.witness, c.x, c.y, c.members, res.reputation);
+      const seen = S.witness(res.witness, c.x, c.y, c.members, rep);
+      if (res.violent) seen.forEach((id) => { S.changeBond(id, S.isTough(id) ? -2 : -4); const n = S.npc(id); if (n && !S.isTough(id)) n.mood = 'frightened'; });
       c.members.forEach((id) => { if (!res.memory[id]) S.addMemory(id, res.witness, { imp: 1, kind: 'self' }); });
       P.deeds.push({ t: MH.absMinutes(), text: res.witness }); if (P.deeds.length > 30) P.deeds.shift();
       if (seen.length) MH.ui.toast('👀 ' + seen.map((id) => MH.CHAR[id].name).slice(0, 3).join(', ') + (seen.length > 3 ? ' +' + (seen.length - 3) : '') + ' saw that');
     }
     res.give.forEach((g) => { S.giveItem(g.item, g.from); MH.ui.toast(`${MH.itemIcon(g.item)} Got ${g.item}${g.from && MH.CHAR[g.from] ? ' from ' + MH.CHAR[g.from].name : ''}`); });
-    res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); });
+    res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) { MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); if (MH.quests) MH.quests.onGive(it, g.to, c.members); } });
+    if (MH.quests) {
+      (res.questDone || []).forEach((qid) => MH.quests.complete(qid, c.members));
+      MH.quests.onTalk(c);
+      if (res.quest) MH.quests.offer(res.quest, c);
+    }
     if (res.coins) { const d = S.addCoins(res.coins); if (d) MH.ui.toast((d > 0 ? '+' : '') + d + ' coins'); }
     res.relations.forEach((r) => S.changeRel(r.a, r.b, r.delta));
     const inv = c.invite;

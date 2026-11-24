@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Mirehollow</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game">
+    <canvas id="cv"></canvas>
+    <div id="joyZone"></div>
+    <div id="joyBase"><div id="joyKnob"></div></div>
+    <div id="bubbles"></div>
+
+    <div id="hud">
+      <div class="hl">
+        <div class="pill clock"><b id="hudTime">--:--</b><span id="hudDay"></span></div>
+        <div class="pill place" id="hudPlace"></div>
+      </div>
+      <div class="hr">
+        <div class="pill" id="hudCoins"></div>
+        <span id="hudAi" class="aidot" title=""></span>
+        <button id="btnJournal" class="hb" title="Journal (J)">📖</button>
+        <button id="btnLog" class="hb" title="Chat log (L)">💬</button>
+        <button id="btnMenu" class="hb" title="Menu (Esc)">⚙️</button>
+      </div>
+    </div>
+
+    <div id="vibe"></div>
+    <div id="narr"></div>
+    <div id="toasts"></div>
+    <button id="btnA" aria-label="Interact"><span class="dot">A</span><span id="btnALabel"></span></button>
+
+    <div id="chat" class="hidden">
+      <div id="cast"></div>
+      <div id="chatbar">
+        <div id="quick">
+          <button data-act="*waves*">👋 wave</button>
+          <button data-act="*hugs*">🤗 hug</button>
+          <button data-act="*offers a handshake*">🤝 shake</button>
+          <button data-act="*smiles*">😊 smile</button>
+          <button data-act="*laughs*">😂 laugh</button>
+          <button data-act="*winks*">😉 wink</button>
+          <button data-act="*bows politely*">🙇 bow</button>
+        </div>
+        <div class="row">
+          <button id="btnLeave" class="cb" title="Leave the conversation">✕</button>
+          <button id="btnChatLog" class="cb" title="Chat log">☰</button>
+          <input id="chatInput" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" maxlength="400" placeholder="Say something… use *asterisks* for actions">
+          <button id="btnStar" class="cb" title="Insert an *action*">✱</button>
+          <button id="btnGive" class="cb" title="Give something">🎁</button>
+          <button id="btnWait" class="cb" title="Stay quiet and let them talk">…</button>
+          <button id="btnSend" class="cb send" title="Send">➤</button>
+        </div>
+        <div id="chatStatus"></div>
+      </div>
+    </div>
+
+    <div id="logPanel"><header><span>Chat log</span><button id="logClose" class="cb">✕</button></header><div id="logList"></div></div>
+    <div id="modals"></div>
+    <div id="fade"></div>
+  </div>
+
+  <script src="js/core.js"></script>
+  <script src="js/data_chars.js"></script>
+  <script src="js/data_lore.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/social.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

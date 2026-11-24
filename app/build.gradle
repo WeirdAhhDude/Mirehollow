@@ -1,0 +1,42 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mirehollow.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.mirehollow.game'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    signingConfigs {
+        // Hobby signing key kept in the repo so every build (from any machine/session)
+        // can install as an update over the previous one without wiping your save.
+        mirehollow {
+            storeFile file('mirehollow.keystore')
+            storePassword 'mirehollow'
+            keyAlias 'mirehollow'
+            keyPassword 'mirehollow'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.mirehollow
+        }
+        debug {
+            signingConfig signingConfigs.mirehollow
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -40,7 +40,7 @@
     if (!MH.state) return;
     $('#hudTime').textContent = `${MH.WEEKDAYS[MH.weekday()].slice(0, 3)} ${MH.clockStr()}`;
     $('#hudDay').textContent = `Day ${MH.state.time.day + 1} ${WEATHER_ICON[MH.state.weather] || ''}`;
-    $('#hudPlace').textContent = MH.cap(MH.world.placeAt(MH.player.x, MH.player.y).name.replace(/^the /, ''));
+    $('#hudPlace').textContent = MH.cap(MH.world.placeAt(MH.player.x, MH.player.y).name.replace(/^the player's/i, 'your').replace(/^the /, ''));
     $('#hudCoins').textContent = '🪙 ' + MH.state.player.coins;
     $('#hudAi').classList.toggle('off', !MH.ai.hasKey());
     $('#hudAi').title = MH.ai.hasKey() ? 'AI connected: ' + MH.settings.model : 'Offline mode (add an OpenRouter key in Settings)';
@@ -159,12 +159,12 @@
 
   // ------------------------------------------------------------ journal
   ui.openJournal = function (tab = 'villagers') {
-    const body = h(`<div class="journal"><nav class="tabs"><button data-t="villagers">Villagers</button><button data-t="you">You</button><button data-t="pocket">Pocket</button><button data-t="town">Town</button></nav><div class="tabbody"></div></div>`);
+    const body = h(`<div class="journal"><nav class="tabs"><button data-t="villagers">Villagers</button><button data-t="plans">Plans</button><button data-t="you">You</button><button data-t="pocket">Pocket</button><button data-t="town">Map</button></nav><div class="tabbody"></div></div>`);
     const tb = body.querySelector('.tabbody');
     const show = (t) => {
       body.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.t === t));
       tb.innerHTML = '';
-      tb.appendChild(({ villagers: tabVillagers, you: tabYou, pocket: tabPocket, town: tabTown })[t]());
+      tb.appendChild(({ villagers: tabVillagers, plans: tabPlans, you: tabYou, pocket: tabPocket, town: tabTown })[t]());
     };
     body.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => show(b.dataset.t)));
     ui.modal('Journal', body, { cls: 'wide' });
@@ -172,16 +172,120 @@
   };
 
   function tabVillagers() {
-    const grid = h(`<div class="vgrid"></div>`);
+    const wrap = h(`<div><div class="vgrid main"></div><h4>Townsfolk you've met</h4><div class="vgrid folk"></div></div>`);
+    const grid = wrap.querySelector('.main');
+    const folkMet = MH.FOLK.filter((c) => MH.social.npc(c.id).met);
+    if (!folkMet.length) wrap.querySelector('.folk').appendChild(h(`<p class="muted small">Nobody yet — say hi to the passers-by around town.</p>`));
     const order = MH.CHARS.slice().sort((a, b) => (MH.social.npc(b.id).met - MH.social.npc(a.id).met) || MH.social.attitude(b.id) - MH.social.attitude(a.id));
-    order.forEach((ch) => {
+    const addCard = (ch, target) => {
       const n = MH.social.npc(ch.id), att = MH.social.attitude(ch.id);
       const card = h(`<button class="vcard ${n.met ? '' : 'unmet'}"><div class="pimg ${ch.portrait ? 'art' : 'pixel'}"><img src="${ch.portrait || MH.art.portraitURL(ch)}"></div><div class="vinfo"><b>${MH.esc(ch.name)}</b><small>${n.met ? MH.bondTier(n.bond) + (n.label ? ' · ' + MH.esc(n.label) : '') : 'Not met yet'}</small><span class="bar"><i style="width:${Math.round((att + 100) / 2)}%;background:${MH.bondColor(att)}"></i></span></div></button>`);
       card.onclick = () => ui.openProfile(ch.id);
-      grid.appendChild(card);
-    });
-    return grid;
+      target.appendChild(card);
+    };
+    order.forEach((ch) => addCard(ch, grid));
+    folkMet.forEach((ch) => addCard(ch, wrap.querySelector('.folk')));
+    return wrap;
   }
+
+  function tabPlans() {
+    const st = MH.state, now = MH.absMinutes();
+    const when = (at) => { const d = Math.floor(at / 1440) - st.time.day; return (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : MH.WEEKDAYS[Math.floor(at / 1440) % 7]) + ' ' + MH.clockStr(at % 1440); };
+    const plans = (st.plans || []).filter((p) => p.until > now && p.kind !== 'party').sort((a, b) => a.at - b.at);
+    const parties = (st.parties || []).filter((p) => p.status !== 'done');
+    const d = h(`<div class="plans">
+      <h4>Your parties</h4><div class="pl-parties"></div>
+      <h4>Appointments</h4><ul class="mems">${plans.length ? plans.map((p) => `<li><b>${when(p.at)}</b> · ${MH.esc(MH.CHAR[p.id].name)} — ${p.loc === 'home' ? 'visiting your house' : MH.esc(p.what || 'meeting you') + ' at ' + MH.esc(MH.world.locations[p.loc].name)}${p.arrived ? ' ✔' : ''}</li>`).join('') : '<li class="muted">Nothing planned. Invite someone with 🏠 while chatting, or arrange to meet somewhere.</li>'}</ul>
+      <h4>Town gatherings (anyone can join)</h4><ul class="mems">${MH.GATHERINGS.slice().sort((a, b) => ((a.day - MH.weekday() + 7) % 7) - ((b.day - MH.weekday() + 7) % 7)).map((g) => `<li><b>${MH.WEEKDAYS[g.day]}</b> ${g.from}:00–${g.to}:00 · ${MH.esc(g.name)} <i>(${MH.esc(MH.world.locations[g.at].name)})</i></li>`).join('')}</ul>
+      <div class="row"><button class="btn small" id="plParty">🎉 Plan a party</button></div></div>`);
+    const pp = d.querySelector('.pl-parties');
+    if (!parties.length) pp.appendChild(h(`<p class="muted small">No parties planned. Use the notebook on your low table at home (or the button below).</p>`));
+    parties.forEach((p) => {
+      const yes = p.invited.filter((id) => p.rsvp[id] === 'yes'), no = p.invited.filter((id) => p.rsvp[id] === 'no'), pend = p.invited.filter((id) => p.rsvp[id] === 'pending');
+      pp.appendChild(h(`<div class="party-card"><b>${MH.esc(p.theme || 'Party')}</b> · ${when(p.at)} · ${p.loc === 'home' ? 'your house' : MH.esc(MH.world.locations[p.loc].name)} ${p.status === 'active' ? '<span class="live">LIVE</span>' : ''}
+        <div class="small">✅ ${yes.map((id) => MH.esc(MH.CHAR[id].name)).join(', ') || '—'}</div><div class="small muted">❌ ${no.map((id) => MH.esc(MH.CHAR[id].name)).join(', ') || '—'} ${pend.length ? '· ⏳ ' + pend.map((id) => MH.esc(MH.CHAR[id].name)).join(', ') : ''}</div>
+        ${p.notes ? `<ul class="mems small">${Object.entries(p.notes).map(([id, n]) => `<li><b>${MH.esc(MH.CHAR[id].name)}:</b> “${MH.esc(n)}”</li>`).join('')}</ul>` : ''}</div>`));
+    });
+    d.querySelector('#plParty').onclick = () => ui.openPartyPlanner();
+    return d;
+  }
+
+  // ------------------------------------------------------------ invitations (from the chat bar)
+  ui.openInvitePicker = function () {
+    const c = MH.chat.convo; if (!c) return;
+    ui.closeGivePicker();
+    const box = h(`<div id="givePicker" class="picker"><div class="ph">Invite…</div><div class="who"></div>
+      <div class="ph2">Where</div><div class="opts wherec"></div><div class="ph2">When</div><div class="opts whenc"></div>
+      <div class="row"><button class="btn small" id="invGo">Write the invitation</button></div></div>`);
+    const sel = new Set([c.members[0]]);
+    const who = box.querySelector('.who');
+    c.members.forEach((id) => {
+      const b = h(`<button class="chip ${sel.has(id) ? 'sel' : ''}">${MH.esc(MH.CHAR[id].name)}</button>`);
+      b.onclick = () => { sel.has(id) ? sel.delete(id) : sel.add(id); b.classList.toggle('sel'); };
+      who.appendChild(b);
+    });
+    const WHERE = [['home', 'My house'], ['pond', 'The pond'], ['park', 'The park'], ['river', 'The river'], ['shrine', 'The shrine'], ['station', 'The station'], ['square', 'The square'], ['sunflowers', 'Sunflowers'], ['bakery', 'The bakery']];
+    const now = MH.absMinutes(), day = MH.state.time.day, hr = MH.hour();
+    const WHEN = [['now', 'Right now', now + 5], ['1h', 'In an hour', now + 60]];
+    if (hr < 18) WHEN.push(['tonight', 'Tonight 19:00', day * 1440 + 19 * 60]);
+    WHEN.push(['tm10', 'Tomorrow 10:00', (day + 1) * 1440 + 600], ['tm15', 'Tomorrow 15:00', (day + 1) * 1440 + 900], ['tm19', 'Tomorrow 19:00', (day + 1) * 1440 + 1140]);
+    let where = 'home', whenI = 0;
+    const mk = (cont, arr, get, set) => arr.forEach((o, i) => { const b = h(`<button class="chip ${get() === (o[0]) ? 'sel' : ''}">${o[1]}</button>`); b.onclick = () => { set(o[0], i); cont.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; cont.appendChild(b); });
+    mk(box.querySelector('.wherec'), WHERE, () => where, (v) => (where = v));
+    mk(box.querySelector('.whenc'), WHEN, () => WHEN[whenI][0], (v, i) => (whenI = i));
+    box.querySelector('#invGo').onclick = () => {
+      if (!sel.size) return;
+      const to = [...sel], w = WHEN[whenI], at = w[2];
+      const place = WHERE.find((x) => x[0] === where)[1].toLowerCase();
+      const names = to.map((id) => MH.CHAR[id].name).join(' and ');
+      const whenTxt = w[0] === 'now' ? 'right now' : w[1].toLowerCase().replace(/ (\d)/, ' at $1');
+      const desc = where === 'home' ? `over to the player's house ${whenTxt}` : `to meet at ${place} ${whenTxt}`;
+      MH.chat.setPendingInvite({ to, loc: where, at, desc, what: where === 'home' ? 'visit' : 'hang out' }, where === 'home' ? `*invites ${names} over to my place ${whenTxt}*` : `*invites ${names} to meet at ${place} ${whenTxt}*`);
+      ui.closeGivePicker();
+    };
+    document.getElementById('chat').appendChild(box);
+    ui.giveOpen = true;
+  };
+
+  // ------------------------------------------------------------ party planner
+  ui.openPartyPlanner = function () {
+    const met = MH.ALL.filter((c) => MH.social.npc(c.id).met && !c.visitor);
+    const body = h(`<div class="form party">
+      <p class="muted small">Write invitations and Mailman Mole will deliver them (mostly to the right houses). Replies trickle back over the next hour or so.</p>
+      <label>Theme</label><input id="pTheme" maxlength="40" placeholder="e.g. pajama movie night, karaoke, tea party">
+      <label>Where</label><div class="opts" id="pWhere"></div>
+      <label>When</label><div class="row"><select id="pDay"><option value="0">Today</option><option value="1">Tomorrow</option><option value="2">In two days</option></select><select id="pHour"></select></div>
+      <label>Guests <small>(${met.length} you've met)</small></label><div class="row wrap"><button class="btn small ghost" id="pAll">Everyone I know</button><button class="btn small ghost" id="pNone">Clear</button></div>
+      <div class="guestlist"></div>
+      <div class="row"><button class="btn big" id="pGo">Send invitations 💌</button></div></div>`);
+    const hours = body.querySelector('#pHour');
+    for (let hh = 10; hh <= 22; hh++) hours.appendChild(h(`<option value="${hh}" ${hh === 19 ? 'selected' : ''}>${hh}:00</option>`));
+    let where = 'home';
+    [['home', 'My house'], ['park', 'The park'], ['pond', 'The pond'], ['river', 'The river'], ['sunflowers', 'Sunflower field'], ['shrine', 'The shrine']].forEach(([k, n]) => {
+      const b = h(`<button class="chip ${k === where ? 'sel' : ''}">${n}</button>`);
+      b.onclick = () => { where = k; body.querySelectorAll('#pWhere .chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); };
+      body.querySelector('#pWhere').appendChild(b);
+    });
+    const sel = new Set();
+    const gl = body.querySelector('.guestlist');
+    if (!met.length) gl.appendChild(h(`<p class="muted small">You haven't met anyone yet! Go say hi first.</p>`));
+    met.forEach((c) => {
+      const b = h(`<button class="chip">${MH.esc(c.name)}</button>`);
+      b.onclick = () => { sel.has(c.id) ? sel.delete(c.id) : sel.add(c.id); b.classList.toggle('sel'); };
+      b.dataset.id = c.id; gl.appendChild(b);
+    });
+    body.querySelector('#pAll').onclick = () => gl.querySelectorAll('.chip').forEach((b) => { sel.add(b.dataset.id); b.classList.add('sel'); });
+    body.querySelector('#pNone').onclick = () => { sel.clear(); gl.querySelectorAll('.chip').forEach((b) => b.classList.remove('sel')); };
+    body.querySelector('#pGo').onclick = () => {
+      if (!sel.size) { ui.toast('Pick at least one guest.'); return; }
+      const dayOffset = +body.querySelector('#pDay').value, hour = +body.querySelector('#pHour').value;
+      if (dayOffset === 0 && hour <= MH.hour()) { ui.toast('That time has already passed today.'); return; }
+      MH.sim.hostParty({ dayOffset, hour, loc: where, theme: body.querySelector('#pTheme').value.trim(), invited: [...sel] });
+      ui.closeModal();
+      ui.toast('💌 Invitations sent!', 3);
+    };
+    ui.modal('🎉 Plan a party', body);
+  };
 
   ui.openProfile = function (id) {
     const ch = MH.CHAR[id], n = MH.social.npc(id), att = MH.social.attitude(id);
@@ -206,7 +310,7 @@
 
   function tabYou() {
     const P = MH.state.player;
-    const d = h(`<div class="you"><div class="phead"><canvas class="pv" width="30" height="44"></canvas><div class="pmeta"><h3>${MH.esc(P.name)}</h3><div class="ptitle">${MH.esc(P.pronouns)} · new in town · ${P.coins} coins</div><button class="btn small" id="editLook">Change look</button></div></div>
+    const d = h(`<div class="you"><div class="phead"><canvas class="pv"></canvas><div class="pmeta"><h3>${MH.esc(P.name)}</h3><div class="ptitle">${MH.esc(P.pronouns)} · new in town · ${P.coins} coins</div><button class="btn small" id="editLook">Change look</button></div></div>
       <h4>Your reputation in town</h4><div class="reps"></div><p class="muted small">Everyone only knows what they saw or heard through gossip, so each villager has their own idea of you.</p>
       <h4>Things people saw you do</h4><ul class="mems">${P.deeds.slice().reverse().map((x) => `<li><i>${MH.esc(MH.agoStr(x.t))}</i> ${MH.esc(x.text)}</li>`).join('') || '<li class="muted">Nothing noteworthy yet.</li>'}</ul></div>`);
     const reps = d.querySelector('.reps');
@@ -214,7 +318,7 @@
       const v = P.rep[t] || 0;
       reps.appendChild(h(`<div class="rep"><span>${MH.TRAIT_LABEL[t]}</span><span class="bar mid"><i style="left:${v < 0 ? 50 + v * 50 / 60 : 50}%;width:${Math.abs(v) * 50 / 60}%;background:${v < 0 ? '#e0524a' : '#8fd16a'}"></i></span><b>${v > 0 ? '+' : ''}${v}</b></div>`));
     });
-    const pv = d.querySelector('.pv'); const ctx = pv.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.drawImage(MH.player.sprite.down[0], 0, 0);
+    const pv = d.querySelector('.pv'); pv.width = 120; pv.height = 174; const ctx = pv.getContext('2d'); ctx.scale(3, 3); MH.art.drawChibiTo(ctx, MH.art.playerLook(MH.state.player.look || {}), 'down', 0);
     d.querySelector('#editLook').onclick = () => ui.openCreator(true);
     return d;
   }
@@ -243,12 +347,15 @@
     const W = MH.world.W, H = MH.world.H, s = 3;
     cv.width = W * s; cv.height = H * s;
     const x = cv.getContext('2d');
-    const col = ['#78c25a', '#3f7d45', '#d8b984', '#c9bfae', '#ecd9a2', '#4aa6d8', '#4f6b47', '#7a6644', '#9a7448', '#b0814e', '#3a86c0'];
-    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) { x.fillStyle = col[MH.world.g(tx, ty)]; x.fillRect(tx * s, ty * s, s, s); }
+    const col = ['#86c35c', '#4e8a48', '#d6bf92', '#cfc6b4', '#ead9a8', '#58aed6', '#5d7a52', '#7f6a48', '#9c784c', '#b5875a', '#3f8cc0', '#8e9096', '#6a6258', '#7fb6b0', '#c8955e', '#c9c48a', '#16120f', '#b9b3a6', '#8e9096', '#6a4a2e'];
+    const Wt = MH.world.TOWN_W;
+    cv.width = Wt * s;
+    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < Wt; tx++) { x.fillStyle = col[MH.world.g(tx, ty)] || '#000'; x.fillRect(tx * s, ty * s, s, s); }
     MH.world.buildings.forEach((b) => { x.fillStyle = b.roof || '#666'; x.fillRect(b.x * s, b.y * s, b.w * s, b.h * s); });
     x.font = 'bold 9px sans-serif'; x.textAlign = 'center';
-    MH.world.buildings.forEach((b) => { x.fillStyle = '#fff'; x.strokeStyle = '#000'; x.lineWidth = 2; const n = b.name.split(' (')[0].replace('The ', ''); x.strokeText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); x.fillText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); });
-    MH.npcs.forEach((e) => { if (e.hidden) return; x.fillStyle = e.ch.look.top || '#fff'; x.fillRect(e.x / 16 * s - 2, e.y / 16 * s - 2, 4, 4); });
+    MH.world.buildings.forEach((b) => { if (b.generic) return; x.fillStyle = '#fff'; x.strokeStyle = '#000'; x.lineWidth = 2; const n = b.name.split(' (')[0].replace('The ', ''); x.strokeText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); x.fillText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); });
+    [['Park', 53, 83], ['Sunflowers', 53, 100], ['Rice paddies', 82, 106], ['Cornfield', 114, 108], ['Swamp', 140, 75], ['Deep Woods', 40, 8], ['Pond', 100, 84], ['River', 108, 52]].forEach(([n, tx, ty]) => { x.fillStyle = '#fff'; x.strokeText(n, tx * s, ty * s); x.fillText(n, tx * s, ty * s); });
+    MH.world.buildings.forEach((b) => { if (b.generic) return; });
     x.fillStyle = '#ff2a6a'; x.beginPath(); x.arc(MH.player.x / 16 * s, MH.player.y / 16 * s, 4, 0, 7); x.fill();
   }
 
@@ -272,18 +379,18 @@
       MH.social.addMemory('zahra', `${P.name} tossed a coin in the well and wished: "${w}". I heard it. Perhaps I'll help, in my own way.`, { imp: 3, kind: 'witness' });
       MH.social.grapevine(`Someone made a wish at the well. Zahra smiled.`, ['zahra']);
       ui.closeModal();
-      MH.render.burst(48 * 16, 33 * 16, 'sparkle', 16);
+      MH.render.burst(79 * 16, 56 * 16, 'sparkle', 16);
       ui.vibe('The coin falls for a long time. Somewhere, a lamp glows a little warmer.');
     };
   };
   ui.sleepPrompt = function () {
     const hr = MH.hour();
-    const body = h(`<div class="form"><p>Your little cottage. It smells like fresh paint and someone else's cinnamon rolls.</p><div class="row"><button class="btn" id="sleepGo">${hr >= 18 || hr < 6 ? 'Sleep until morning' : 'Nap until tomorrow morning'}</button><button class="btn ghost" id="saveGo">Just save</button></div></div>`);
-    ui.modal('Your Cottage', body);
+    const body = h(`<div class="form"><p>Your futon. It smells like fresh tatami and someone else's cinnamon rolls.</p><div class="row"><button class="btn" id="sleepGo">${hr >= 18 || hr < 6 ? 'Sleep until morning' : 'Nap until tomorrow morning'}</button><button class="btn ghost" id="saveGo">Just save</button></div></div>`);
+    ui.modal('Your House', body);
     body.querySelector('#sleepGo').onclick = () => {
       ui.closeModal();
       const f = $('#fade'); f.classList.add('on');
-      setTimeout(() => { MH.sim.sleepUntilMorning(); MH.render.snap(); MH.save(); f.classList.remove('on'); }, 900);
+      setTimeout(() => { MH.sim.sleepUntilMorning(); MH.render.snap(); MH.save(); f.classList.remove('on'); MH.sim.vibeNow('Morning light slides across the tatami. A train rattles past outside.'); }, 900);
     };
     body.querySelector('#saveGo').onclick = () => { MH.save(); ui.toast('Saved.'); ui.closeModal(); };
   };
@@ -310,6 +417,8 @@
       <p><b>Chat like a role-play</b>: type anything. Put actions in asterisks: <i>*offers a handshake*</i>, <i>*hides behind Vix*</i>. Villagers answer with their own actions too.</p>
       <p><b>Group chats</b>: villagers nearby can overhear and wander in. Tap <b>…</b> to stay quiet and let them talk among themselves.</p>
       <p><b>Bonds & reputation</b>: everyone remembers what you do. Witnesses gossip. Some villagers will like you just for your reputation, others will hate you for the same thing.</p>
+      <p><b>Your house</b>: it's right by the west railway crossing. Go inside to sleep, raid the fridge, and plan parties on the low table. Invite people over (or to meet somewhere) with the 🏠 button while chatting.</p>
+      <p><b>Events</b>: towns gatherings happen every week (see Journal → Plans). Just show up to join.</p>
       <p><b>AI</b>: add an OpenRouter API key in Settings so every villager gets unique AI dialogue. Without a key, the game runs in a simple offline mode.</p>
       <p><b>Journal</b>: see what each villager thinks and remembers about you.</p></div>`);
     ui.modal('How to play', body);
@@ -325,6 +434,8 @@
       <div class="row"><input id="sModel" value="${MH.esc(S.model)}" placeholder="provider/model-name"><button class="btn small ghost" id="sBrowse">Browse</button></div>
       <div id="modelList" class="modellist hidden"><input id="mSearch" placeholder="Search models…"><div class="ml"></div></div>
       <div class="row"><button class="btn small" id="sTest">Test connection</button><span id="sTestOut" class="muted small"></span></div>
+      <label class="toggle"><input type="checkbox" id="sMature" ${S.mature ? 'checked' : ''}> Mature mode (16+)</label>
+      <p class="muted small">Off: cozy PG-13. On: strong language, darker themes and heavier drama are allowed, and romance can go further — anything sexual fades to black instead of being refused, so scenes don't break immersion. Nothing explicit either way.</p>
       <label>Villager small talk (uses AI calls when you can see them)</label>
       <select id="sAmb"><option value="off">Off</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">Lively</option></select>
       <label>Creativity <small id="sTempV">${S.temperature}</small></label>
@@ -350,6 +461,7 @@
       S.textSpeed = body.querySelector('#sSpeed').value;
       S.timeScale = parseFloat(body.querySelector('#sTime').value) || 1;
       S.temperature = parseFloat(body.querySelector('#sTemp').value) || 0.9;
+      S.mature = body.querySelector('#sMature').checked;
       MH.saveSettings();
     };
     body.querySelector('#sTest').onclick = async () => {
@@ -420,28 +532,29 @@
     }));
   };
 
-  const SKINS = ['#f2c9a0', '#e0a878', '#b87a4a', '#7a4a2a', '#e2793b', '#8a8a92', '#f4f4f2', '#5cc14e', '#7c93a6', '#f2a9b8', '#c8a874', '#4f7ad9'];
+  const SKINS = ['#fbe0c8', '#f2c9a0', '#e8b48a', '#d49a6a', '#b87a4a', '#9a6238', '#7a4a2a', '#5a3620'];
   const HAIRS = ['#5a3a2a', '#1c1a22', '#d4622a', '#f3d35a', '#f2f2f2', '#c84a8a', '#4a6ac8', '#3f9a3a', '#8a5a34', '#e8382a'];
   const CLOTH = ['#4a7ad8', '#d93a3a', '#3a8a5a', '#f4c84a', '#7a4aa0', '#2a2a3a', '#f4f0e6', '#e07ab0', '#5ab0e0', '#8a6a44'];
   ui.openCreator = function (editing) {
     const P = editing ? MH.state.player : null;
-    const L = Object.assign({ skin: SKINS[0], hair: HAIRS[0], hairStyle: 'short', ears: 'none', tail: 'none', top: CLOTH[0], bottom: CLOTH[5] }, P ? P.look : {});
-    const body = h(`<div class="creator"><div class="cprev"><canvas width="30" height="44"></canvas></div><div class="cform form">
+    const L = Object.assign({ skin: SKINS[1], hair: HAIRS[0], hairStyle: 'short', top: CLOTH[0], bottom: CLOTH[5], lashes: false }, P ? P.look : {});
+    const body = h(`<div class="creator"><div class="cprev"><canvas></canvas></div><div class="cform form">
       ${editing ? '' : `<label>Your name</label><input id="cName" maxlength="20" placeholder="Your name" value="${MH.esc(MH.settings.playerName || '')}"><label>Pronouns</label><select id="cPro"><option>they/them</option><option>she/her</option><option>he/him</option><option>she/they</option><option>he/they</option></select>`}
-      <label>Fur / skin</label><div class="sw" data-k="skin"></div>
+      <p class="muted small">You're the only human in Mirehollow. The villagers will notice.</p>
+      <label>Skin</label><div class="sw" data-k="skin"></div>
       <label>Hair</label><div class="sw" data-k="hair"></div>
       <label>Hair style</label><div class="opts" data-k="hairStyle" data-v="short,long,pony,curly,bun,buns,messy,wild,none"></div>
-      <label>Ears</label><div class="opts" data-k="ears" data-v="none,fox,cat,bear,rabbit,round"></div>
-      <label>Tail</label><div class="opts" data-k="tail" data-v="none,fox,cat,bear,puff"></div>
+      <label>Eyelashes</label><div class="opts" data-k="lashes" data-v="no,yes"></div>
       <label>Top</label><div class="sw" data-k="top"></div>
       <label>Bottom</label><div class="sw" data-k="bottom"></div>
       <div class="row"><button class="btn big" id="cGo">${editing ? 'Done' : 'Move in!'}</button></div></div></div>`);
-    const cv = body.querySelector('canvas'), cx = cv.getContext('2d');
+    const cv = body.querySelector('canvas'); cv.width = 160; cv.height = 232; const cx = cv.getContext('2d');
     let frame = 0, dirI = 0;
     const draw = () => {
-      const set = MH.art.chibi({ id: 'prev_' + MH.uid(), species: 'player', look: MH.art.playerLook(L) });
-      cx.clearRect(0, 0, 30, 44);
-      cx.drawImage(set[['down', 'left', 'up', 'right'][dirI]][frame], 0, 0);
+      cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, 160, 232);
+      const d = ['down', 'left', 'up', 'left'][dirI];
+      cx.setTransform(dirI === 3 ? -4 : 4, 0, 0, 4, dirI === 3 ? 160 : 0, 0);
+      MH.art.drawChibiTo(cx, MH.art.playerLook(L), d, frame);
     };
     const iv = setInterval(() => { frame = (frame + 1) % 3; if (frame === 0 && Math.random() < 0.3) dirI = (dirI + 1) % 4; draw(); }, 260);
     const pal = { skin: SKINS, hair: HAIRS, top: CLOTH, bottom: CLOTH };
@@ -451,7 +564,7 @@
     });
     body.querySelectorAll('.opts').forEach((o) => {
       const k = o.dataset.k;
-      o.dataset.v.split(',').forEach((v) => { const b = h(`<button class="chip ${L[k] === v ? 'sel' : ''}">${v}</button>`); b.onclick = () => { L[k] = v; o.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); draw(); }; o.appendChild(b); });
+      o.dataset.v.split(',').forEach((v) => { const val = k === 'lashes' ? v === 'yes' : v; const b = h(`<button class="chip ${L[k] === val ? 'sel' : ''}">${v}</button>`); b.onclick = () => { L[k] = val; o.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); draw(); }; o.appendChild(b); });
     });
     draw();
     body.querySelector('#cGo').onclick = () => {

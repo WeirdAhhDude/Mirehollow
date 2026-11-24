@@ -34,26 +34,27 @@
 
     <div id="chat" class="hidden">
       <div id="cast"></div>
+      <div id="meBubble"></div>
       <div id="chatbar">
         <div id="quick">
-          <button data-act="*waves*">👋 wave</button>
-          <button data-act="*hugs*">🤗 hug</button>
-          <button data-act="*offers a handshake*">🤝 shake</button>
-          <button data-act="*smiles*">😊 smile</button>
-          <button data-act="*laughs*">😂 laugh</button>
-          <button data-act="*winks*">😉 wink</button>
-          <button data-act="*bows politely*">🙇 bow</button>
+          <button id="btnWait" class="qb" title="Stay quiet and let them talk">… Listen</button>
+          <button id="btnInvite" class="qb" title="Invite someone over or to meet somewhere">🏠 Invite</button>
+          <button id="btnGive" class="qb" title="Give something">🎁 Give</button>
+          <button id="btnStar" class="qb" title="Insert an *action*">✱ Action</button>
+          <button id="btnChatLog" class="qb" title="Chat log">☰ Log</button>
+          <button data-act="*waves*">👋</button>
+          <button data-act="*hugs*">🤗</button>
+          <button data-act="*offers a handshake*">🤝</button>
+          <button data-act="*smiles*">😊</button>
+          <button data-act="*laughs*">😂</button>
+          <button data-act="*winks*">😉</button>
+          <button data-act="*bows politely*">🙇</button>
         </div>
         <div class="row">
           <button id="btnLeave" class="cb" title="Leave the conversation">✕</button>
-          <button id="btnChatLog" class="cb" title="Chat log">☰</button>
-          <input id="chatInput" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" maxlength="400" placeholder="Say something… use *asterisks* for actions">
-          <button id="btnStar" class="cb" title="Insert an *action*">✱</button>
-          <button id="btnGive" class="cb" title="Give something">🎁</button>
-          <button id="btnWait" class="cb" title="Stay quiet and let them talk">…</button>
+          <input id="chatInput" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" maxlength="400" placeholder="Say something… *actions* in asterisks">
           <button id="btnSend" class="cb send" title="Send">➤</button>
         </div>
-        <div id="chatStatus"></div>
       </div>
     </div>
 
@@ -64,6 +65,7 @@
 
   <script src="js/core.js"></script>
   <script src="js/data_chars.js"></script>
+  <script src="js/data_folk.js"></script>
   <script src="js/data_lore.js"></script>
   <script src="js/world.js"></script>
   <script src="js/art.js"></script>

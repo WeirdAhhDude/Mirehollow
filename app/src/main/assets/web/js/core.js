@@ -99,6 +99,7 @@ window.MH = window.MH || {};
     textSpeed: 'normal', // slow | normal | fast | instant
     timeScale: 1, // game minutes per real second
     temperature: 0.9,
+    mature: false, // Mature mode (16+): darker themes & strong language, fade-to-black instead of refusals
     playerName: '',
   };
   MH.settings = Object.assign({}, MH.defaultSettings, MH.store.get('settings', {}));

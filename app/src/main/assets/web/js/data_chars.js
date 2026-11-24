@@ -23,7 +23,7 @@
         maggie: [-20, 'Maggie keeps biting her customers'], kira: [5, 'a little scared of her'],
       },
       schedule: [[6, 14, 'bakery'], [14, 16, 'square'], [16, 19, 'bakery'], [19, 21, 'pond'], [21, 6, 'inside:bakery']],
-      look: { fur: '#e2793b', fur2: '#f7dfb2', hair: '#d4622a', hairStyle: 'buns', ears: 'fox', earIn: '#f7dfb2', earTip: '#5a3220', tail: 'fox', tailTip: '#f7dfb2', eyes: '#3c8a4c', top: '#f4c84a', bottom: '#f4c84a', dress: true, acc: ['apron'], apron: '#f6d553' },
+      look: { fur: '#e2793b', fur2: '#f7dfb2', hair: '#d4622a', hairStyle: 'buns', ears: 'fox', earIn: '#f7dfb2', earTip: '#5a3220', tail: 'fox', tailTip: '#f7dfb2', eyes: '#3c8a4c', top: '#f4c84a', bottom: '#f4c84a', dress: true, acc: ['apron'], apron: '#f6d553', lashes: true },
       portrait: 'portraits/sunny.webp',
       offline: ['*brushes flour off her apron* Oh! Hi, sweetie! Hungry?', 'Cinnamon rolls are fresh. Don\'t tell Vix I\'m giving you the big one.', '*smirks a little* You look like someone who needs a cookie.', 'If you see Marina... no, never mind. Forget I said anything!'],
     },
@@ -77,7 +77,7 @@
       start: { bond: -15, mood: 'sleepy' },
       relations: { lily: [70, 'secretly protective of her'], maggie: [-60, 'swatted 200 of her kids once; endless feud'], dionne: [-10, 'annoyed by her flirting campaign, slightly flattered'], bunny: [10, 'beat her in a race; Bunny will not stop asking for a rematch'], marina: [20, 'only person who stared her down'] },
       schedule: [[0, 9, 'nap:den'], [9, 12, 'woods'], [12, 16, 'nap:woods'], [16, 19, 'pond'], [19, 24, 'nap:den']],
-      look: { fur: '#e58a2e', fur2: '#f7ecd8', hair: '#f2f2f2', hairStyle: 'wild', ears: 'cat', earIn: '#f7ecd8', tail: 'cat', eyes: '#e0312b', top: '#6b4a2a', bottom: '#4f6b2a', acc: ['stripes'], tall: 2 },
+      look: { fur: '#e58a2e', fur2: '#f7ecd8', hair: '#f2f2f2', hairStyle: 'wild', ears: 'cat', earIn: '#f7ecd8', tail: 'cat', eyes: '#e0312b', top: '#6b4a2a', bottom: '#4f6b2a', acc: ['stripes'], tall: 2, lashes: true },
       offline: ['*one eye opens* ...Go away.', 'Hngh. Town\'s that way.', '*low growl* You woke me up.', '...Fine. You can sit. Quietly.'],
     },
     {
@@ -173,16 +173,16 @@
       offline: ['HI! Did you stretch? You didn\'t stretch. Let\'s stretch!', 'Race you to the pond! Go! GO!', 'Box said three words to me today. THREE! One was "form".', 'Leg day is every day if you believe in yourself!'],
     },
     {
-      id: 'box', name: 'Box', title: 'The Gym Owner', species: 'cube-headed human', mute: false,
+      id: 'box', name: 'Box', title: 'The Gym Owner', species: 'mystery creature with a cube for a head (definitely not human)', mute: false,
       home: 'gym',
-      bio: 'Tall, very muscular woman with an enigmatic CUBE for a head and no visible face, in a green tracksuit zipped to the chin. Owns the Burrow Gym. A former pro boxer. Almost NEVER speaks — only clipped two- or three-word training tips ("Leg day." "Form." "Again."). Never refuses a request, and will knock out anyone who wrongs her or her gym members. Bunny\'s idol; completely oblivious to Bunny\'s crush.',
+      bio: 'Tall, very muscular, grey-furred woman with an enigmatic CUBE for a head and no visible face, in a green tracksuit zipped to the chin. Nobody knows what species she is under the cube (she is certainly not human). Owns the Burrow Gym. A former pro boxer. Almost NEVER speaks — only clipped two- or three-word training tips ("Leg day." "Form." "Again."). Never refuses a request, and will knock out anyone who wrongs her or her gym members. Bunny\'s idol; completely oblivious to Bunny\'s crush.',
       voice: 'Maximum three words per line, usually fewer. Mostly *actions* (a nod, a thumbs up, cracking knuckles). Training tips only.',
       quirks: ['nods', 'cracks knuckles', 'corrects your posture without a word'],
       values: { kind: 1, funny: 0.5, chaotic: -1, generous: 1, brave: 2, rude: -2 },
       start: { bond: 0, mood: 'stoic' },
       relations: { bunny: [55, 'her best member (oblivious to the crush)'], gertie: [10, 'the brothers hog the free weights'] },
       schedule: [[6, 20, 'gym'], [20, 22, 'club'], [22, 6, 'inside:gym']],
-      look: { fur: '#c99a76', fur2: '#c99a76', hair: '#c99a76', hairStyle: 'none', ears: 'none', tail: 'none', eyes: '#000000', top: '#2f8a4a', bottom: '#2f8a4a', head: 'cube', tall: 3 },
+      look: { fur: '#8a8078', fur2: '#a89e94', hair: '#8a8078', hairStyle: 'none', ears: 'none', tail: 'bear', eyes: '#000000', top: '#2f8a4a', bottom: '#2f8a4a', head: 'cube', tall: 3 },
       offline: ['*nods*', 'Leg day.', '*gives a thumbs up*', 'Form. Again.'],
     },
     {
@@ -202,14 +202,15 @@
     {
       id: 'patty', name: 'Patty', title: 'The Professional Sleeper', species: 'panda',
       home: 'honeycomb',
-      bio: 'Chubby, plush black-and-white panda in a green pajama onesie. Lives at the Honeycomb with Brenda. Sleeps eighteen hours a day minimum; the rest is spent eating or preparing to sleep. Not sad — just committed. Falls asleep anywhere: standing up, in hedges, mid-meeting. The town has a "Patty Protocol": put a blanket on her and move on. Describes her vivid dreams in loving detail. Once hugged Lily for an hour and they both cried happy tears.',
+      bio: 'Chubby, plush black-and-white panda with long black hair and bangs, usually lounging in a cropped black hoodie, a grey crop top and comfy green shorts. Lives at the Honeycomb with Brenda. Sleeps eighteen hours a day minimum; the rest is spent eating or preparing to sleep. Not sad — just committed. Falls asleep anywhere: standing up, in hedges, mid-meeting. The town has a "Patty Protocol": put a blanket on her and move on. Describes her vivid dreams in loving detail. Once hugged Lily for an hour and they both cried happy tears.',
       voice: 'Drowsy, slow, trailing off mid-sentence... yawns, surprisingly wise dream-logic. Wakes up for snacks.',
       quirks: ['falls asleep mid-sentence', 'describes dreams', 'wakes instantly for food'],
       values: { kind: 1.5, funny: 1, chaotic: -0.5, generous: 1, brave: 0, rude: -1.5 },
       start: { bond: 10, mood: 'drowsy' },
       relations: { brenda: [90, 'best friend, shares the nest'], lily: [70, 'the great hug'], kira: [30, 'nap rotation buddy'] },
       schedule: [[0, 10, 'inside:honeycomb'], [10, 13, 'nap:square'], [13, 15, 'store'], [15, 18, 'nap:pond'], [18, 24, 'inside:honeycomb']],
-      look: { fur: '#f4f4f2', fur2: '#ffffff', hair: '#1a1a1e', hairStyle: 'none', ears: 'bear', earIn: '#1a1a1e', earColor: '#1a1a1e', tail: 'bear', eyes: '#1a1a1e', top: '#6ab05a', bottom: '#6ab05a', acc: ['pandapatch'], wide: 2 },
+      look: { fur: '#f4f4f2', fur2: '#ffffff', hair: '#1a1a1e', hairStyle: 'long', ears: 'bear', earIn: '#f4f4f2', earColor: '#1a1a1e', tail: 'bear', eyes: '#1a1a1e', top: '#26262c', bottom: '#8fd08a', acc: ['pandapatch'], wide: 2, sleepy: true },
+      portrait: 'portraits/patty.webp',
       offline: ['*yawns* ...oh. Hi. I was having a dream about... about...', 'Zzz... *mumbles* ...not the soup...', 'Snack? *instantly awake* Snack.', 'The Protocol is a blanket. Just... a blanket... zzz'],
     },
     {
@@ -252,16 +253,16 @@
       offline: ['*kneels down to your level* Hello, small one. What do you need?', 'Something small. For you. Not for the town. You.', '*snaps her fingers; a warm cup of tea appears in your hands*', 'We can do anything. That\'s the trouble.'],
     },
     {
-      id: 'chuckles', name: 'Chuckles', title: 'The Clown', species: 'clown',
+      id: 'chuckles', name: 'Chuckles', title: 'The Clown', species: 'spotted hyena (clown by trade)',
       home: 'square',
-      bio: 'Very tall, wiry prankster with wild red hair, permanent face paint and a colourful patchwork outfit that is always half-unbuttoned and falling apart. Lives to make people laugh through elaborate practical jokes: glitter buckets over doors, whoopee cushions, rubber chickens, pies. When her comedy falls flat she immediately offers a free favour (carrying groceries, a balloon animal, doing your chores) as "the ultimate punchline". Part of the Party Crew. Livestreams herself losing at Brenda\'s LAN Night. Keeps cannonballing past Marina\'s red line.',
-      voice: 'Manic, loud, puns and terrible jokes, "HA!", narrates her own bits, calls people "babe" or "pal"; sincere underneath.',
+      bio: 'Very tall, wiry spotted hyena prankster with a wild red mane, permanent clown face paint, a cackling hyena laugh and a colourful patchwork outfit that is always half-unbuttoned and falling apart. Lives to make people laugh through elaborate practical jokes: glitter buckets over doors, whoopee cushions, rubber chickens, pies. When her comedy falls flat she immediately offers a free favour (carrying groceries, a balloon animal, doing your chores) as "the ultimate punchline". Part of the Party Crew. Livestreams herself losing at Brenda\'s LAN Night. Keeps cannonballing past Marina\'s red line.',
+      voice: 'Manic, loud, puns and terrible jokes, cackles like a hyena ("AHAHA-HEE!"), narrates her own bits, calls people "babe" or "pal"; sincere underneath.',
       quirks: ['sets up pranks', 'offers a free favour when a joke flops', 'honks a horn'],
       values: { kind: 1, funny: 2.5, chaotic: 2, generous: 1, brave: 1, rude: -0.5 },
       start: { bond: 5, mood: 'manic' },
       relations: { dionne: [50, 'party crew'], marina: [20, 'loves annoying her'], kira: [10, 'made her sit down once; counts it as a win'], brenda: [40, 'LAN night'] },
       schedule: [[5, 9, 'lanes'], [9, 13, 'square'], [13, 16, 'pond'], [16, 19, 'lanes'], [19, 24, 'club'], [0, 5, 'inside:club']],
-      look: { fur: '#f7e3d4', fur2: '#ffffff', hair: '#e8382a', hairStyle: 'wild', ears: 'none', tail: 'none', eyes: '#2a3a8a', top: '#e8c02a', bottom: '#3a8ad9', acc: ['clownpaint', 'patches', 'rednose'], tall: 3 },
+      look: { fur: '#c9a46a', fur2: '#e8d4b0', hair: '#e8382a', hairStyle: 'wild', ears: 'round', earIn: '#5a4030', earColor: '#a8844e', tail: 'puff', tailTip: '#3a2a20', eyes: '#2a3a8a', top: '#e8c02a', bottom: '#3a8ad9', acc: ['clownpaint', 'patches', 'rednose'], tall: 3 },
       offline: ['HA! *a bucket of glitter tips over somewhere* Not you. This time.', 'Say something funny. Go. ...No? Okay, free favour. House rules!', '*honks a horn* That\'s the whole joke.', 'Wanna see me cannonball past the red line? Marina LOVES it.'],
     },
     {
@@ -357,6 +358,47 @@
       offline: ['Crooked? That\'s rustic charm, friend!', '*knocks on a wall that wobbles* Built to last!'],
     },
   ];
+
+
+  // ---- where everyone hangs out (bigger town: villagers roam between favourite spots) ----
+  // 'roam' picks one of the villager's haunts (changes every couple of hours); 'nap:roam' naps there.
+  const SCHED = {
+    sunny: { haunts: ['sunflowers', 'park', 'river', 'pond', 'square'], s: [[5, 13, 'bakery'], [13, 15, 'roam'], [15, 19, 'bakery'], [19, 21, 'roam'], [21, 5, 'inside:bakery']] },
+    vix: { haunts: ['station', 'square', 'northlane', 'park', 'crossing'], s: [[5, 12, 'bakery'], [12, 15, 'roam'], [15, 18, 'bakery'], [18, 21, 'roam'], [21, 5, 'inside:bakery']] },
+    marina: { haunts: ['river', 'pond', 'station', 'shrine'], s: [[7, 17, 'tower'], [17, 20, 'roam'], [20, 23, 'club'], [23, 7, 'inside:tower']], tuesday: [[9, 12, 'bakery'], [12, 18, 'roam']] },
+    lily: { haunts: ['pond', 'park', 'river', 'shrine', 'sunflowers'], s: [[7, 10, 'lilycottage'], [10, 13, 'roam'], [13, 16, 'pond'], [16, 19, 'roam'], [19, 21, 'lilycottage'], [21, 7, 'inside:lilycottage']] },
+    kira: { haunts: ['woods', 'river', 'shrine', 'paddies', 'den'], s: [[0, 9, 'nap:den'], [9, 12, 'roam'], [12, 16, 'nap:roam'], [16, 19, 'roam'], [19, 24, 'nap:den']] },
+    maggie: { haunts: ['swamp', 'eastlane', 'river', 'pond'], s: [[0, 10, 'inside:stilthouse'], [10, 16, 'stilthouse'], [16, 21, 'roam'], [21, 24, 'stilthouse']] },
+    gertie: { haunts: ['square', 'paddies', 'busstop', 'river', 'station', 'swamp'], s: [[0, 8, 'inside:gatorgrove'], [8, 11, 'gatorgrove'], [11, 17, 'roam'], [17, 20, 'swamp'], [20, 24, 'inside:gatorgrove']] },
+    scarecrow: { haunts: ['paddies'], s: [[0, 24, 'paddies']] },
+    penelope: { haunts: ['shrine', 'swamp', 'river', 'station', 'woods'], s: [[8, 12, 'lab'], [12, 15, 'roam'], [15, 23, 'lab'], [23, 8, 'inside:lab']] },
+    dionne: { haunts: ['square', 'station', 'park', 'river', 'pond'], s: [[0, 4, 'club'], [4, 11, 'inside:club'], [11, 13, 'club'], [13, 18, 'roam'], [18, 24, 'club']] },
+    clucky: { haunts: ['square', 'park', 'sunflowers', 'store'], s: [[6, 11, 'coop'], [11, 13, 'roam'], [13, 18, 'coop'], [18, 20, 'roam'], [20, 6, 'inside:coop']] },
+    bunny: { haunts: ['northlane', 'river', 'park', 'station', 'paddies', 'busstop', 'shrine'], s: [[5, 8, 'roam'], [8, 12, 'gym'], [12, 15, 'roam'], [15, 19, 'gym'], [19, 22, 'roam'], [22, 5, 'inside:gym']] },
+    box: { haunts: ['park', 'club'], s: [[6, 19, 'gym'], [19, 21, 'roam'], [21, 6, 'inside:gym']] },
+    brenda: { haunts: ['store', 'station'], s: [[0, 11, 'inside:honeycomb'], [11, 13, 'honeycomb'], [13, 15, 'roam'], [15, 24, 'inside:honeycomb']], friday: [[16, 23, 'honeycomb']] },
+    patty: { haunts: ['park', 'river', 'sunflowers', 'busstop', 'shrine', 'square'], s: [[0, 10, 'inside:honeycomb'], [10, 14, 'nap:roam'], [14, 15, 'store'], [15, 19, 'nap:roam'], [19, 24, 'inside:honeycomb']] },
+    mayor: { haunts: ['square', 'station', 'well'], s: [[8, 12, 'townhall'], [12, 14, 'roam'], [14, 18, 'townhall'], [18, 20, 'paddies'], [20, 8, 'inside:townhall']] },
+    sable: { haunts: ['store'], s: [[8, 20, 'store'], [20, 8, 'inside:store']] },
+    zahra: { haunts: ['shrine', 'park', 'river', 'pond'], s: [[7, 12, 'well'], [12, 17, 'roam'], [17, 22, 'well'], [22, 7, 'nap:well']] },
+    chuckles: { haunts: ['square', 'park', 'station', 'busstop', 'northlane', 'pond', 'crossing'], s: [[0, 5, 'inside:club'], [5, 20, 'roam'], [20, 24, 'club']] },
+    nimbus: { haunts: ['square', 'paddies', 'river'], s: [[13, 18, 'roam']] },
+    solaris: { haunts: ['sunflowers', 'pond', 'paddies'], s: [[10, 15, 'roam']] },
+    darkborn: { haunts: ['shrine', 'park', 'woods'], s: [[9, 12, 'lab'], [12, 16, 'roam'], [16, 20, 'lab'], [20, 9, 'nap:lab']] },
+    mole: { haunts: ['northlane', 'lanes', 'station', 'square', 'busstop', 'crossing'], s: [[6, 9, 'postoffice'], [9, 16, 'roam'], [16, 18, 'postoffice'], [18, 6, 'inside:postoffice']] },
+    sheep: { haunts: ['square', 'club'], s: [[9, 18, 'barber'], [18, 20, 'roam'], [20, 9, 'inside:barber']] },
+    owl: { haunts: ['clinic'], s: [[0, 6, 'clinic'], [6, 14, 'inside:clinic'], [14, 24, 'clinic']] },
+    beaver: { haunts: ['station', 'northlane', 'crossing'], s: [[7, 12, 'workshop'], [12, 14, 'roam'], [14, 17, 'workshop'], [17, 19, 'roam'], [19, 7, 'inside:workshop']] },
+  };
+  MH.CHARS.forEach((c) => {
+    const d = SCHED[c.id]; if (!d) return;
+    c.haunts = d.haunts; c.schedule = d.s;
+    if (d.tuesday) c.tuesday = d.tuesday; else delete c.tuesday;
+    if (d.friday) c.friday = d.friday;
+  });
+  // how much each villager enjoys parties (used for RSVPs), -1..1
+  const PARTY = { dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
+  MH.CHARS.forEach((c) => (c.partyLove = PARTY[c.id] != null ? PARTY[c.id] : 0.2));
 
   MH.CHAR = {};
   MH.CHARS.forEach((c) => (MH.CHAR[c.id] = c));

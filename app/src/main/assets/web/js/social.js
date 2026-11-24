@@ -33,7 +33,7 @@
       version: 1,
       created: Date.now(),
       player: Object.assign({
-        name: 'Newcomer', pronouns: 'they/them', look: {}, tx: 26, ty: 53, coins: 40, inv: [],
+        name: 'Newcomer', pronouns: 'they/them', look: {}, tx: 37, ty: 33, coins: 40, inv: [],
         rep: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 }, deeds: [],
       }, playerOpts || {}),
       time: { day: 0, minutes: 8 * 60 },
@@ -44,13 +44,17 @@
       picked: {},
       today: {},
       convoCount: 0,
+      plans: [],      // villagers' appointments: visits, meetups, party attendance
+      parties: [],    // parties the player is hosting
+      joined: {},     // gatherings the player has attended (key: day|name)
+      lastApproach: -99999,
     };
-    MH.CHARS.forEach((c) => {
+    MH.ALL.forEach((c) => {
       st.npcs[c.id] = {
         bond: c.start.bond, mood: c.start.mood, label: '', met: false,
         memories: [], perceived: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 },
         rel: Object.fromEntries(Object.entries(c.relations || {}).map(([k, v]) => [k, v[0]])),
-        lastTalk: -99999, talks: 0,
+        lastTalk: -99999, talks: 0, lastApproach: -99999,
       };
     });
     return st;
@@ -146,8 +150,10 @@
   S.witness = function (text, wx, wy, exclude, repDeltas, radius = 9) {
     if (!text) return [];
     const seen = [];
+    const insideHome = MH.world.inInterior(Math.floor(wx / MH.TILE), Math.floor(wy / MH.TILE));
     MH.npcs.forEach((e) => {
       if (exclude.includes(e.id) || e.hidden || e.asleep) return;
+      if (MH.isInside(e) !== insideHome) return; // walls block the view
       if (MH.CHAR[e.id].elusive && Math.random() < 0.5) return;
       const d = Math.hypot(e.x - wx, e.y - wy) / MH.TILE;
       if (d > radius) return;

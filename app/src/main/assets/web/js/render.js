@@ -1,291 +1,360 @@
-// Mirehollow — renderer: low-res pixel canvas scaled up, y-sorted sprites, lighting, weather, particles.
+// Mirehollow — renderer: screen-resolution painted world, chunked ground, y-sorted sprites,
+// utility wires, train & crossings, lighting, weather, particles.
 'use strict';
 (function (MH) {
   const T = MH.TILE;
-  const R = (MH.render = { cam: { x: 0, y: 0, tx: null, ty: null }, zoom: 3, fx: [] });
-  let canvas, ctx, ground, light, lctx;
+  const R = (MH.render = { cam: { x: 0, y: 0, tx: null, ty: null }, zoom: 4, fx: [], dpr: 1 });
+  let canvas, ctx, light, lctx, buckets = null, BW = 0;
+  const BUCKET = 8;
 
   R.init = function (cv) {
     canvas = cv;
     ctx = canvas.getContext('2d');
-    ground = MH.art.renderGround();
-    [light, lctx] = MH.art.mk(8, 8);
+    light = document.createElement('canvas'); lctx = light.getContext('2d');
+    R.buildBuckets();
     R.resize();
     window.addEventListener('resize', R.resize);
     if (window.visualViewport) window.visualViewport.addEventListener('resize', R.resize);
   };
-  R.rebuildGround = () => { ground = MH.art.renderGround(); };
+
+  R.buildBuckets = function () {
+    BW = Math.ceil(MH.world.W / BUCKET);
+    const BH = Math.ceil(MH.world.H / BUCKET);
+    buckets = Array.from({ length: BW * BH }, () => []);
+    for (const p of MH.world.props) buckets[Math.floor(p.ty / BUCKET) * BW + Math.floor(p.tx / BUCKET)].push(p);
+  };
+  R.addProp = function (p) { if (buckets) buckets[Math.floor(p.ty / BUCKET) * BW + Math.floor(p.tx / BUCKET)].push(p); };
+  R.removeProp = function (p) { if (!buckets) return; const b = buckets[Math.floor(p.ty / BUCKET) * BW + Math.floor(p.tx / BUCKET)]; const i = b.indexOf(p); if (i >= 0) b.splice(i, 1); };
 
   R.resize = function () {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    R.dpr = dpr;
     const cssW = canvas.parentElement.clientWidth || window.innerWidth, cssH = canvas.parentElement.clientHeight || window.innerHeight;
-    const pw = cssW * dpr, ph = cssH * dpr;
-    const target = Math.min(ph, pw * 0.75);
-    R.zoom = Math.max(1, Math.round(target / 250));
-    canvas.width = Math.ceil(pw / R.zoom);
-    canvas.height = Math.ceil(ph / R.zoom);
-    canvas.style.width = (canvas.width * R.zoom) / dpr + 'px';
-    canvas.style.height = (canvas.height * R.zoom) / dpr + 'px';
-    ctx.imageSmoothingEnabled = false;
-    light.width = canvas.width; light.height = canvas.height;
+    canvas.width = Math.round(cssW * dpr); canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
+    // portrait phones: ~11.5 tiles across; landscape screens: ~13 tiles tall
+    const byW = canvas.width / (11.5 * T), byH = canvas.height / (13 * T);
+    R.zoom = canvas.width < canvas.height ? Math.min(byW, byH * 1.6) : Math.min(byH, byW * 1.4);
+    R.zoom = Math.max(1.5, R.zoom);
+    R.baseZoom = R.zoom;
+    MH.art.setScale(R.zoom);
+    light.width = Math.ceil(canvas.width / 3); light.height = Math.ceil(canvas.height / 3);
     R.cssScale = R.zoom / dpr;
   };
 
-  R.worldToScreen = (x, y) => ({ x: (x - R.cam.x) * R.cssScale, y: (y - R.cam.y) * R.cssScale });
-  R.viewW = () => canvas.width;
-  R.viewH = () => canvas.height;
-
+  R.worldToScreen = (x, y) => ({ x: ((x - R.cam.x) * R.zoom) / R.dpr, y: ((y - R.cam.y) * R.zoom) / R.dpr });
+  R.viewW = () => canvas.width / R.zoom;
+  R.viewH = () => canvas.height / R.zoom;
   R.focus = function (x, y) { R.cam.tx = x; R.cam.ty = y; };
   R.clearFocus = function () { R.cam.tx = null; R.cam.ty = null; };
 
   function updateCamera(dt, snap) {
     const p = MH.player;
-    let fx = R.cam.tx != null ? R.cam.tx : p.x, fy = R.cam.ty != null ? R.cam.ty : p.y - 10;
-    // keep focus above the chat UI when chatting
-    const chatting = MH.chat && MH.chat.active;
-    const yOff = chatting ? canvas.height * 0.16 : 0;
-    const xOff = chatting && canvas.width > canvas.height * 1.2 ? canvas.width * 0.14 : 0;
-    let tx = fx - canvas.width / 2 + xOff, ty = fy - canvas.height / 2 + yOff;
-    const maxX = MH.world.W * T - canvas.width, maxY = MH.world.H * T - canvas.height;
-    tx = MH.clamp(tx, 0, Math.max(0, maxX)); ty = MH.clamp(ty, 0, Math.max(0, maxY));
-    if (snap) { R.cam.x = tx; R.cam.y = ty; }
-    else { const k = 1 - Math.pow(0.0015, dt); R.cam.x += (tx - R.cam.x) * k; R.cam.y += (ty - R.cam.y) * k; }
+    // indoors: zoom so the whole room fits the screen width
+    const I0 = MH.world.interior, insideNow = !MH.titleMode && MH.world.inInterior(Math.floor(p.x / T), Math.floor(p.y / T));
+    R.zoom = insideNow ? Math.min(R.baseZoom, canvas.width / ((I0.x1 - I0.x0 + 1) * T + 6)) : R.baseZoom;
+    const vw = R.viewW(), vh = R.viewH();
+    let fx = R.cam.tx != null ? R.cam.tx : p.x, fy = R.cam.ty != null ? R.cam.ty : p.y - 12;
+    let tx = fx - vw / 2, ty = fy - vh / 2;
+    const ptx = Math.floor(p.x / T), pty = Math.floor(p.y / T);
+    const I = MH.world.interior;
+    let x0 = 0, y0 = 0, x1 = MH.world.TOWN_W * T, y1 = MH.world.H * T;
+    if (MH.world.inInterior(ptx, pty) && !MH.titleMode) { x0 = I.x0 * T - 8; y0 = I.y0 * T - 24; x1 = (I.x1 + 1) * T + 8; y1 = (I.y1 + 1) * T + 16; }
+    tx = x1 - x0 < vw ? (x0 + x1) / 2 - vw / 2 : MH.clamp(tx, x0, x1 - vw);
+    ty = y1 - y0 < vh ? (y0 + y1) / 2 - vh / 2 : MH.clamp(ty, y0, y1 - vh);
+    if (snap || Math.abs(tx - R.cam.x) > vw * 1.5 || Math.abs(ty - R.cam.y) > vh * 1.5) { R.cam.x = tx; R.cam.y = ty; }
+    else { const k = 1 - Math.pow(0.002, dt); R.cam.x += (tx - R.cam.x) * k; R.cam.y += (ty - R.cam.y) * k; }
   }
   R.snap = () => updateCamera(0, true);
 
-  // ------------------------------------------------------------ lighting
+  // ------------------------------------------------------------ lighting curves
   function darkness() {
-    const m = MH.state.time.minutes, h = m / 60;
-    if (h >= 7.5 && h < 17.5) return 0;
-    if (h >= 17.5 && h < 21) return ((h - 17.5) / 3.5) * 0.62;
-    if (h >= 21 || h < 4.5) return 0.62;
-    return 0.62 * (1 - (h - 4.5) / 3);
+    const h = MH.state.time.minutes / 60;
+    if (h >= 7 && h < 17.5) return 0;
+    if (h >= 17.5 && h < 20.5) return ((h - 17.5) / 3) * 0.6;
+    if (h >= 20.5 || h < 4.5) return 0.6;
+    return 0.6 * (1 - (h - 4.5) / 2.5);
   }
   function duskTint() {
     const h = MH.state.time.minutes / 60;
-    if (h > 16.5 && h < 20.5) return Math.sin(((h - 16.5) / 4) * Math.PI) * 0.18;
-    if (h > 5 && h < 8) return Math.sin(((h - 5) / 3) * Math.PI) * 0.1;
+    if (h > 16 && h < 20.5) return Math.sin(((h - 16) / 4.5) * Math.PI) * 0.2;
+    if (h > 5 && h < 8) return Math.sin(((h - 5) / 3) * Math.PI) * 0.12;
     return 0;
   }
+  R.darkness = darkness;
 
   // ------------------------------------------------------------ particles
   R.burst = function (x, y, kind, n = 12) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, s = MH.rand(20, 70);
-      R.fx.push({ kind, x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (kind === 'crow' ? 40 : 20), life: MH.rand(0.8, 1.6), t: 0 });
+      R.fx.push({ kind, x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (kind === 'crow' ? 40 : 20), life: MH.rand(0.8, 1.6), t: 0, r: Math.random() * 6 });
     }
   };
   function updateFx(dt) {
     R.fx = R.fx.filter((f) => (f.t += dt) < f.life);
-    for (const f of R.fx) { f.x += f.vx * dt; f.y += f.vy * dt; if (f.kind === 'heart' || f.kind === 'sparkle') f.vy -= 10 * dt; }
+    for (const f of R.fx) { f.x += f.vx * dt; f.y += f.vy * dt; if (f.kind === 'heart' || f.kind === 'sparkle' || f.kind === 'note') f.vy -= 10 * dt; }
   }
-  function drawFx(cx, cy) {
+  function drawFx() {
     for (const f of R.fx) {
-      const x = Math.round(f.x - cx), y = Math.round(f.y - cy), a = 1 - f.t / f.life;
+      const a = 1 - f.t / f.life;
       ctx.globalAlpha = a;
-      if (f.kind === 'crow') { ctx.fillStyle = '#1a1420'; ctx.fillRect(x - 2, y, 5, 1); ctx.fillRect(x - 1, y - 1, 1, 1); ctx.fillRect(x + 1, y - 1, 1, 1); ctx.fillRect(x, y + 1, 1, 1); }
-      else if (f.kind === 'heart') { ctx.fillStyle = '#ff5a8a'; ctx.fillRect(x - 1, y, 3, 2); ctx.fillRect(x, y + 2, 1, 1); }
-      else if (f.kind === 'sparkle') { ctx.fillStyle = '#fff6a0'; ctx.fillRect(x, y - 1, 1, 3); ctx.fillRect(x - 1, y, 3, 1); }
-      else if (f.kind === 'glitter') { ctx.fillStyle = ['#ff6ad0', '#6af0ff', '#fff06a'][Math.floor(f.x) % 3]; ctx.fillRect(x, y, 1, 1); }
-      else { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, 1, 1); }
+      if (f.kind === 'crow') { ctx.strokeStyle = '#1a1420'; ctx.lineWidth = 1.2; ctx.beginPath(); const w = 3 + Math.sin(f.t * 20) * 1.5; ctx.moveTo(f.x - 4, f.y - w * 0.5); ctx.quadraticCurveTo(f.x - 2, f.y, f.x, f.y); ctx.quadraticCurveTo(f.x + 2, f.y, f.x + 4, f.y - w * 0.5); ctx.stroke(); }
+      else if (f.kind === 'heart') { ctx.fillStyle = '#ff5a8a'; ctx.beginPath(); ctx.moveTo(f.x, f.y + 2); ctx.bezierCurveTo(f.x - 3, f.y - 0.5, f.x - 1.5, f.y - 3, f.x, f.y - 1.2); ctx.bezierCurveTo(f.x + 1.5, f.y - 3, f.x + 3, f.y - 0.5, f.x, f.y + 2); ctx.fill(); }
+      else if (f.kind === 'sparkle') { ctx.fillStyle = '#fff6a0'; ctx.beginPath(); for (let i = 0; i < 4; i++) { const ang = (i / 4) * Math.PI * 2 + f.r; ctx.lineTo(f.x + Math.cos(ang) * 2.2, f.y + Math.sin(ang) * 2.2); ctx.lineTo(f.x + Math.cos(ang + 0.785) * 0.7, f.y + Math.sin(ang + 0.785) * 0.7); } ctx.fill(); }
+      else if (f.kind === 'note') { ctx.fillStyle = '#8a5ae8'; ctx.beginPath(); ctx.ellipse(f.x, f.y, 1.4, 1, -0.3, 0, 7); ctx.fill(); ctx.fillRect(f.x + 1, f.y - 5, 0.6, 5); }
+      else if (f.kind === 'petal') { ctx.fillStyle = '#f8c4d4'; ctx.beginPath(); ctx.ellipse(f.x, f.y, 1.2, 0.6, f.r + f.t * 3, 0, 7); ctx.fill(); }
+      else { ctx.fillStyle = '#ffffff'; ctx.fillRect(f.x, f.y, 1, 1); }
     }
     ctx.globalAlpha = 1;
   }
 
-  // ------------------------------------------------------------ weather
+  // ------------------------------------------------------------ weather (screen space)
   const drops = [];
   function drawWeather(dt) {
     const w = MH.state.weather;
-    if (w !== 'rain' && w !== 'storm') { drops.length = 0; return; }
-    const want = w === 'storm' ? 160 : 90;
-    while (drops.length < want) drops.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, s: MH.rand(140, 220) });
-    ctx.fillStyle = 'rgba(190,215,255,0.55)';
+    const inside = MH.world.inInterior(Math.floor(MH.player.x / T), Math.floor(MH.player.y / T));
+    if ((w !== 'rain' && w !== 'storm') || inside) { drops.length = 0; return; }
+    const W = canvas.width, H = canvas.height;
+    const want = w === 'storm' ? 220 : 130;
+    while (drops.length < want) drops.push({ x: Math.random() * W, y: Math.random() * H, s: MH.rand(900, 1400) * R.dpr / 2 });
+    ctx.strokeStyle = 'rgba(200,220,255,0.5)'; ctx.lineWidth = 1.2 * R.dpr;
+    ctx.beginPath();
     for (const d of drops) {
-      d.y += d.s * dt; d.x -= d.s * 0.25 * dt;
-      if (d.y > canvas.height) { d.y = -4; d.x = Math.random() * (canvas.width + 40); }
-      ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, 4);
+      d.y += d.s * dt; d.x -= d.s * 0.18 * dt;
+      if (d.y > H) { d.y = -10; d.x = Math.random() * (W + 80); }
+      ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 3 * R.dpr, d.y - 14 * R.dpr);
     }
-    ctx.fillStyle = 'rgba(40,60,90,0.18)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (w === 'storm' && Math.random() < 0.004) R.flash = 0.25;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(40,60,90,0.16)'; ctx.fillRect(0, 0, W, H);
+    if (w === 'storm' && Math.random() < 0.004) R.flash = 0.28;
+  }
+
+  // ------------------------------------------------------------ entity drawing
+  const FOOT = () => MH.art.CHIBI_FOOT;
+  function tallOf(e) { return (e.ch && e.ch.look && e.ch.look.tall) || 0; }
+  R.headTop = function (e) { const sc = MH.art.chibiScale(e.ch || e); return e.y - (33 + tallOf(e) * 1.5) * sc; };
+
+  function drawEntity(e) {
+    const ch = e.ch || e.chr;
+    if (!ch) return;
+    const sc = MH.art.chibiScale(ch);
+    // soft shadow
+    ctx.fillStyle = 'rgba(20,30,20,0.24)';
+    ctx.beginPath(); ctx.ellipse(e.x, e.y + 0.5, 6.5 * sc, 2.4 * sc, 0, 0, Math.PI * 2); ctx.fill();
+    const float = ch.id === 'zahra' || ch.id === 'nimbus' || ch.id === 'darkborn' ? Math.sin(MH.now * 2 + e.x) * 1.5 - 2 : 0;
+    const img = MH.art.chibiFrame(ch, e.dir, e.asleep ? 0 : e.frame);
+    const w = MH.art.CW * sc, h = MH.art.CH * sc;
+    if (e.asleep && ch.id !== 'scarecrow') {
+      ctx.save(); ctx.translate(e.x, e.y - 4); ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(img, -h + 12 * sc, -w / 2, h, w); ctx.restore();
+    } else if (e.dir === 'right') {
+      ctx.save(); ctx.translate(e.x, 0); ctx.scale(-1, 1); ctx.drawImage(img, -w / 2, e.y - FOOT() * sc + float, w, h); ctx.restore();
+    } else ctx.drawImage(img, e.x - w / 2, e.y - FOOT() * sc + float, w, h);
+    // name-free emotes
+    if (e.asleep && Math.floor(MH.now * 1.2) % 3 !== 0) MH.art.drawEmote(ctx, 'zzz', e.x + 6, e.y - 22 - ((MH.now * 4) % 4), 0.9);
+    else if (e.emote && e.emote.until > MH.now) MH.art.drawEmote(ctx, e.emote.name, e.x, R.headTop(e) - 9 + Math.sin(MH.now * 8), 1);
+  }
+
+  // ------------------------------------------------------------ train
+  function drawTrain(tr) {
+    const y = 36 * T + 16; // centre between rails
+    const carW = 7 * T, carH = 26, gap = 3;
+    for (let i = 0; i < tr.cars; i++) {
+      const x0 = tr.x + (tr.dir > 0 ? -i : i) * (carW + gap) - carW / 2;
+      ctx.fillStyle = 'rgba(20,30,20,0.25)'; ctx.fillRect(x0 + 4, y + 4, carW, 8);
+      ctx.save(); ctx.translate(x0, y - carH + 6);
+      const r = 5;
+      ctx.beginPath(); ctx.roundRect(0, 0, carW, carH, r); ctx.fillStyle = '#f2ecd8'; ctx.fill(); ctx.strokeStyle = '#4a4438'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#3f8a6a'; ctx.fillRect(1, carH - 9, carW - 2, 4);
+      ctx.fillStyle = '#c86a3a'; ctx.fillRect(1, carH - 5, carW - 2, 1.5);
+      ctx.fillStyle = '#5a6670'; ctx.fillRect(0, 0, carW, 4);
+      for (let k = 0; k < 7; k++) { ctx.fillStyle = MH.render.darkness() > 0.2 ? '#ffe8a8' : '#9cc8e0'; ctx.beginPath(); ctx.roundRect(5 + k * 15, 7, 10, 8, 1.5); ctx.fill(); ctx.strokeStyle = '#4a4438'; ctx.lineWidth = 0.6; ctx.stroke(); }
+      if (i === 0) { ctx.fillStyle = '#ffd86a'; ctx.beginPath(); ctx.arc(tr.dir > 0 ? carW - 3 : 3, carH - 7, 1.8, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
   }
 
   // ------------------------------------------------------------ main draw
   R.draw = function (dt) {
     updateCamera(dt);
     updateFx(dt);
-    const cx = Math.round(R.cam.x), cy = Math.round(R.cam.y);
-    const vw = canvas.width, vh = canvas.height;
-    ctx.fillStyle = '#1e3a24';
-    ctx.fillRect(0, 0, vw, vh);
-    ctx.drawImage(ground, cx, cy, vw, vh, 0, 0, vw, vh);
+    const z = R.zoom, vw = R.viewW(), vh = R.viewH();
+    const cx = R.cam.x, cy = R.cam.y;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#16120f'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(z, 0, 0, z, -cx * z, -cy * z);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
 
+    // ground chunks
+    const CHW = MH.art.CHUNK * T;
+    const c0x = Math.max(0, Math.floor(cx / CHW)), c1x = Math.floor((cx + vw) / CHW), c0y = Math.max(0, Math.floor(cy / CHW)), c1y = Math.floor((cy + vh) / CHW);
+    for (let gy = c0y; gy <= c1y; gy++) for (let gx = c0x; gx <= c1x; gx++) {
+      if (gx * CHW >= MH.world.W * T || gy * CHW >= MH.world.H * T) continue;
+      ctx.drawImage(MH.art.groundChunk(gx, gy), gx * CHW, gy * CHW, CHW + 0.05, CHW + 0.05);
+    }
     // water shimmer
     const t = MH.now;
-    const tx0 = Math.floor(cx / T), ty0 = Math.floor(cy / T), tx1 = tx0 + Math.ceil(vw / T) + 1, ty1 = ty0 + Math.ceil(vh / T) + 1;
-    for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
+    const tx0 = Math.floor(cx / T), ty0 = Math.floor(cy / T), tx1 = Math.ceil((cx + vw) / T), ty1 = Math.ceil((cy + vh) / T);
+    ctx.lineWidth = 0.7; ctx.strokeStyle = 'rgba(235,250,255,0.65)';
+    ctx.beginPath();
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const g = MH.world.g(tx, ty);
-      if (g !== MH.G.WATER && g !== MH.G.DEEP && g !== MH.G.SWAMP) continue;
-      const ph = MH.hash2(tx, ty, 77) * 6.28;
-      const v = Math.sin(t * 1.6 + ph);
-      if (v > 0.6) {
-        ctx.fillStyle = g === MH.G.SWAMP ? 'rgba(160,200,120,0.35)' : 'rgba(230,248,255,0.6)';
-        const ox = Math.floor(MH.hash2(tx, ty, 5) * 10), oy = Math.floor(MH.hash2(tx, ty, 6) * 12) + 2;
-        ctx.fillRect(tx * T - cx + ox, ty * T - cy + oy, 3 + Math.round(v * 2), 1);
+      if (g !== MH.G.WATER && g !== MH.G.DEEP && g !== MH.G.PADDY) continue;
+      const ph = MH.hash2(tx, ty, 77) * 6.28, v = Math.sin(t * 1.5 + ph);
+      if (v < 0.55) continue;
+      const ox = tx * T + MH.hash2(tx, ty, 5) * 10 + (g === MH.G.WATER && ty < 77 ? (t * 6) % 6 : 0), oy = ty * T + 3 + MH.hash2(tx, ty, 6) * 10;
+      ctx.moveTo(ox, oy); ctx.quadraticCurveTo(ox + 2, oy - 1, ox + 3 + v * 2, oy);
+    }
+    ctx.stroke();
+
+    // gather visible props (buckets) + buildings + entities
+    const m = 6;
+    const b0x = Math.max(0, Math.floor((cx - 64) / (BUCKET * T))), b1x = Math.min(BW - 1, Math.floor((cx + vw + 64) / (BUCKET * T)));
+    const b0y = Math.max(0, Math.floor((cy - 16) / (BUCKET * T))), b1y = Math.floor((cy + vh + 120) / (BUCKET * T));
+    const flats = [], list = [];
+    for (let by = b0y; by <= b1y; by++) for (let bx = b0x; bx <= b1x; bx++) {
+      const bucket = buckets[by * BW + bx]; if (!bucket) continue;
+      for (const p of bucket) {
+        if (p.x < cx - 64 || p.x > cx + vw + 64 || p.y < cy - 8 || p.y > cy + vh + 120) continue;
+        if (p.pick && MH.isPicked(p) && (p.flat || p.type === 'sunflower')) continue;
+        (p.flat ? flats : list).push({ y: p.y, p });
       }
     }
-
-    const inView = (x, y, m = 48) => x > cx - m && x < cx + vw + m && y > cy - m && y < cy + vh + m * 2;
-
-    // flat props
-    for (const p of MH.world.props) {
-      if (!p.flat || !inView(p.x, p.y)) continue;
-      if (p.pick && MH.isPicked(p)) continue;
-      const s = MH.art.prop(p);
-      ctx.drawImage(s, Math.round(p.x - s.width / 2 - cx), Math.round(p.y - s.height + 2 - cy));
-    }
-
-    // sortables
-    const list = [];
-    for (const p of MH.world.props) if (!p.flat && inView(p.x, p.y)) list.push({ y: p.y, p });
+    for (const fp of flats) { const s = MH.art.prop(fp.p); ctx.drawImage(s.img, fp.p.x + s.ox, fp.p.y + s.oy, s.w, s.h); }
     for (const b of MH.world.buildings) {
       const bx = b.x * T, by = (b.y + b.h) * T;
-      if (bx + b.w * T < cx - 20 || bx > cx + vw + 20 || by < cy - 10 || by - b.h * T - 40 > cy + vh) continue;
+      if (bx + b.w * T < cx - 20 || bx > cx + vw + 20 || by + 16 < cy || by - b.h * T - 50 > cy + vh) continue;
       list.push({ y: by - 1, b });
     }
-    for (const e of MH.npcs) if (!e.hidden && inView(e.x, e.y, 80)) list.push({ y: e.y, e });
+    for (const e of MH.npcs) if (!e.hidden && e.x > cx - 60 && e.x < cx + vw + 60 && e.y > cy - 20 && e.y < cy + vh + 90) list.push({ y: e.y, e });
     if (!MH.titleMode) list.push({ y: MH.player.y, e: MH.player });
+    if (MH.train && MH.train.active) list.push({ y: 37 * T + 10, train: MH.train });
     list.sort((a, b) => a.y - b.y);
-
     for (const it of list) {
-      if (it.p) {
-        const p = it.p;
-        if (p.pick && MH.isPicked(p) && p.type !== 'corn' && p.type !== 'bush') continue;
-        const s = MH.art.prop(p);
-        ctx.drawImage(s, Math.round(p.x - s.width / 2 - cx + (p.w === 2 ? 8 : 0)), Math.round(p.y - s.height + 3 - cy));
-      } else if (it.b) {
-        const b = it.b, s = MH.art.building(b), o = MH.art.buildingOffset(b);
-        ctx.drawImage(s, Math.round(o.ox - cx), Math.round(o.oy - cy));
-      } else drawEntity(it.e, cx, cy);
+      if (it.p) { const s = MH.art.prop(it.p); ctx.drawImage(s.img, it.p.x + s.ox + (it.p.w === 2 ? 8 : 0), it.p.y + s.oy, s.w, s.h); }
+      else if (it.b) { const s = MH.art.building(it.b), a = MH.art.buildingAnchor(it.b); ctx.drawImage(s.img, a.x + s.ox, a.y + s.oy, s.w, s.h); it.b._spr = s; }
+      else if (it.train) drawTrain(it.train);
+      else drawEntity(it.e);
+    }
+
+    // utility wires (high in the air, drawn above everything)
+    ctx.strokeStyle = 'rgba(40,36,40,0.75)'; ctx.lineWidth = 0.55;
+    ctx.beginPath();
+    for (const [a, b] of MH.world.wires) {
+      if (Math.max(a.x, b.x) < cx - 40 || Math.min(a.x, b.x) > cx + vw + 40 || Math.max(a.y, b.y) < cy - 20 || Math.min(a.y, b.y) - 110 > cy + vh) continue;
+      for (const [dx, dy] of [[-9, -91], [-4, -91], [4, -91], [9, -91], [-6, -83], [6, -83]]) {
+        const ax = a.x + dx, ay = a.y + dy, bx = b.x + dx, by = b.y + dy;
+        const sag = 3 + Math.hypot(bx - ax, by - ay) * 0.035;
+        ctx.moveTo(ax, ay); ctx.quadraticCurveTo((ax + bx) / 2, (ay + by) / 2 + sag, bx, by);
+      }
+    }
+    ctx.stroke();
+
+    // crossing lamps
+    const blink = Math.floor(t * 2.4) % 2;
+    for (const c of MH.world.crossings) {
+      if (!c.active) continue;
+      for (const p of c.signs || []) {
+        const lamps = MH.art.crossingLamps(p);
+        lamps.forEach(([lx, ly], i) => {
+          if ((i + blink) % 2) return;
+          const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, 9); g.addColorStop(0, 'rgba(255,80,60,0.95)'); g.addColorStop(0.3, 'rgba(255,60,40,0.6)'); g.addColorStop(1, 'rgba(255,40,30,0)');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(lx, ly, 9, 0, 7); ctx.fill();
+        });
+      }
     }
 
     // talk target indicator
     const tgt = MH.sim && MH.sim.target;
-    if (tgt && !(MH.chat && MH.chat.active)) {
-      const bob = Math.round(Math.sin(t * 6) * 1.5);
-      const hy = tgt.e ? headTop(tgt.e) : tgt.y - 20;
-      const x = Math.round((tgt.e ? tgt.e.x : tgt.x) - cx), y = Math.round(hy - cy - 6 + bob);
-      ctx.fillStyle = '#1a1420'; ctx.fillRect(x - 3, y - 1, 7, 4); ctx.fillRect(x - 2, y + 3, 5, 1); ctx.fillRect(x - 1, y + 4, 3, 1);
-      ctx.fillStyle = '#ffd23a'; ctx.fillRect(x - 2, y, 5, 2); ctx.fillRect(x - 1, y + 2, 3, 1); ctx.fillRect(x, y + 3, 1, 1);
+    if (tgt && !(MH.chat && MH.chat.active) && !MH.titleMode) {
+      const bob = Math.sin(t * 6) * 1.5;
+      const hx = tgt.e ? tgt.e.x : tgt.x, hy = (tgt.e ? R.headTop(tgt.e) : tgt.y - 18) - 10 + bob;
+      ctx.beginPath(); ctx.moveTo(hx - 4, hy - 3); ctx.lineTo(hx + 4, hy - 3); ctx.lineTo(hx, hy + 2.5); ctx.closePath();
+      ctx.fillStyle = '#ffd23a'; ctx.fill(); ctx.strokeStyle = '#5a3a10'; ctx.lineWidth = 0.8; ctx.stroke();
     }
 
-    // swarm near Maggie at dusk / swamp
-    drawSwarm(cx, cy);
-    drawFx(cx, cy);
+    drawSwarm();
+    drawFx();
+
+    // cloud shadows drifting over the town (outdoors only)
+    const inside = MH.world.inInterior(Math.floor(MH.player.x / T), Math.floor(MH.player.y / T)) && !MH.titleMode;
+    if (!inside) {
+      ctx.fillStyle = 'rgba(20,40,30,0.07)';
+      for (let i = 0; i < 5; i++) {
+        const sx = ((t * 6 + i * 520) % (MH.world.TOWN_W * T + 600)) - 300, sy = (i * 431) % (MH.world.H * T);
+        if (sx < cx - 260 || sx > cx + vw + 260 || sy < cy - 200 || sy > cy + vh + 200) continue;
+        ctx.beginPath(); ctx.ellipse(sx, sy, 150, 80, 0.2, 0, 7); ctx.ellipse(sx + 90, sy + 30, 100, 60, 0, 0, 7); ctx.fill();
+      }
+    }
+
+    // ---------------- screen-space passes
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawWeather(dt);
-
-    // lighting
-    const dark = darkness();
-    const dusk = duskTint();
-    if (dusk > 0) { ctx.fillStyle = `rgba(255,120,60,${dusk})`; ctx.fillRect(0, 0, vw, vh); }
+    const dark = inside ? 0 : darkness();
+    const dusk = inside ? 0 : duskTint();
+    const W = canvas.width, H = canvas.height;
+    if (dusk > 0) { ctx.fillStyle = `rgba(255,128,60,${dusk})`; ctx.fillRect(0, 0, W, H); }
+    if (inside) { ctx.fillStyle = 'rgba(255,190,110,0.06)'; ctx.fillRect(0, 0, W, H); }
     if (dark > 0.02) {
+      const ls = light.width / W;
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
       lctx.globalCompositeOperation = 'source-over';
-      lctx.clearRect(0, 0, vw, vh);
-      lctx.fillStyle = `rgba(14,18,52,${dark})`;
-      lctx.fillRect(0, 0, vw, vh);
+      lctx.clearRect(0, 0, light.width, light.height);
+      lctx.fillStyle = `rgba(16,20,56,${dark})`; lctx.fillRect(0, 0, light.width, light.height);
       lctx.globalCompositeOperation = 'destination-out';
+      lctx.setTransform(z * ls, 0, 0, z * ls, -cx * z * ls, -cy * z * ls);
       const lights = MH.world.lights.slice();
-      lights.push({ x: MH.player.x, y: MH.player.y - 8, r: 30 });
+      lights.push({ x: MH.player.x, y: MH.player.y - 10, r: 36 });
+      const sol = MH.npcById.solaris; if (sol && !sol.hidden) lights.push({ x: sol.x, y: sol.y - 16, r: 90 });
       for (const L of lights) {
-        if (!inView(L.x, L.y, L.r + 10)) continue;
-        if (L.window && L.b && L.b.cave) continue;
-        const flick = L.lamp ? 1 + Math.sin(t * 7 + L.x) * 0.04 : 1;
-        const g = lctx.createRadialGradient(L.x - cx, L.y - cy, 0, L.x - cx, L.y - cy, L.r * flick);
+        if (L.x < cx - L.r || L.x > cx + vw + L.r || L.y < cy - L.r || L.y > cy + vh + L.r) continue;
+        if (L.crossing && !L.crossing.active) continue;
+        const flick = L.lamp ? 1 + Math.sin(t * 7 + L.x) * 0.03 : 1;
+        const g = lctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, L.r * flick);
         g.addColorStop(0, 'rgba(0,0,0,0.95)'); g.addColorStop(0.5, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-        lctx.fillStyle = g;
-        lctx.fillRect(L.x - cx - L.r, L.y - cy - L.r, L.r * 2, L.r * 2);
+        lctx.fillStyle = g; lctx.fillRect(L.x - L.r, L.y - L.r, L.r * 2, L.r * 2);
       }
-      // glowing villagers (Solaris)
-      const sol = MH.npcById.solaris;
-      if (sol && !sol.hidden) {
-        const g = lctx.createRadialGradient(sol.x - cx, sol.y - 14 - cy, 0, sol.x - cx, sol.y - 14 - cy, 70);
-        g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-        lctx.fillStyle = g; lctx.fillRect(sol.x - cx - 70, sol.y - cy - 84, 140, 140);
-      }
-      ctx.drawImage(light, 0, 0);
-      // warm glow on lamps
+      ctx.drawImage(light, 0, 0, W, H);
+      // warm window glows & lamp halos
+      ctx.setTransform(z, 0, 0, z, -cx * z, -cy * z);
       ctx.globalCompositeOperation = 'lighter';
+      for (const b of MH.world.buildings) {
+        const s = b._spr; if (!s || !s.wins) continue;
+        const a = MH.art.buildingAnchor(b);
+        if (a.x > cx + vw || a.x + b.w * T < cx || a.y < cy || a.y - b.h * T - 60 > cy + vh) continue;
+        const lit = MH.hash2(b.x, b.y, MH.state.time.day) < 0.8 || !b.generic;
+        if (!lit) continue;
+        ctx.fillStyle = `rgba(255,190,90,${0.55 * dark})`;
+        for (const [wx, wy, ww, wh] of s.wins) ctx.fillRect(a.x + s.ox + 8 + wx, a.y + s.oy + wy, ww, wh);
+      }
       for (const L of MH.world.lights) {
-        if (!L.lamp || !inView(L.x, L.y)) continue;
-        const g = ctx.createRadialGradient(L.x - cx, L.y - cy, 0, L.x - cx, L.y - cy, 18);
-        g.addColorStop(0, `rgba(255,200,110,${0.35 * dark})`); g.addColorStop(1, 'rgba(255,200,110,0)');
-        ctx.fillStyle = g; ctx.fillRect(L.x - cx - 18, L.y - cy - 18, 36, 36);
+        if (!L.lamp || L.x < cx - 40 || L.x > cx + vw + 40 || L.y < cy - 40 || L.y > cy + vh + 40) continue;
+        const g = ctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, 16);
+        g.addColorStop(0, `rgba(255,210,130,${0.5 * dark})`); g.addColorStop(1, 'rgba(255,210,130,0)');
+        ctx.fillStyle = g; ctx.fillRect(L.x - 16, L.y - 16, 32, 32);
       }
       ctx.globalCompositeOperation = 'source-over';
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
-    // Solaris glow by day
-    const sol = MH.npcById.solaris;
-    if (sol && !sol.hidden && inView(sol.x, sol.y)) {
-      ctx.globalCompositeOperation = 'lighter';
-      const g = ctx.createRadialGradient(sol.x - cx, sol.y - 16 - cy, 0, sol.x - cx, sol.y - 16 - cy, 40);
-      g.addColorStop(0, 'rgba(255,210,90,0.35)'); g.addColorStop(1, 'rgba(255,210,90,0)');
-      ctx.fillStyle = g; ctx.fillRect(sol.x - cx - 40, sol.y - cy - 56, 80, 80);
-      ctx.globalCompositeOperation = 'source-over';
+    // gentle vignette
+    if (!R._vig || R._vig.w !== W || R._vig.h !== H) {
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(30,20,10,0.28)');
+      R._vig = { g, w: W, h: H };
     }
-    if (R.flash) { ctx.fillStyle = `rgba(255,255,255,${R.flash})`; ctx.fillRect(0, 0, vw, vh); R.flash = Math.max(0, R.flash - dt); }
+    ctx.fillStyle = R._vig.g; ctx.fillRect(0, 0, W, H);
+    if (R.flash) { ctx.fillStyle = `rgba(255,255,255,${R.flash})`; ctx.fillRect(0, 0, W, H); R.flash = Math.max(0, R.flash - dt); }
   };
 
-  function headTop(e) {
-    const s = e.sprite, sc = s.scale || 1;
-    const lookT = (e.ch && e.ch.look && e.ch.look.tall) || 0;
-    return e.y - (24 + lookT) * sc;
-  }
-  R.headTop = headTop;
-
-  function drawEntity(e, cx, cy) {
-    const s = e.sprite; if (!s) return;
-    const sc = s.scale || 1;
-    const frames = s[e.dir] || s.down;
-    const img = frames[e.asleep ? 0 : e.frame] || frames[0];
-    const w = img.width * sc, h = img.height * sc;
-    const x = Math.round(e.x - w / 2 - cx), y = Math.round(e.y - h + 3 * sc - cy);
-    // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    const sw = 7 * sc;
-    for (let i = -2; i <= 1; i++) { const ww = Math.round(sw * Math.sqrt(1 - (i * i) / 5)); ctx.fillRect(Math.round(e.x - cx) - ww, Math.round(e.y - cy) + i + 1, ww * 2, 1); }
-    if (e.id === 'nimbus' || e.id === 'zahra') { /* floating */ }
-    if (e.asleep && e.id !== 'scarecrow') {
-      ctx.save();
-      ctx.translate(Math.round(e.x - cx), Math.round(e.y - cy - 4));
-      ctx.rotate(-Math.PI / 2);
-      ctx.drawImage(img, -h + 6 * sc, -w / 2, h, w);
-      ctx.restore();
-    } else {
-      const floatY = e.id === 'zahra' || e.id === 'nimbus' || e.id === 'darkborn' ? Math.round(Math.sin(MH.now * 2 + e.x) * 1.5) - 2 : 0;
-      ctx.drawImage(img, x, y + floatY, w, h);
-    }
-    // emote
-    if (e.asleep && Math.floor(MH.now * 1.2) % 3 !== 0) {
-      const em = MH.art.emote('zzz');
-      ctx.drawImage(em, Math.round(e.x - cx + 4), Math.round(e.y - cy - 26 - (MH.now * 4) % 4));
-    } else if (e.emote && e.emote.until > MH.now) {
-      const em = MH.art.emote(e.emote.name);
-      const bob = Math.round(Math.sin(MH.now * 8) * 1);
-      ctx.drawImage(em, Math.round(e.x - cx - em.width / 2), Math.round(headTop(e) - cy - 14 + bob));
-    }
-  }
-
-  // Maggie's swarm: little dark dots buzzing around her or in the swamp at dusk.
+  // Maggie's swarm: little dark specks buzzing around her.
   const swarm = Array.from({ length: 18 }, () => ({ a: Math.random() * 6.28, r: MH.rand(6, 18), s: MH.rand(2, 5), o: Math.random() * 6 }));
-  function drawSwarm(cx, cy) {
+  function drawSwarm() {
     const m = MH.npcById.maggie;
     if (!m || m.hidden) return;
     ctx.fillStyle = '#2a2430';
     for (const b of swarm) {
       const a = b.a + MH.now * b.s;
-      const x = Math.round(m.x + Math.cos(a) * b.r + Math.sin(MH.now * 3 + b.o) * 3 - cx);
-      const y = Math.round(m.y - 26 + Math.sin(a * 1.3) * b.r * 0.6 - cy);
-      ctx.fillRect(x, y, 1, 1);
+      ctx.beginPath(); ctx.arc(m.x + Math.cos(a) * b.r + Math.sin(MH.now * 3 + b.o) * 3, m.y - 32 + Math.sin(a * 1.3) * b.r * 0.6, 0.7, 0, 7); ctx.fill();
     }
   }
 })(window.MH);

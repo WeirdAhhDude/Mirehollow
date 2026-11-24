@@ -23,12 +23,16 @@
     st.picked = st.picked || {};
     st.player.deeds = st.player.deeds || [];
     st.player.rep = Object.assign({ kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 }, st.player.rep || {});
+    st.plans = st.plans || []; st.parties = st.parties || []; st.joined = st.joined || {};
+    if (st.lastApproach == null) st.lastApproach = -99999;
+    if ((st.version || 1) < 2) { st.version = 2; st.player.tx = 37; st.player.ty = 33; } // new, bigger town
+    if (st.player.look) { delete st.player.look.ears; delete st.player.look.tail; }
     return st;
   }
 
   MH.loadState = function (st) {
     MH.state = migrate(st);
-    if (MH.state.today.nimbus == null) MH.sim.newDay(true);
+    if (MH.state.today.nimbus == null || !MH.state.today.announced) MH.sim.newDay(true);
     MH.makePlayer();
     MH.titleMode = false;
     MH.sim.placeEveryone();
@@ -45,6 +49,7 @@
 
   MH.newGame = function (opts) {
     MH.state = MH.social.newState(opts);
+    MH.state.version = 2;
     MH.sim.newDay(true);
     MH.state.weather = 'sunny';
     MH.makePlayer();
@@ -55,7 +60,7 @@
     document.body.classList.remove('title');
     MH.save();
     MH.ui.updateHud();
-    setTimeout(() => MH.ui.vibe('You\'ve just moved into a little cottage in Mirehollow. The swamp is past the last lamp post. Bring bug spray.'), 500);
+    setTimeout(() => MH.ui.vibe('You\'ve just moved into a little house by the railway crossing in Mirehollow. The swamp is past the last lamp post. Bring bug spray.'), 500);
     if (!MH.store.get('seenHelp', false)) { setTimeout(() => { MH.ui.openHelp(); MH.store.set('seenHelp', true); }, 1500); }
     // The Mayor comes to welcome you.
     setTimeout(() => {
@@ -63,7 +68,8 @@
       if (!m || MH.chat.active) return;
       const s = MH.world.nearestWalkable(MH.player.tile().tx + 6, MH.player.tile().ty - 3);
       m.setTile(s.tx, s.ty); m.hidden = false; m.busy = null;
-      m.approachReason = `Mayor Ringo hurries over to officially welcome ${opts.name}, the newcomer who just moved into the empty cottage, clipboard in hand. He is flustered, mentions a couple of the town's "quirks" (the swamp, the lab, the Scarecrow), and hopes they won't cause trouble.`;
+      MH.state.lastApproach = MH.absMinutes(); MH.social.npc('mayor').lastApproach = MH.absMinutes();
+      m.approachReason = `Mayor Ringo hurries over to officially welcome ${opts.name}, the newcomer who just moved into the empty house by the west railway crossing, clipboard in hand. He is flustered, notes that they're the only human in town ("which is FINE, very exciting, we're very inclusive"), mentions a couple of the town's "quirks" (the swamp, the lab, the Scarecrow), and hopes they won't cause trouble.`;
       m.approachT = 40; m.repath = 0; m.hurry = true; m.showEmote('!', 2);
       MH.sim.approaching = m;
     }, 6000);
@@ -75,7 +81,7 @@
     MH.now += dt;
     try {
       if (MH.titleMode) {
-        MH.render.focus(47 * 16 + Math.sin(MH.now * 0.12) * 110, 32 * 16 + Math.cos(MH.now * 0.09) * 40);
+        MH.render.focus(79 * 16 + Math.sin(MH.now * 0.1) * 140, 50 * 16 + Math.cos(MH.now * 0.08) * 120);
         for (const e of MH.npcs) if (!e.hidden && !e.busy) { if (e.path && e.path.length) MH.npcWalk(e, dt); else if (Math.random() < dt * 0.15) { const s = MH.world.randomSpot(e.plan ? e.plan.loc : e.ch.home); MH.npcGoTo(e, s.tx, s.ty); } }
       } else {
         MH.updatePlayer(dt);
@@ -92,6 +98,7 @@
   MH.boot = function () {
     MH.world.gen();
     MH.state = MH.social.newState();
+    MH.state.version = 2;
     MH.state.time.minutes = 10 * 60;
     MH.sim.newDay(true);
     MH.state.weather = 'sunny';

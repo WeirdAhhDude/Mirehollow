@@ -1,4 +1,4 @@
-// Mirehollow — player & villager entities, movement, collision.
+// Mirehollow — player & villager entities, movement, collision, entering/leaving the house.
 'use strict';
 (function (MH) {
   const T = MH.TILE;
@@ -10,7 +10,7 @@
   function Entity(opts) {
     Object.assign(this, {
       x: 0, y: 0, dir: 'down', frame: 0, animT: 0, moving: false, speed: 50, path: null, pathGoal: null,
-      hidden: false, asleep: false, emote: null, state: 'idle', idleT: 0, bubble: null,
+      hidden: false, asleep: false, emote: null, state: 'idle', idleT: 0,
     }, opts);
   }
   Entity.prototype.tile = function () { return { tx: Math.floor(this.x / T), ty: Math.floor((this.y - 2) / T) }; };
@@ -21,11 +21,13 @@
     else this.dir = dy < 0 ? 'up' : 'down';
   };
   Entity.prototype.showEmote = function (name, secs = 2.5) { this.emote = { name, until: MH.now + secs }; };
+  MH.Entity = Entity;
 
-  const HB = 4; // half hitbox width
+  const HB = 4;
+  const walk = (tx, ty) => MH.world.walkable(tx, ty) && !MH.world.crossingBlocked(tx, ty);
   function blockedAt(x, y) {
     const pts = [[x - HB, y - 4], [x + HB, y - 4], [x - HB, y], [x + HB, y]];
-    for (const [px, py] of pts) if (!MH.world.walkable(Math.floor(px / T), Math.floor(py / T))) return true;
+    for (const [px, py] of pts) if (!walk(Math.floor(px / T), Math.floor(py / T))) return true;
     return false;
   }
   MH.blockedAt = blockedAt;
@@ -33,80 +35,72 @@
   function tryMove(e, dx, dy) {
     let moved = false;
     if (dx && !blockedAt(e.x + dx, e.y)) { e.x += dx; moved = true; }
-    else if (dx) {
-      // slide around corners
-      for (const s of [-1, 1]) if (!blockedAt(e.x + dx, e.y + s * 2)) { e.y += s * 0.6; break; }
-    }
+    else if (dx) { for (const s of [-1, 1]) if (!blockedAt(e.x + dx, e.y + s * 2)) { e.y += s * 0.6; break; } }
     if (dy && !blockedAt(e.x, e.y + dy)) { e.y += dy; moved = true; }
-    else if (dy) {
-      for (const s of [-1, 1]) if (!blockedAt(e.x + s * 2, e.y + dy)) { e.x += s * 0.6; break; }
-    }
+    else if (dy) { for (const s of [-1, 1]) if (!blockedAt(e.x + s * 2, e.y + dy)) { e.x += s * 0.6; break; } }
     return moved;
   }
-
   function animate(e, dt, moving) {
     e.moving = moving;
-    if (moving) {
-      e.animT += dt * (e.running ? 11 : 7);
-      e.frame = 1 + (Math.floor(e.animT) % 2);
-    } else { e.frame = 0; e.animT = 0; }
+    if (moving) { e.animT += dt * (e.running ? 10 : 6.5); e.frame = 1 + (Math.floor(e.animT) % 2); }
+    else { e.frame = 0; e.animT = 0; }
   }
+  MH.animate = animate;
 
   // ------------------------------------------------------------ player
+  MH.playerChar = function () {
+    const st = MH.state.player;
+    return { id: 'player', name: st.name, species: 'human', look: MH.art.playerLook(st.look || {}), _v: (MH._pv = (MH._pv || 0) + 1) };
+  };
   MH.makePlayer = function () {
     const st = MH.state.player;
-    const p = new Entity({ id: 'player', isPlayer: true, speed: 72 });
+    const p = new Entity({ id: 'player', isPlayer: true, speed: 74 });
     p.setTile(st.tx, st.ty);
     if (!MH.world.walkable(st.tx, st.ty)) { const n = MH.world.nearestWalkable(st.tx, st.ty); p.setTile(n.tx, n.ty); }
-    p.sprite = MH.art.chibi({ id: 'player_' + MH.uid(), species: 'player', look: MH.art.playerLook(st.look) });
+    p.ch = MH.playerChar();
     MH.player = p;
     return p;
   };
-  MH.refreshPlayerSprite = function () {
-    MH.player.sprite = MH.art.chibi({ id: 'player_' + MH.uid(), species: 'player', look: MH.art.playerLook(MH.state.player.look) });
-  };
+  MH.refreshPlayerSprite = function () { MH.player.ch = MH.playerChar(); };
 
   MH.updatePlayer = function (dt) {
     const p = MH.player, inp = MH.input;
-    if (MH.chat && MH.chat.active) { animate(p, dt, false); return; }
-    if (MH.ui && MH.ui.modalOpen) { animate(p, dt, false); return; }
-    let { mx, my, run } = inp.move();
+    if ((MH.chat && MH.chat.active) || (MH.ui && MH.ui.modalOpen) || MH.fading) { animate(p, dt, false); return; }
+    const { mx, my, run } = inp.move();
     const mag = Math.hypot(mx, my);
     if (mag > 0.15) {
       p.running = run || mag > 0.92;
-      const sp = p.speed * (p.running ? 1.65 : 1) * Math.min(1, mag);
+      const sp = p.speed * (p.running ? 1.7 : 1) * Math.min(1, mag);
       const nx = mx / mag, ny = my / mag;
       tryMove(p, nx * sp * dt, ny * sp * dt);
       if (Math.abs(nx) > Math.abs(ny)) p.dir = nx < 0 ? 'left' : 'right'; else p.dir = ny < 0 ? 'up' : 'down';
       animate(p, dt, true);
     } else animate(p, dt, false);
-    // soft push away from villagers
     for (const e of MH.npcs) {
       if (e.hidden) continue;
       const d = Math.hypot(e.x - p.x, e.y - p.y);
-      if (d < 9 && d > 0.01) { const k = (9 - d) / d * 0.5; tryMove(p, (p.x - e.x) * k, (p.y - e.y) * k); }
+      if (d < 9 && d > 0.01) { const k = ((9 - d) / d) * 0.5; tryMove(p, (p.x - e.x) * k, (p.y - e.y) * k); }
     }
     const t = p.tile();
     MH.state.player.tx = t.tx; MH.state.player.ty = t.ty;
   };
 
-  // ------------------------------------------------------------ villagers
+  // ------------------------------------------------------------ villagers & townsfolk
   MH.makeNpcs = function () {
     MH.npcs.length = 0;
-    MH.CHARS.forEach((ch) => {
-      const e = new Entity({ id: ch.id, ch, speed: SPEED[ch.id] || 48 });
-      e.sprite = MH.art.chibi(ch);
-      const spot = MH.world.randomSpot(ch.home) || { tx: 47, ty: 34 };
+    MH.ALL.forEach((ch) => {
+      const e = new Entity({ id: ch.id, ch, speed: SPEED[ch.id] || (ch.folk ? 40 + Math.random() * 14 : 48), folk: !!ch.folk });
+      const spot = MH.world.randomSpot(ch.folk ? MH.pick(ch.haunts) : ch.home) || { tx: 78, ty: 58 };
       e.setTile(spot.tx, spot.ty);
       MH.npcs.push(e);
       MH.npcById[ch.id] = e;
     });
   };
 
-  // Walk along a path toward goal tile. Returns true when arrived.
   MH.npcWalk = function (e, dt) {
     if (!e.path || !e.path.length) { animate(e, dt, false); return true; }
     const n = e.path[0];
+    if (MH.world.crossingBlocked(n.tx, n.ty)) { animate(e, dt, false); return false; } // wait for the train
     const gx = n.tx * T + T / 2, gy = n.ty * T + T - 3;
     const dx = gx - e.x, dy = gy - e.y, d = Math.hypot(dx, dy);
     const sp = e.speed * (e.hurry ? 1.6 : 1) * dt;
@@ -125,12 +119,32 @@
   MH.npcGoTo = function (e, tx, ty) {
     const t = e.tile();
     const path = MH.world.findPath(t.tx, t.ty, tx, ty);
-    if (path === null) { // stuck: teleport-ish to nearest walkable then retry later
-      const n = MH.world.nearestWalkable(t.tx, t.ty); e.setTile(n.tx, n.ty); e.path = []; return false;
-    }
+    if (path === null) { e.setTile(tx, ty); e.path = []; return false; } // unreachable: just arrive (off-screen shortcut)
     e.path = path; e.pathGoal = { tx, ty };
     return true;
   };
 
   MH.distTiles = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) / T;
+
+  // ------------------------------------------------------------ the player's house
+  MH.isInside = (e) => MH.world.inInterior(Math.floor(e.x / T), Math.floor((e.y - 2) / T));
+  MH.fadeTo = function (fn) {
+    const f = document.getElementById('fade');
+    MH.fading = true; f.classList.add('on');
+    setTimeout(() => { fn(); MH.render.snap(); setTimeout(() => { f.classList.remove('on'); MH.fading = false; }, 150); }, 450);
+  };
+  MH.enterHome = function () {
+    MH.fadeTo(() => { MH.player.setTile(160, 12); MH.player.dir = 'up'; MH.emit('home', { inside: true }); });
+  };
+  MH.exitHome = function () {
+    const b = MH.world.buildingById.home;
+    MH.fadeTo(() => { MH.player.setTile(b.doorX, b.doorY + 1); MH.player.dir = 'down'; MH.emit('home', { inside: false }); });
+  };
+  // a villager walks in through your door
+  MH.npcEnterHome = function (e) {
+    const spots = [[159, 11], [162, 11], [158, 10], [163, 9], [159, 8], [162, 8], [157, 11], [164, 11], [156, 10], [165, 8], [163, 12], [158, 12]];
+    const taken = new Set(MH.npcs.filter((o) => o !== e && !o.hidden && MH.isInside(o)).map((o) => o.tile().tx + ',' + o.tile().ty));
+    const s = spots.find(([x, y]) => !taken.has(x + ',' + y)) || [160, 11];
+    e.setTile(s[0], s[1]); e.hidden = false; e.path = null; e.dir = 'down';
+  };
 })(window.MH);

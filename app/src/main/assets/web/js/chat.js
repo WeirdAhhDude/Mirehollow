@@ -17,7 +17,7 @@
       send: document.getElementById('btnSend'), leave: document.getElementById('btnLeave'), wait: document.getElementById('btnWait'),
       give: document.getElementById('btnGive'), star: document.getElementById('btnStar'), log: document.getElementById('btnChatLog'), logTop: document.getElementById('chatLogTop'),
       invite: document.getElementById('btnInvite'), bubbles: document.getElementById('bubbles'), quick: document.getElementById('quick'),
-      me: document.getElementById('meBubble'), toChip: document.getElementById('toChip'),
+      me: document.getElementById('meBubble'), toChip: document.getElementById('toChip'), tags: document.getElementById('castTags'),
     };
     el.send.onclick = () => chat.submit();
     el.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chat.submit(); } if (e.key === 'Escape') chat.askLeave(); });
@@ -72,6 +72,7 @@
   chat.setTarget = function (id) {
     chat.to = id && chat.convo && chat.convo.members.includes(id) ? id : null;
     el.cast.querySelectorAll('.card').forEach((c) => c.classList.toggle('target', c.dataset.id === chat.to));
+    el.tags.querySelectorAll('.tag').forEach((t) => t.classList.toggle('target', t.dataset.id === chat.to));
     applyLayers();
     el.toChip.classList.toggle('on', !!chat.to);
     el.toChip.innerHTML = chat.to ? `To: <b>${MH.esc(MH.CHAR[chat.to].name)}</b> ✕` : '';
@@ -185,7 +186,18 @@
   chat.applyLayers = applyLayers;
   // Each bubble sits right above its speaker's head. The top layer keeps its spot; the others are fitted
   // around it (pushed upward) and drawn underneath. They never fade: the latest line of every speaker stays.
+  function layoutTags() {
+    const W = window.innerWidth, rootR = el.root.getBoundingClientRect(), order = layerOrder();
+    el.tags.querySelectorAll('.tag').forEach((t) => {
+      const card = el.cast.querySelector(`.card[data-id="${t.dataset.id}"]`);
+      if (!card) return;
+      const r = card.getBoundingClientRect(), w = t.offsetWidth;
+      t.style.transform = `translateX(${Math.round(MH.clamp(r.left - rootR.left + r.width / 2 - w / 2, 4, Math.max(4, W - w - 4)))}px)`;
+      t.style.zIndex = 40 - Math.max(0, order.indexOf(t.dataset.id));
+    });
+  }
   function layoutLoop() {
+    if (chat.active) layoutTags();
     if (chat.active && says.size) {
       const W = window.innerWidth;
       const rootR = el.root.getBoundingClientRect();
@@ -259,7 +271,7 @@
     MH.player.face(MH.npcById[members[0]].x, MH.npcById[members[0]].y);
     el.root.classList.remove('hidden');
     document.body.classList.add('chatting');
-    el.cast.innerHTML = ''; clearSays(); el.me.classList.remove('on'); chat.meB = null;
+    el.cast.innerHTML = ''; el.tags.innerHTML = ''; clearSays(); el.me.classList.remove('on'); chat.meB = null;
     renderCast(); chat.setTarget(null);
     MH.social.log({ kind: 'sys', text: '— Conversation with ' + members.map((id) => MH.CHAR[id].name).join(', ') + ' · ' + MH.world.placeAt(c.x, c.y).name + ' —', convo: c.id });
     el.input.value = ''; chat.pendingInvite = null;
@@ -408,7 +420,8 @@
       cardSay(l.who, l.say);
       reactEmote(e, l.say);
       while (!cardTyped(l.who) && chat.convo === c) await waitFor(0.04);
-      await waitFor(Math.min(1.6, 0.35 + l.say.length * 0.01));
+      // let the finished line sit for a moment (longer lines a bit longer) before the next one lands
+      await waitFor(MH.clamp(1.1 + l.say.length * 0.028, 1.5, 4.5));
       chat.skipFlag = false;
     }
     if (chat.convo !== c) return;
@@ -520,23 +533,28 @@
       if (!c.members.includes(card.dataset.id)) { card.classList.add('leaving'); setTimeout(() => card.remove(), 380); }
       else have.add(card.dataset.id);
     });
+    el.tags.querySelectorAll('.tag').forEach((t) => { if (!c.members.includes(t.dataset.id)) t.remove(); });
     c.members.forEach((id) => {
       if (have.has(id)) return;
       const ch = MH.CHAR[id];
       const card = document.createElement('div');
       card.className = 'card entering' + (ch.portrait ? ' art' : ' pixel');
       card.dataset.id = id;
-      card.innerHTML = `<img alt="" draggable="false" src="${portraitSrc(ch)}"><div class="tag"><b>${MH.esc(ch.name)}</b><span class="mood"></span></div><div class="delta"></div>`;
+      card.innerHTML = `<img alt="" draggable="false" src="${portraitSrc(ch)}"><div class="delta"></div>`;
       card.style.setProperty('--sway', (0.4 + Math.random() * 0.2).toFixed(2) + 's');
-      card.querySelector('.tag').onclick = () => MH.ui.openProfile(id);
       el.cast.appendChild(card);
+      const tag = document.createElement('div');
+      tag.className = 'tag'; tag.dataset.id = id;
+      tag.innerHTML = `<b>${MH.esc(ch.name)}</b><span class="mood"></span>`;
+      tag.onclick = () => MH.ui.openProfile(id);
+      el.tags.appendChild(tag);
       requestAnimationFrame(() => requestAnimationFrame(() => card.classList.remove('entering')));
     });
     el.cast.dataset.n = Math.min(9, c.members.length);
     el.cast.querySelectorAll('.card').forEach((card) => {
       const id = card.dataset.id, n = MH.social.npc(id); if (!n) return;
-      card.querySelector('.mood').textContent = n.mood + ' · ' + MH.bondTier(n.bond).toLowerCase();
-      card.style.setProperty('--bond', MH.bondColor(MH.social.attitude(id)));
+      const tag = el.tags.querySelector(`.tag[data-id="${id}"]`);
+      if (tag) { tag.querySelector('.mood').textContent = n.mood + ' · ' + MH.bondTier(n.bond).toLowerCase(); tag.style.setProperty('--bond', MH.bondColor(MH.social.attitude(id))); tag.classList.toggle('target', id === chat.to); }
       const ch2 = MH.CHAR[id];
       card.style.setProperty('--ps', ch2.portraitScale || 1); card.style.setProperty('--px', (ch2.portraitX || 0) + '%'); card.style.setProperty('--py', (ch2.portraitY || 0) + '%');
       card.classList.toggle('target', id === chat.to);

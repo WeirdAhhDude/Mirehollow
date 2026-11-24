@@ -20,8 +20,8 @@
       me: document.getElementById('meBubble'), toChip: document.getElementById('toChip'),
     };
     el.send.onclick = () => chat.submit();
-    el.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chat.submit(); } if (e.key === 'Escape') chat.end(); });
-    el.leave.onclick = () => chat.end();
+    el.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chat.submit(); } if (e.key === 'Escape') chat.askLeave(); });
+    el.leave.onclick = () => chat.askLeave();
     el.wait.onclick = () => chat.letThemTalk();
     el.star.onclick = () => wrapAction();
     el.give.onclick = () => MH.ui.openGivePicker();
@@ -38,7 +38,12 @@
       if (card && chat.convo && chat.convo.members.length > 1 && e.target.closest('img')) chat.setTarget(chat.to === card.dataset.id ? null : card.dataset.id);
       chat.skip();
     });
-    el.says.addEventListener('pointerdown', (e) => { const s = e.target.closest('.say'); if (s) s.classList.toggle('expand'); chat.skip(); });
+    el.says.addEventListener('pointerdown', (e) => {
+      const s = e.target.closest('.say'); if (!s) return;
+      s.classList.toggle('expand');
+      if (chat.convo && chat.convo.members.length > 1 && s.dataset.id) chat.setTarget(s.dataset.id);
+      chat.skip();
+    });
     requestAnimationFrame(layoutLoop);
   };
 
@@ -56,10 +61,18 @@
     else { insertText('**'); i.setSelectionRange(a + 1, a + 1); }
   }
 
+  chat.askLeave = async function () {
+    if (!chat.active) return;
+    const names = chat.convo.members.map((id) => MH.CHAR[id].name);
+    const ok = await MH.ui.confirm(`Leave the conversation with ${names.length > 2 ? names.slice(0, 2).join(', ') + ' and the others' : names.join(' and ')}?`, 'Leave', 'Stay');
+    if (ok) chat.end();
+  };
+
   // who the player is talking to in a group (tap a portrait)
   chat.setTarget = function (id) {
     chat.to = id && chat.convo && chat.convo.members.includes(id) ? id : null;
     el.cast.querySelectorAll('.card').forEach((c) => c.classList.toggle('target', c.dataset.id === chat.to));
+    applyLayers();
     el.toChip.classList.toggle('on', !!chat.to);
     el.toChip.innerHTML = chat.to ? `To: <b>${MH.esc(MH.CHAR[chat.to].name)}</b> ✕` : '';
     el.input.placeholder = chat.to ? `Say something to ${MH.CHAR[chat.to].name}…` : chat.convo && chat.convo.members.length > 1 ? 'Talk to everyone… (tap a portrait to pick one)' : 'Say something… *actions* in asterisks';
@@ -121,7 +134,7 @@
     let s = says.get(id);
     if (!s) {
       const d = document.createElement('div');
-      d.className = 'say';
+      d.className = 'say'; d.dataset.id = id;
       const ch = MH.CHAR[id];
       d.innerHTML = `<span class="who" style="color:${MH.shade((ch.look && ch.look.top) || '#a86a3a', 0.75)}">${MH.esc(ch.name)}</span><span class="txt"></span>`;
       el.says.appendChild(d);
@@ -157,8 +170,21 @@
     const m = chat.meB;
     if (m && m.shown < m.full.length) { m.shown = Math.min(m.full.length, m.shown + cps() * 2 * dt); el.me.innerHTML = MH.fmt(m.full.slice(0, Math.floor(m.shown))); }
   }
-  // Each bubble sits right above its speaker's head; when several are up they stack upward,
-  // newest closest to the heads. They never fade: the latest line of every speaker stays.
+  // Layers: the character you picked is on top, then the main person you're talking to,
+  // then everyone else in the order they joined. Portraits AND their bubbles follow these layers.
+  function layerOrder() {
+    const c = chat.convo; if (!c) return [];
+    const order = c.members.slice();
+    if (chat.to && order.includes(chat.to)) { order.splice(order.indexOf(chat.to), 1); order.unshift(chat.to); }
+    return order;
+  }
+  function applyLayers() {
+    const order = layerOrder();
+    el.cast.querySelectorAll('.card').forEach((card) => { const i = order.indexOf(card.dataset.id); card.style.zIndex = i < 0 ? 0 : 40 - i; });
+  }
+  chat.applyLayers = applyLayers;
+  // Each bubble sits right above its speaker's head. The top layer keeps its spot; the others are fitted
+  // around it (pushed upward) and drawn underneath. They never fade: the latest line of every speaker stays.
   function layoutLoop() {
     if (chat.active && says.size) {
       const W = window.innerWidth;
@@ -173,11 +199,14 @@
         const r = img.getBoundingClientRect();
         items.push({ s, cx: r.left + r.width / 2 - rootR.left, head: r.top - rootR.top + r.height * (card.classList.contains('art') ? 0.05 : 0.08) });
       }
-      items.sort((a, b) => b.s.born - a.s.born);
+      const order = layerOrder();
+      const newest = items.reduce((m, it) => (it.s.born > (m ? m.s.born : -1) ? it : m), null);
+      items.sort((a, b) => order.indexOf(a.s.d.dataset.id) - order.indexOf(b.s.d.dataset.id));
       const placed = [];
       items.forEach((it, i) => {
         const d = it.s.d;
-        d.classList.toggle('old', i >= 2 && !it.s.thinking);
+        d.classList.toggle('old', i >= 2 && it !== newest && !it.s.thinking);
+        d.classList.toggle('latest', it === newest && n > 1);
         d.classList.toggle('named', n > 1);
         d.style.zIndex = 50 - i;
         const w = d.offsetWidth, h = d.offsetHeight;
@@ -215,7 +244,8 @@
       const e = MH.npcById[id];
       if (e.busy === 'smalltalk') MH.npcs.forEach((o) => { if (o !== e && o.busy === 'smalltalk' && MH.distTiles(o, e) < 4.5 && !ids.includes(o.id)) extra.push(o.id); });
     });
-    const members = ids.concat(extra);
+    const comps = (MH.state.companions || []).filter((id) => !ids.includes(id) && !extra.includes(id) && MH.npcById[id] && MH.distTiles(MH.npcById[id], MH.player) < 10);
+    const members = ids.concat(extra, comps);
     const c = { id: MH.uid(), members: [], nearby: [], lines: [], x: 0, y: 0, started: MH.absMinutes(), turn: 0, spoke: {}, joinedTurn: {} };
     chat.convo = c; chat.active = true; chat.to = null;
     MH.state.convoCount++;
@@ -313,7 +343,7 @@
     MH.social.log({ kind: 'line', who: 'player', text: (to ? '(to ' + MH.CHAR[to].name + ') ' : '') + text, convo: c.id });
     chat.meB = { full: (to ? '→ ' + MH.CHAR[to].name + ': ' : '') + text, shown: 0 };
     el.me.innerHTML = ''; el.me.classList.add('on');
-    if (chat.pendingInvite && /\*[^*]*invit/i.test(text)) c.invite = chat.pendingInvite;
+    if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
     chat.pendingInvite = null;
     chat.runTurn('player', text, to);
   };
@@ -389,14 +419,9 @@
     codeJoins(c);
   }
 
-  // villagers can leave on their own: somewhere to be, or bored of a group chat they're not part of
-  function codeLeaves(c) {
-    for (const id of c.members.slice()) {
-      const n = MH.social.npc(id);
-      if (n.mustGo && c.turn - (n.mustGoTurn || c.turn) >= 4) { chat.removeMember(id, 'has to go — ' + n.mustGo.replace(/^they /, '').replace(/^it's/, 'it\'s')); continue; }
-      if (c.members.length > 2 && c.turn - (c.spoke[id] || 0) >= 5 && Math.random() < 0.3 && !MH.npcById[id].guest) { chat.removeMember(id, 'drifts off'); }
-    }
-  }
+  // No time limit in conversations: villagers only leave when the story makes them (the AI's "leave"),
+  // when someone chases them off, or when you end the chat.
+  function codeLeaves() {}
 
   function reactEmote(e, say) {
     const s = say.toLowerCase();
@@ -440,9 +465,10 @@
     if (inv) inv.to.forEach((id) => {
       const ans = res.invite[id] || 'maybe';
       const yes = ans === 'yes' || (ans === 'maybe' && Math.random() < 0.5);
-      const where = inv.loc === 'home' ? 'your house' : MH.world.locations[inv.loc].name;
+      const where = inv.follow ? 'come along' : inv.loc === 'home' ? 'your house' : MH.world.locations[inv.loc].name;
+      if (yes && inv.follow) { MH.sim.startFollow(id); S.addMemory(id, `${P.name} asked me to come along with them. I said yes.`, { imp: 2 }); return; }
       if (yes) { MH.sim.addPlan({ id, kind: inv.loc === 'home' ? 'visit' : 'meet', loc: inv.loc, at: inv.at, until: inv.at + 120, what: inv.what }); MH.ui.toast(`📅 ${MH.CHAR[id].name} will come to ${where} at ${MH.clockStr(inv.at % 1440)}${Math.floor(inv.at / 1440) > MH.state.time.day ? ' tomorrow' : ''}`, 4); S.addMemory(id, `${P.name} invited me to ${inv.loc === 'home' ? 'their house' : where} (${inv.desc}). I said yes.`, { imp: 2 }); }
-      else { MH.ui.toast(`${MH.CHAR[id].name} turned down the invitation`, 3); S.addMemory(id, `${P.name} invited me to ${inv.loc === 'home' ? 'their house' : where}. I said no.`, { imp: 1 }); }
+      else { MH.ui.toast(`${MH.CHAR[id].name} turned down the invitation`, 3); S.addMemory(id, inv.follow ? `${P.name} asked me to come along with them. I said no.` : `${P.name} invited me to ${inv.loc === 'home' ? 'their house' : where}. I said no.`, { imp: 1 }); }
     });
     res.plans.forEach((p) => {
       if (inv && inv.to.includes(p.id)) return;
@@ -450,7 +476,12 @@
       MH.sim.addPlan({ id: p.id, kind: p.where === 'home' ? 'visit' : 'meet', loc: p.where, at, until: at + 120, what: p.what });
       MH.ui.toast(`📅 ${MH.CHAR[p.id].name}: ${p.what} — ${p.where === 'home' ? 'your house' : MH.world.locations[p.where].name}, ${Math.floor(at / 1440) > MH.state.time.day ? 'tomorrow ' : ''}${MH.clockStr(at % 1440)}`, 4.5);
     });
-    res.leave.forEach((id) => chat.removeMember(id, 'walks off'));
+    for (const id in res.follow || {}) {
+      if (!MH.npcById[id]) continue;
+      if (res.follow[id] === 'start' && !(inv && inv.follow && inv.to.includes(id))) MH.sim.startFollow(id);
+      else if (res.follow[id] === 'stop') MH.sim.stopFollow(id, 'stops following you');
+    }
+    res.leave.forEach((id) => { if (MH.npcById[id] && MH.npcById[id].following) MH.sim.stopFollow(id, 'goes their own way'); chat.removeMember(id, 'walks off'); });
     if (rep && Object.keys(rep).length) MH.emit('rep', rep);
   }
 
@@ -465,14 +496,15 @@
       const friend = c.members.some((m) => (n.rel[m] || 0) >= 50);
       const enemy = c.members.some((m) => (n.rel[m] || 0) <= -40);
       if (friend) p += 0.1;
-      if (enemy && ['clucky', 'maggie', 'kira', 'marina'].includes(id)) p += 0.07;
+      if (enemy) p += ['clucky', 'maggie', 'kira', 'marina', 'dionne', 'chuckles'].includes(id) ? 0.16 : 0.1;
       if (['dionne', 'chuckles', 'gertie', 'bunny'].includes(id)) p += 0.06;
       if (e.folk) p = (/gossipy|nosy/.test(e.ch.bio) ? 0.05 : 0.015);
       if (e.guest) p += 0.25;
       if (id === 'scarecrow') p = 0.04;
       if (e.ch.mute && id !== 'scarecrow') p *= 0.4;
       if (Math.random() < p) {
-        const why = e.guest ? 'wanders over to join in' : friend ? 'notices a friend and wanders over' : enemy ? 'spots a rival and marches over' : id === 'scarecrow' ? 'is suddenly standing right behind everyone. Nobody saw her arrive' : 'overhears and wanders over, curious';
+        const rival = enemy ? c.members.find((m) => (n.rel[m] || 0) <= -40) : null;
+        const why = e.guest ? 'wanders over to join in' : enemy ? `spots ${MH.CHAR[rival].name} and marches over — there's history there` : friend ? 'notices a friend and wanders over' : id === 'scarecrow' ? 'is suddenly standing right behind everyone. Nobody saw her arrive' : 'overhears and wanders over, curious';
         chat.addMember(id, why);
         return;
       }
@@ -505,8 +537,11 @@
       const id = card.dataset.id, n = MH.social.npc(id); if (!n) return;
       card.querySelector('.mood').textContent = n.mood + ' · ' + MH.bondTier(n.bond).toLowerCase();
       card.style.setProperty('--bond', MH.bondColor(MH.social.attitude(id)));
+      const ch2 = MH.CHAR[id];
+      card.style.setProperty('--ps', ch2.portraitScale || 1); card.style.setProperty('--px', (ch2.portraitX || 0) + '%'); card.style.setProperty('--py', (ch2.portraitY || 0) + '%');
       card.classList.toggle('target', id === chat.to);
     });
+    applyLayers();
   }
   chat.renderCast = renderCast;
   function setSpeaking(id) {

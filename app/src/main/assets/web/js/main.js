@@ -23,7 +23,7 @@
     st.picked = st.picked || {};
     st.player.deeds = st.player.deeds || [];
     st.player.rep = Object.assign({ kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0 }, st.player.rep || {});
-    st.plans = st.plans || []; st.parties = st.parties || []; st.joined = st.joined || {};
+    st.plans = st.plans || []; st.parties = st.parties || []; st.joined = st.joined || {}; st.companions = st.companions || [];
     if (st.lastApproach == null) st.lastApproach = -99999;
     if ((st.version || 1) < 2) { st.version = 2; st.player.tx = 37; st.player.ty = 33; } // new, bigger town
     if (st.player.look) { delete st.player.look.ears; delete st.player.look.tail; }
@@ -36,10 +36,12 @@
     MH.makePlayer();
     MH.titleMode = false;
     MH.sim.placeEveryone();
+    MH.sim.restoreCompanions();
     MH.render.clearFocus();
     MH.render.snap();
     document.body.classList.remove('title');
     MH.ui.updateHud();
+    MH.emit('companions');
   };
 
   MH.startGame = function (st) {
@@ -96,6 +98,8 @@
   }
 
   MH.boot = function () {
+    MH.applyCharEdits();
+    MH.loadCustomPortraits();
     MH.world.gen();
     MH.state = MH.social.newState();
     MH.state.version = 2;

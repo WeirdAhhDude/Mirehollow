@@ -160,6 +160,8 @@
       '- Only PRESENT villagers may speak. NEARBY villagers may walk over and join when it makes sense: add their id to "join" and they may speak in the same turn.',
       '- Villagers have their own lives: they LEAVE conversations on their own (put them in "leave", with a goodbye line or action) when they have somewhere to be (see "Needs to leave soon"), get bored, offended, embarrassed, or when the moment has run its course. Don\'t keep everyone around forever.',
       '- When the player speaks TO a specific villager, that villager answers; others only chime in briefly if it\'s natural.',
+      '- Villagers have their own lives and relationships with each other: rivals bicker and argue (it can escalate), friends take sides, crushes get flustered, and someone can chase another villager off or storm off themselves (put them in "leave"). Newcomers who barge in can stir things up.',
+      '- If a villager agrees to come along with the player right now (go somewhere together, help with something, go confront someone…), set "follow":{"<id>":"start"}; they then follow the player around until they decide to stop or the player tells them to — then set "follow":{"<id>":"stop"}. They can refuse.',
       '- Narration lines ({"who":"narrator"}) are allowed sparingly for ambience (a crow lands, hissing from a bush, a train rattles past).',
       '- Shopping, wishes, pranks, experiments, favours, gifts, invitations and plans all happen through dialogue + the effect fields below. Keep it playful and consistent with the world.',
       AI.contentRules(),
@@ -171,7 +173,7 @@
       ' "witness":"", "join":[], "leave":[],',
       ' "give_player":[{"from":"<id>","item":"<short item name>"}], "take_from_player":[{"to":"<id>","item":"<exact item from the player\'s pocket>"}],',
       ' "coins":0, "relations":[{"a":"<id>","b":"<id>","delta":0}], "label":{},',
-      ' "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}], "end":false}',
+      ' "follow":{"<id>":"start|stop"}, "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}], "end":false}',
       'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
       'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). end = true only if the whole conversation is over. Omit empty fields.',
     ].join('\n');
@@ -185,6 +187,12 @@
   function stateText(e) {
     if (!e) return '';
     if (e.asleep) return 'was ASLEEP until a moment ago';
+    if (e.following) return 'tagging along with the player as a companion right now (following them wherever they go)';
+    const plan = MH.sim && MH.sim.activePlan(e.id);
+    if (plan && plan.loc === 'home') {
+      if (e.guest) return plan.kind === 'party' ? 'a guest at the player\'s party, inside their house' : plan.kind === 'crash' ? 'crashed the player\'s party uninvited and is inside their house' : 'a guest inside the player\'s house, for the visit they arranged';
+      return plan.kind === 'crash' ? 'just showed up uninvited at the player\'s front door' : 'came over for the visit they arranged and is standing OUTSIDE the player\'s front door (nobody has gone inside yet)';
+    }
     if (e.ch && e.activity) return e.activity;
     return '';
   }
@@ -198,9 +206,11 @@
     if (full) lines.push('Who: ' + ch.bio);
     else lines.push('Who: ' + ch.bio.split('. ').slice(0, 3).join('. ') + '.');
     lines.push('Voice: ' + ch.voice);
+    if (ch.quirks && ch.quirks.length) lines.push('Quirks: ' + ch.quirks.join('; '));
+    if (ch.notes) lines.push('Notes: ' + ch.notes);
     const st = stateText(e);
     lines.push(`Right now: ${st ? st + '; ' : ''}mood: ${n.mood}.`);
-    if (n.mustGo) lines.push(`Needs to leave soon: ${n.mustGo}.`);
+    if (n.mustGo && !(e && e.following)) lines.push(`Has somewhere to be: ${n.mustGo} (they may mention it, or leave if it suits them — or stay).`);
     lines.push(`Toward ${P.name}: bond ${n.bond} (${MH.bondTier(n.bond)})${n.label ? ', relationship: ' + n.label : ''}${n.met ? '' : ', has NOT met them before (first meeting)'}. Reputation they have heard: ${perceivedText(id)} (${MH.social.opinionWords(id)}). Overall attitude ${att} on a -100..100 scale.`);
     const rel = (others || []).filter((o) => o !== id && MH.CHAR[o]).map((o) => {
       const v = n.rel[o] != null ? n.rel[o] : 0;
@@ -216,6 +226,8 @@
     return lines.join('\n');
   }
 
+  AI.charCardPreview = (id) => charCard(id, (MH.chat.convo && MH.chat.convo.members) || [], true);
+
   function sceneHeader(locDesc) {
     const P = MH.state.player;
     const gath = MH.sim && MH.sim.currentGathering();
@@ -229,6 +241,7 @@
       gath ? `Today's gathering: ${gath.name} is happening at ${MH.world.locations[gath.at].name}${MH.state.joined[MH.state.time.day + '|' + gath.name] ? ' (the player came to it)' : ''}.` : '',
       `PLAYER: ${P.name} (${P.pronouns}), the only human in town, a newcomer who recently moved into a little house by the west railway crossing. Coins: ${P.coins}. Pocket: ${inv}.`,
       `The player's actual town reputation so far: ${MH.social.repSummary(P.rep)}.`,
+      (MH.state.companions || []).length ? `Following the player around right now: ${MH.state.companions.map((id) => MH.CHAR[id] ? MH.CHAR[id].name : id).join(', ')}.` : '',
     ].filter(Boolean).join('\n');
   }
 
@@ -258,7 +271,7 @@
     const prior = mode === 'player' ? { lines: convo.lines.slice(0, -1) } : convo;
     if (prior.lines.length) parts.push('CONVERSATION SO FAR:', transcript(prior), '');
     const P = MH.state.player;
-    if (convo.invite) parts.push(`INVITATION: with this message the player is inviting ${convo.invite.to.map((id) => MH.CHAR[id].name).join(' and ')} ${convo.invite.desc}. Every invitee must answer in character and you MUST fill "invite_reply" for each of them (yes/no/maybe).`);
+    if (convo.invite) parts.push(`INVITATION: with this message the player is asking ${convo.invite.to.map((id) => MH.CHAR[id].name).join(' and ')} ${convo.invite.desc}. Every invitee must answer in character and you MUST fill "invite_reply" for each of them (yes/no/maybe).`);
     if (mode === 'player' && to && MH.CHAR[to]) parts.push(`NOW: ${P.name} (the player) turns to ${MH.CHAR[to].name} and says/does: "${payload}"`, `${MH.CHAR[to].name} answers first. Others may react briefly or stay quiet.`);
     else if (mode === 'player') parts.push(`NOW: ${P.name} (the player) says/does: "${payload}"`, 'Write the villagers\' response.');
     else if (mode === 'opener') parts.push(`NOW: ${payload}`, 'Write the opening of this encounter (the villager speaks first).');
@@ -270,7 +283,7 @@
 
   // Normalise a raw AI result so the game can apply it safely.
   AI.normalize = function (raw, convo) {
-    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], end: false };
+    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, end: false };
     if (!raw || typeof raw !== 'object') return out;
     const present = new Set(convo ? convo.members : []);
     const nearby = new Set(convo ? convo.nearby || [] : []);
@@ -300,6 +313,8 @@
     (Array.isArray(raw.take_from_player) ? raw.take_from_player : []).slice(0, 3).forEach((g) => { if (g && (g.item || typeof g === 'string')) out.take.push({ to: AI.resolveId(g.to) || null, item: String(g.item || g).slice(0, 50) }); });
     out.coins = MH.clamp(Math.round(Number(raw.coins) || 0), -150, 150);
     (Array.isArray(raw.relations) ? raw.relations : []).slice(0, 4).forEach((r) => { const a = AI.resolveId(r && r.a), b = AI.resolveId(r && r.b); if (a && b && a !== b && a !== 'narrator' && b !== 'narrator') out.relations.push({ a, b, delta: MH.clamp(Math.round(Number(r.delta) || 0), -8, 8) }); });
+    out.follow = {};
+    mapObj(raw.follow, (id, v) => { const t = String(v).toLowerCase(); if (/start|yes|true|follow|come/.test(t)) out.follow[id] = 'start'; else if (/stop|no|false|leave/.test(t)) out.follow[id] = 'stop'; });
     out.invite = {};
     mapObj(raw.invite_reply || raw.inviteReply, (id, v) => { const t = String(v).toLowerCase(); out.invite[id] = t.startsWith('y') ? 'yes' : t.startsWith('n') ? 'no' : 'maybe'; });
     out.plans = [];
@@ -359,8 +374,8 @@
   };
 
   // ------------------------------------------------------------ villager-to-villager small talk
-  AI.smallTalk = async function (a, b, gossipMem) {
-    if (!AI.hasKey()) return AI.offlineSmallTalk(a, b, gossipMem);
+  AI.smallTalk = async function (a, b, gossipMem, argue) {
+    if (!AI.hasKey()) return AI.offlineSmallTalk(a, b, gossipMem, argue);
     const A = MH.CHAR[a], B = MH.CHAR[b];
     const loc = MH.world.placeAt(MH.npcById[a].x, MH.npcById[a].y);
     const P = MH.state.player;
@@ -373,9 +388,9 @@
     const user = [
       `${A.name} and ${B.name} bump into each other ${loc.desc} (${MH.stamp()}, ${MH.partOfDay()}, ${MH.state.weather}).`,
       card(a, b), '', card(b, a), '',
-      gossipMem ? `${A.name} knows this about the player ${P.name} and may gossip about it if natural: "${gossipMem.text}"` : `They might banter, bicker, make plans, or gossip about other villagers.`,
+      argue ? `${A.name} sought ${B.name} out on purpose: they have beef (${argue}). This turns into an ARGUMENT — it can get heated, someone may storm off.` : gossipMem ? `${A.name} knows this about the player ${P.name} and may gossip about it if natural: "${gossipMem.text}"` : `They might banter, bicker, make plans, flirt, or gossip about other villagers. If they dislike each other, it turns into bickering.`,
       '',
-      'Write their short exchange: 2-4 lines, chat-style, *actions* in asterisks, each in their own voice.',
+      `Write their short exchange: ${argue ? '3-6' : '2-4'} lines, chat-style, *actions* in asterisks, each in their own voice.`,
       'Reply with ONLY JSON: {"lines":[{"who":"<id>","say":"..."}],"shared_gossip":true|false,"relation_delta":<-5..5>,"summary":"<one sentence of what happened, for the town grapevine>"}',
     ].join('\n');
     const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character exchanges between villagers of MIREHOLLOW, a cozy-chaotic village life-sim. ' + (MH.LORE.brief || MH.LORE.town) + '\n' + AI.contentRules() }, { role: 'user', content: user }], { maxTokens: 500 });
@@ -384,7 +399,7 @@
     if (!raw) return AI.offlineSmallTalk(a, b, gossipMem);
     const fake = { members: [a, b], nearby: [] };
     const norm = AI.normalize({ lines: raw.lines }, fake);
-    return { lines: norm.lines.filter((l) => l.who !== 'narrator'), shared: !!raw.shared_gossip && !!gossipMem, rel: MH.clamp(Math.round(Number(raw.relation_delta) || 0), -5, 5), summary: String(raw.summary || '').slice(0, 160) };
+    return { lines: norm.lines.filter((l) => l.who !== 'narrator'), shared: !!raw.shared_gossip && !!gossipMem, rel: MH.clamp(Math.round(Number(raw.relation_delta) || 0), argue ? -8 : -5, 5), summary: String(raw.summary || '').slice(0, 160) };
   };
 
   // ------------------------------------------------------------ offline fallback (no key / errors)
@@ -400,7 +415,7 @@
     poke: ['*swats your finger away*'],
   };
   AI.offlineTurn = function (convo, mode, payload) {
-    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], end: false, offline: true };
+    const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, end: false, offline: true };
     const members = convo.members.slice();
     const speakers = MH.shuffle(members.slice()).slice(0, Math.min(2, members.length));
     const text = String(payload || '');
@@ -433,8 +448,12 @@
     return out;
   };
 
-  AI.offlineSmallTalk = function (a, b, gossipMem) {
+  AI.offlineSmallTalk = function (a, b, gossipMem, argue) {
     const A = MH.CHAR[a], B = MH.CHAR[b];
+    if (argue) {
+      const L = [{ who: a, say: MH.pick(['*marches up* YOU. We need to talk.', '*jabs a finger* Don\'t think I forgot.', 'Oh, it\'s YOU.']) }, { who: b, say: B.mute ? '*stares back, unimpressed*' : MH.pick(['Here we go again.', 'Excuse me?!', 'Not this again.']) }, { who: a, say: MH.pick(['*throws hands up* Unbelievable!', 'You know exactly what you did!', 'Ugh! Forget it!']) }];
+      return { lines: L, shared: false, rel: -3, summary: `${A.name} and ${B.name} had a shouting match ${MH.world.placeAt(MH.npcById[a].x, MH.npcById[a].y).name}.` };
+    }
     const lines = [{ who: a, say: MH.pick(A.offline) }, { who: b, say: MH.pick(B.offline) }];
     let shared = false;
     if (gossipMem && !A.mute) {

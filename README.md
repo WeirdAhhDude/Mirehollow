@@ -50,6 +50,7 @@ Settings if you want to save credit.
 | **Group chats** | Villagers nearby overhear and may wander in; portraits shrink to make room. They leave on their own when they have somewhere to be (or get bored). **Tap a portrait to talk to just that person** (tap again to talk to everyone). **… Listen** lets them talk among themselves; **📜 Log** shows the whole conversation. Each character's latest line stays on screen. |
 | **Shops** | The bakery, gym, bookstore/lab, general store, club, town hall, clinic and barbershop can be entered during opening hours — staff work behind their counters and customers drop in. Closed? Knock. |
 | **Give things** | 🎁 in the chat bar, or just write it: `*hands Lily a wildflower*`. |
+| **Follow** | Ask someone to come along (🏠 Invite → *Come with me now*), or it just happens in the story ("he did WHAT? let's go see him"). Followers trail you everywhere — into shops and your house — and join your conversations, until they decide to leave or you tap their icon under the clock. |
 | **Invite** | 🏠 in the chat bar: invite whoever you're talking to over to your house, or to meet at the pond/park/shrine/etc. — now, in an hour, tonight or tomorrow. They answer in character. Villagers can also set up meetups on their own. |
 | **Your house** | Right by the west railway crossing. Inside: sleep on the futon, raid the fridge once a day, and plan parties on the low table. |
 | **Parties** | Pick a theme, place, time and guest list. Mailman Mole delivers the invitations (occasionally to the wrong house); RSVP notes trickle back; guests show up and the party becomes one big group chat. Don't skip your own party. |
@@ -66,6 +67,7 @@ Settings if you want to save credit.
 - **Witnesses & gossip** — anyone nearby sees what you do. Villagers who bump into each other chat (you can overhear) and pass gossip along, shifting each other's opinion of you.
 - **Approaches** — now and then (not often) a villager walks up to you on purpose: to bring up something they heard, or because they really like (or really don't like) you.
 - **Schedules** — everyone has a routine but roams between favourite haunts, so you'll have to go looking for people. Friend groups head out together (the Party Crew at the river, the nap rotation in the park…). Visitors like Nimbus and Solaris only show up some days.
+- **Villager drama** — rivals seek each other out and argue (you can overhear it, or hear shouting from afar), friends take sides, newcomers barge into conversations, and uninvited guests can crash your parties. Conversations have no time limit — people only leave when the story makes them.
 - **Townsfolk** — ~30 animal passers-by with their own names, jobs and personalities. Talk to them; they witness things and gossip too.
 - **Train** — a little local train runs through town; the crossing bells ring and the barriers block the road while it passes.
 - **Vibe captions** — little ambient lines ("You hear some noises near the bakery").
@@ -84,10 +86,18 @@ They were adapted from the original Mirehollow lore and rewritten to keep the ga
 crushes, feuds and running gags are kept; nudity and sexual content were removed. The AI is also instructed to
 keep things PG-13 and to have villagers deflect in character if pushed.
 
-## Adding character art
+## Editing characters & portraits (in-game)
+
+Journal → Villagers → tap someone → **✏️ Edit character & portrait**. You can change their name, title,
+species, personality/backstory, how they talk, quirks, relationships and extra notes for the AI, and
+**👁 Preview what the AI reads** shows the exact text sent to the model. **📷 Upload portrait** picks an image
+from your phone; sliders adjust its size and position. Edits are stored on the device (they survive new
+games) and **Reset to original** undoes them.
+
+## Adding character art in the code
 
 Sunny and Patty use real illustrations as their chat portraits; everyone else uses a big version of their
-chibi. To give another villager a portrait:
+chibi. To bake a portrait into the app itself:
 
 1. Put a transparent PNG/WebP in `app/src/main/assets/web/portraits/` (e.g. `marina.webp`, ~800 px tall).
 2. In `data_chars.js`, add `portrait: 'portraits/marina.webp',` to that villager.

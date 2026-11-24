@@ -18,6 +18,7 @@
       $('#btnALabel').textContent = t ? t.label : '';
     });
     MH.on('vibe', (text) => ui.vibe(text));
+    MH.on('companions', renderParty);
     MH.on('log', (entry) => { if (ui.logOpen) appendLog(entry); });
     MH.on('tier', ({ id, to, up }) => ui.toast(`${up ? '💖' : '💔'} ${MH.CHAR[id].name} now sees you as: ${to}`, 4));
     MH.on('ai-error', () => {});
@@ -35,6 +36,19 @@
     });
     setInterval(updateHud, 500);
   };
+
+  // villagers following you, shown under the clock — tap one to send them off
+  function renderParty() {
+    const box = $('#party'); if (!box || !MH.state) return;
+    box.innerHTML = '';
+    (MH.state.companions || []).forEach((id) => {
+      const ch = MH.CHAR[id]; if (!ch) return;
+      const b = h(`<button class="pmember" title="${MH.esc(ch.name)}"><img src="${ch.portrait || MH.art.portraitURL(ch)}" class="${ch.portrait ? 'art' : ''}"><span>${MH.esc(ch.name.split(' ')[0])}</span></button>`);
+      b.onclick = async () => { if (await ui.confirm(`Tell ${ch.name} to stop following you?`, 'Stop following', 'Keep them')) { MH.social.addMemory(id, `${MH.state.player.name} told me I could go.`, { imp: 1 }); MH.sim.stopFollow(id, 'waves and heads off'); } };
+      box.appendChild(b);
+    });
+  }
+  ui.renderParty = renderParty;
 
   function updateHud() {
     if (!MH.state) return;
@@ -91,10 +105,11 @@
     ui.modalOpen = false;
   };
   ui.back = function () {
+    if (ui.confirmOpen) { const c = document.getElementById('confirmBox'); if (c) c.querySelector('[data-v="0"]').click(); return true; }
     if (ui.giveOpen) { ui.closeGivePicker(); return true; }
     if (ui.modalOpen && !ui.lockModal) { ui.closeModal(); return true; }
     if (ui.logOpen) { ui.toggleLog(false); return true; }
-    if (MH.chat.active) { MH.chat.end(); return true; }
+    if (MH.chat.active) { MH.chat.askLeave(); return true; }
     if (MH.state && !ui.lockModal) { ui.openMenu(); return true; }
     return false;
   };
@@ -230,10 +245,10 @@
     });
     const WHERE = [['home', 'My house'], ['pond', 'The pond'], ['park', 'The park'], ['river', 'The river'], ['shrine', 'The shrine'], ['station', 'The station'], ['square', 'The square'], ['sunflowers', 'Sunflowers'], ['bakery', 'The bakery']];
     const now = MH.absMinutes(), day = MH.state.time.day, hr = MH.hour();
-    const WHEN = [['now', 'Right now', now + 5], ['1h', 'In an hour', now + 60]];
+    const WHEN = [['follow', '🚶 Come with me now', now], ['now', 'Right now', now + 5], ['1h', 'In an hour', now + 60]];
     if (hr < 18) WHEN.push(['tonight', 'Tonight 19:00', day * 1440 + 19 * 60]);
     WHEN.push(['tm10', 'Tomorrow 10:00', (day + 1) * 1440 + 600], ['tm15', 'Tomorrow 15:00', (day + 1) * 1440 + 900], ['tm19', 'Tomorrow 19:00', (day + 1) * 1440 + 1140]);
-    let where = 'home', whenI = 0;
+    let where = 'home', whenI = 1;
     const mk = (cont, arr, get, set) => arr.forEach((o, i) => { const b = h(`<button class="chip ${get() === (o[0]) ? 'sel' : ''}">${o[1]}</button>`); b.onclick = () => { set(o[0], i); cont.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; cont.appendChild(b); });
     mk(box.querySelector('.wherec'), WHERE, () => where, (v) => (where = v));
     mk(box.querySelector('.whenc'), WHEN, () => WHEN[whenI][0], (v, i) => (whenI = i));
@@ -242,6 +257,10 @@
       const to = [...sel], w = WHEN[whenI], at = w[2];
       const place = WHERE.find((x) => x[0] === where)[1].toLowerCase();
       const names = to.map((id) => MH.CHAR[id].name).join(' and ');
+      if (w[0] === 'follow') {
+        MH.chat.setPendingInvite({ to, loc: 'follow', at, desc: 'to come along with the player right now (follow them around)', what: 'come along', follow: true }, `*asks ${names} to come along with me*`);
+        ui.closeGivePicker(); return;
+      }
       const whenTxt = w[0] === 'now' ? 'right now' : w[1].toLowerCase().replace(/ (\d)/, ' at $1');
       const desc = where === 'home' ? `over to the player's house ${whenTxt}` : `to meet at ${place} ${whenTxt}`;
       MH.chat.setPendingInvite({ to, loc: where, at, desc, what: where === 'home' ? 'visit' : 'hang out' }, where === 'home' ? `*invites ${names} over to my place ${whenTxt}*` : `*invites ${names} to meet at ${place} ${whenTxt}*`);
@@ -308,8 +327,115 @@
       <h4>What ${MH.esc(ch.name)} remembers about you</h4>
       <ul class="mems">${mems.length ? mems.map((m) => `<li><i>${MH.esc(MH.agoStr(m.t))}</i> ${MH.esc(m.text)}</li>`).join('') : '<li class="muted">Nothing yet.</li>'}</ul>
       ${n.met && rels.length ? `<h4>Their relationships</h4><div class="rels">${rels.map(([k, v]) => `<span class="rel" style="border-color:${MH.bondColor(v)}">${MH.esc(MH.CHAR[k].name)} ${v > 0 ? '+' : ''}${v}</span>`).join('')}</div>` : ''}
+      <div class="row" style="margin-top:14px"><button class="btn small" id="pEdit">✏️ Edit character & portrait</button></div>
     </div>`);
+    body.querySelector('#pEdit').onclick = () => ui.openCharEditor(id);
     ui.modal(MH.esc(ch.name), body);
+  };
+
+  // ------------------------------------------------------------ character editor (what the AI reads + portrait)
+  ui.openCharEditor = function (id) {
+    const ch = MH.CHAR[id], ed = MH.charEdits[id] || {};
+    const relText = Object.entries(ch.relations || {}).filter(([k]) => MH.CHAR[k]).map(([k, v]) => `${MH.CHAR[k].name}: ${v[1]}`).join('\n');
+    const body = h(`<div class="form editor">
+      <div class="pe-prev"><div class="pe-stage"><img alt=""></div><div class="pe-line"></div></div>
+      <div class="row wrap"><label class="btn small" id="peUploadL">📷 Upload portrait<input type="file" id="peUpload" accept="image/*" hidden></label><button class="btn small ghost" id="peNoPic">Remove custom portrait</button></div>
+      <label>Portrait size <small id="pesV"></small></label><input type="range" id="peS" min="0.4" max="1.8" step="0.02">
+      <label>Move up / down <small id="peyV"></small></label><input type="range" id="peY" min="-45" max="45" step="1">
+      <label>Move left / right <small id="pexV"></small></label><input type="range" id="peX" min="-45" max="45" step="1">
+      <p class="muted small">The dashed line is roughly where speech bubbles sit (over the head).</p>
+      <h4>What the AI knows about ${MH.esc(ch.name)}</h4>
+      <label>Name</label><input id="peName" maxlength="40">
+      <label>Title</label><input id="peTitle" maxlength="60">
+      <label>Species</label><input id="peSpecies" maxlength="80">
+      <label>Personality, looks & backstory</label><textarea id="peBio" rows="9"></textarea>
+      <label>How they talk</label><textarea id="peVoice" rows="3"></textarea>
+      <label>Quirks <small>(comma separated)</small></label><input id="peQuirks">
+      <label>Relationships <small>(one per line — Name: how they feel)</small></label><textarea id="peRel" rows="5"></textarea>
+      <label>Extra notes for the AI <small>(anything else: secrets, current goals, running jokes…)</small></label><textarea id="peNotes" rows="4"></textarea>
+      <div class="row wrap"><button class="btn small ghost" id="pePreview">👁 Preview what the AI reads</button></div>
+      <pre class="pe-ai hidden"></pre>
+      <div class="row wrap"><button class="btn" id="peSave">Save</button><button class="btn small danger" id="peReset">Reset to original</button></div>
+    </div>`);
+    const $b = (q) => body.querySelector(q);
+    $b('#peName').value = ch.name; $b('#peTitle').value = ch.title || ''; $b('#peSpecies').value = ch.species || '';
+    $b('#peBio').value = ch.bio || ''; $b('#peVoice').value = ch.voice || ''; $b('#peQuirks').value = (ch.quirks || []).join(', ');
+    $b('#peRel').value = relText; $b('#peNotes').value = ch.notes || '';
+    let pic = ch.portrait || MH.art.portraitURL(ch), newPic = null, removePic = false;
+    const S = $b('#peS'), Y = $b('#peY'), X = $b('#peX'), img = $b('.pe-stage img');
+    S.value = ed.pScale || 1; Y.value = ed.pY || 0; X.value = ed.pX || 0;
+    const preview = () => {
+      img.src = pic;
+      img.style.scale = S.value; img.style.translate = `${X.value}% ${Y.value}%`;
+      $b('#pesV').textContent = Math.round(S.value * 100) + '%'; $b('#peyV').textContent = Y.value; $b('#pexV').textContent = X.value;
+    };
+    [S, Y, X].forEach((r) => (r.oninput = preview));
+    preview();
+    $b('#peUpload').onchange = async (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      try { newPic = await ui.loadPortraitFile(f); pic = newPic; removePic = false; preview(); ui.toast('Portrait loaded — adjust it, then Save.'); }
+      catch (err) { ui.toast('Could not read that image.'); }
+    };
+    $b('#peNoPic').onclick = () => { removePic = true; newPic = null; pic = (ch._orig && ch._orig.portrait) || MH.art.portraitURL(ch); preview(); };
+    $b('#pePreview').onclick = () => {
+      const pre = $b('.pe-ai');
+      saveFields(true);
+      pre.textContent = MH.ai.charCardPreview(id);
+      pre.classList.remove('hidden');
+    };
+    const saveFields = (dry) => {
+      const data = { name: $b('#peName').value.trim(), title: $b('#peTitle').value.trim(), species: $b('#peSpecies').value.trim(), bio: $b('#peBio').value.trim(), voice: $b('#peVoice').value.trim(), quirks: $b('#peQuirks').value, relNotes: $b('#peRel').value, notes: $b('#peNotes').value.trim(), pScale: +S.value, pY: +Y.value, pX: +X.value };
+      if (dry) { const keep = MH.charEdits[id]; MH.saveCharEdit(id, data); if (!keep) { /* keep edits even on preview: harmless */ } return; }
+      MH.saveCharEdit(id, data);
+    };
+    $b('#peSave').onclick = async () => {
+      saveFields();
+      if (newPic) { await MH.idb.set('portrait_' + id, newPic); MH.saveCharEdit(id, { customPortrait: true }); MH.CHAR[id].portrait = newPic; }
+      else if (removePic) { await MH.idb.del('portrait_' + id); MH.saveCharEdit(id, { customPortrait: false }); }
+      ui.toast(`Saved ${MH.CHAR[id].name}.`);
+      ui.openProfile(id);
+    };
+    $b('#peReset').onclick = async () => {
+      if (!(await ui.confirm(`Reset ${ch.name} to the original character (text and portrait)?`, 'Reset', 'Cancel'))) return;
+      await MH.resetCharEdit(id);
+      ui.toast('Reset.'); ui.openProfile(id);
+    };
+    ui.modal('Edit ' + MH.esc(ch.name), body, { keep: true, onClose: () => ui.openProfile(id) });
+  };
+
+  // read an uploaded image, shrink it to a sensible size, return a data URL
+  ui.loadPortraitFile = function (file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onerror = rej;
+      r.onload = () => {
+        const im = new Image();
+        im.onerror = rej;
+        im.onload = () => {
+          const k = Math.min(1, 1100 / im.height, 1100 / im.width);
+          const c = document.createElement('canvas');
+          c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          let url = c.toDataURL('image/webp', 0.9);
+          if (!url.startsWith('data:image/webp')) url = c.toDataURL('image/png');
+          res(url);
+        };
+        im.src = r.result;
+      };
+      r.readAsDataURL(file);
+    });
+  };
+
+  // small "are you sure?" prompt (resolves true/false)
+  ui.confirm = function (text, yes = 'Yes', no = 'No') {
+    return new Promise((res) => {
+      const old = document.getElementById('confirmBox'); if (old) old.remove();
+      const box = h(`<div id="confirmBox" class="confirm"><div class="cbox"><p>${MH.esc(text)}</p><div class="row"><button class="btn ghost" data-v="0">${MH.esc(no)}</button><button class="btn" data-v="1">${MH.esc(yes)}</button></div></div></div>`);
+      box.querySelectorAll('[data-v]').forEach((b) => (b.onclick = () => { box.remove(); ui.confirmOpen = false; res(b.dataset.v === '1'); }));
+      box.addEventListener('pointerdown', (e) => { if (e.target === box) { box.remove(); ui.confirmOpen = false; res(false); } });
+      document.getElementById('game').appendChild(box);
+      ui.confirmOpen = true;
+    });
   };
 
   function tabYou() {

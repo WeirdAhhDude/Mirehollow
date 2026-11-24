@@ -136,4 +136,64 @@ window.MH = window.MH || {};
   };
 
   MH.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------- IndexedDB (uploaded portraits can be too big for localStorage) ----------
+  MH.idb = (function () {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open('mirehollow', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
+    }));
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode); const st = t.objectStore('kv'); const q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+    return {
+      get: (k) => tx('readonly', (st) => st.get(k)).catch(() => null),
+      set: (k, v) => tx('readwrite', (st) => st.put(v, k)).catch((e) => { console.warn('idb', e); return null; }),
+      del: (k) => tx('readwrite', (st) => st.delete(k)).catch(() => null),
+    };
+  })();
+
+  // ---------- villager edits (made in Journal → villager → Edit). Global, survive new games. ----------
+  MH.EDITABLE = ['name', 'title', 'species', 'bio', 'voice', 'quirks', 'relNotes', 'notes'];
+  MH.charEdits = MH.store.get('charEdits', {});
+  MH.applyCharEdits = function (id) {
+    const ids = id ? [id] : Object.keys(MH.CHAR);
+    ids.forEach((cid) => {
+      const ch = MH.CHAR[cid]; if (!ch) return;
+      if (!ch._orig) ch._orig = { name: ch.name, title: ch.title, species: ch.species, bio: ch.bio, voice: ch.voice, quirks: (ch.quirks || []).slice(), relations: JSON.parse(JSON.stringify(ch.relations || {})), portrait: ch.portrait || null, notes: '' };
+      const o = ch._orig, ed = MH.charEdits[cid] || {};
+      ch.name = ed.name || o.name; ch.title = ed.title || o.title; ch.species = ed.species || o.species;
+      ch.bio = ed.bio || o.bio; ch.voice = ed.voice || o.voice;
+      ch.quirks = ed.quirks != null ? String(ed.quirks).split(',').map((q) => q.trim()).filter(Boolean) : o.quirks.slice();
+      ch.notes = ed.notes || '';
+      ch.relations = JSON.parse(JSON.stringify(o.relations));
+      if (ed.relNotes) String(ed.relNotes).split('\n').forEach((line) => {
+        const m = line.match(/^\s*([^:]+?)\s*:\s*(.+)$/); if (!m) return;
+        const key = Object.keys(MH.CHAR).find((k) => k === m[1].toLowerCase() || MH.CHAR[k].name.toLowerCase() === m[1].toLowerCase().trim());
+        if (key) ch.relations[key] = [ch.relations[key] ? ch.relations[key][0] : 0, m[2].trim()];
+      });
+      ch.portraitScale = ed.pScale || 1; ch.portraitX = ed.pX || 0; ch.portraitY = ed.pY || 0;
+      if (!ed.customPortrait) ch.portrait = o.portrait;
+    });
+  };
+  MH.saveCharEdit = function (id, data) {
+    MH.charEdits[id] = Object.assign({}, MH.charEdits[id] || {}, data);
+    MH.store.set('charEdits', MH.charEdits);
+    MH.applyCharEdits(id);
+  };
+  MH.resetCharEdit = async function (id) {
+    delete MH.charEdits[id];
+    MH.store.set('charEdits', MH.charEdits);
+    await MH.idb.del('portrait_' + id);
+    MH.applyCharEdits(id);
+  };
+  MH.loadCustomPortraits = async function () {
+    for (const id in MH.charEdits) {
+      if (!MH.charEdits[id].customPortrait || !MH.CHAR[id]) continue;
+      const url = await MH.idb.get('portrait_' + id);
+      if (url) MH.CHAR[id].portrait = url;
+    }
+  };
 })(window.MH);

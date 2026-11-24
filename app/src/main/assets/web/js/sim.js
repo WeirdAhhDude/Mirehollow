@@ -36,6 +36,7 @@
 
   sim.sleepUntilMorning = function () {
     const st = MH.state;
+    (st.companions || []).slice().forEach((id) => sim.stopFollow(id, 'goes home for the night'));
     if (st.time.minutes >= 7 * 60) { st.time.day++; sim.newDay(); }
     st.time.minutes = 7 * 60;
     sim.placeEveryone();
@@ -128,6 +129,8 @@
       return;
     }
     if (sim.approaching === e) return updateApproach(e, dt);
+    if (e.following) return companionTick(e, dt);
+    if (e.seek) return seekTick(e, dt);
     const farFromPlayer = MH.distTiles(e, MH.player) > 50;
     const p = sim.plan(e.id);
     const key = planKey(p);
@@ -221,17 +224,116 @@
     MH.npcEnterHome(e);
     e.guest = true; plan.arrived = true;
     const P = MH.state.player;
-    const party = plan.kind === 'party' ? (MH.state.parties || []).find((x) => x.id === plan.partyId) : null;
-    if (party) { party.arrived = party.arrived || []; if (!party.arrived.includes(e.id)) party.arrived.push(e.id); }
-    MH.ui.toast(`🚪 ${e.ch.name} arrived${party ? ' for your party' : ''}!`);
-    e.showEmote(party ? 'note' : 'heart', 2.5);
-    if (MH.chat.active && MH.isInside(MH.player)) { MH.chat.addMember(e.id, party ? 'arrives for the party' : 'arrives for the visit'); return; }
+    const crash = plan.kind === 'crash';
+    const party = plan.partyId ? (MH.state.parties || []).find((x) => x.id === plan.partyId) : null;
+    if (party) { party.arrived = party.arrived || []; if (!party.arrived.includes(e.id)) party.arrived.push(e.id); if (crash) (party.crashers = party.crashers || []).push(e.id); }
+    MH.ui.toast(crash ? `😱 ${e.ch.name} crashed your party!` : `🚪 ${e.ch.name} arrived${party ? ' for your party' : ''}!`, crash ? 4 : 2.8);
+    e.showEmote(crash ? '!' : party ? 'note' : 'heart', 2.5);
+    if (MH.chat.active && MH.isInside(MH.player)) { MH.chat.addMember(e.id, crash ? 'barges in uninvited' : party ? 'arrives for the party' : 'arrives for the visit'); return; }
     if (!plan.met && !MH.chat.active) {
       plan.met = true;
-      MH.chat.start([e.id], 'opener', party
+      MH.chat.start([e.id], 'opener', crash
+        ? `${e.ch.name} barges into ${P.name}'s party uninvited (they weren't invited and they know it). Drama is possible.`
+        : party
         ? `${e.ch.name} arrives at ${P.name}'s ${party.theme ? '"' + party.theme + '" ' : ''}party at their house.`
         : `${e.ch.name} arrives at ${P.name}'s house for the visit they agreed on, and steps inside.`);
     }
+  };
+
+  // ------------------------------------------------------------ companions (villagers following the player)
+  function nearPlayerSpot() {
+    const t = MH.player.tile();
+    for (const [dx, dy] of [[1, 1], [-1, 1], [1, 0], [-1, 0], [0, 1], [2, 1], [-2, 1], [0, 2], [1, 2], [-1, 2]]) if (MH.world.walkable(t.tx + dx, t.ty + dy)) return { tx: t.tx + dx, ty: t.ty + dy };
+    return MH.world.nearestWalkable(t.tx, t.ty);
+  }
+  function companionTick(e, dt) {
+    const pl = MH.player;
+    e.hidden = false; e.asleep = false; e.inRoom = null; e.staffSpot = null;
+    const d = MH.distTiles(e, pl);
+    if (MH.roomOf(e) !== MH.roomOf(pl) || d > 26) { const s = nearPlayerSpot(); e.setTile(s.tx, s.ty); e.path = null; e.dir = 'up'; return; }
+    if (d > 2.4) {
+      e.repath = (e.repath || 0) - dt;
+      if (e.repath <= 0 || !e.path || !e.path.length) { e.repath = 0.6; const t = pl.tile(); MH.npcGoTo(e, t.tx, t.ty); if (e.path && e.path.length) e.path.pop(); }
+      e.hurry = d > 5;
+      MH.npcWalk(e, dt);
+    } else { e.path = null; e.hurry = false; MH.animate(e, dt, false); if (Math.random() < dt * 0.5) e.face(pl.x, pl.y); }
+  }
+  sim.startFollow = function (id) {
+    const e = MH.npcById[id]; if (!e || e.following) return;
+    MH.state.companions = MH.state.companions || [];
+    if (!MH.state.companions.includes(id)) MH.state.companions.push(id);
+    e.following = true; e.guest = false; e.inRoom = null; e.planKey = null;
+    MH.social.addMemory(id, `Went along with ${MH.state.player.name} — following them around for a bit.`, { imp: 1 });
+    MH.ui.toast(`🚶 ${e.ch.name} is coming with you`, 3);
+    MH.emit('companions');
+  };
+  sim.stopFollow = function (id, how) {
+    const e = MH.npcById[id];
+    MH.state.companions = (MH.state.companions || []).filter((x) => x !== id);
+    if (e && e.following) { e.following = false; e.path = null; e.planKey = null; e.planDelay = 0; MH.ui.toast(`${e.ch.name} ${how || 'heads off on their own'}`, 3); }
+    MH.emit('companions');
+  };
+  sim.restoreCompanions = function () { (MH.state.companions || []).forEach((id) => { const e = MH.npcById[id]; if (e) { e.following = true; const s = nearPlayerSpot(); e.setTile(s.tx, s.ty); e.hidden = false; } }); };
+
+  // ------------------------------------------------------------ villagers' own drama: rivals seek each other out and argue
+  function seekTick(e, dt) {
+    const t = MH.npcById[e.seek.target];
+    e.seek.t -= dt;
+    if (!t || t.hidden || t.busy || e.seek.t <= 0 || MH.chat.active && MH.chat.convo && (MH.chat.convo.members.includes(e.id))) { e.seek = null; e.hurry = false; e.planKey = null; return; }
+    if (MH.distTiles(e, t) < 2) { const why = e.seek.why; e.seek = null; e.hurry = false; sim.argue(e, t, why); return; }
+    e.repath = (e.repath || 0) - dt;
+    if (e.repath <= 0 || !e.path || !e.path.length) { e.repath = 1; const tt = t.tile(); MH.npcGoTo(e, tt.tx, tt.ty); if (e.path && e.path.length) e.path.pop(); }
+    e.hurry = true;
+    MH.npcWalk(e, dt);
+  }
+  sim.considerDrama = function () {
+    if (MH.settings.ambient === 'off') return;
+    const pl = MH.player, now = MH.absMinutes();
+    const free = MH.npcs.filter((e) => !e.hidden && !e.asleep && !e.busy && !e.following && !e.guest && !e.seek && !e.ch.mute && !e.folk && sim.approaching !== e);
+    const pairs = [];
+    for (const a of free) for (const b of free) {
+      if (a === b) continue;
+      const r = MH.social.npc(a.id).rel[b.id];
+      if (r == null || r > -25) continue;
+      const d = MH.distTiles(a, b);
+      if (d > 34 || MH.roomOf(a) !== MH.roomOf(b)) continue;
+      const k = 'd|' + [a.id, b.id].sort().join('|');
+      if ((sim.pairCool[k] || -1e9) > now) continue;
+      pairs.push({ a, b, k, r, near: Math.min(MH.distTiles(a, pl), MH.distTiles(b, pl)) });
+    }
+    if (!pairs.length) return;
+    pairs.sort((x, y) => x.near - y.near + (x.r - y.r) * 0.05);
+    const p = pairs[0].near < 20 || Math.random() < 0.4 ? pairs[0] : MH.pick(pairs);
+    sim.pairCool[p.k] = now + 720;
+    const note = MH.CHAR[p.a.id].relations && MH.CHAR[p.a.id].relations[p.b.id] ? MH.CHAR[p.a.id].relations[p.b.id][1] : 'an old grudge';
+    p.a.seek = { target: p.b.id, t: 40, why: note };
+    p.a.showEmote('anger', 2);
+  };
+  sim.argue = async function (a, b, why) {
+    if (a.busy || b.busy) return;
+    a.busy = b.busy = 'smalltalk'; a.path = b.path = null;
+    a.face(b.x, b.y); b.face(a.x, a.y);
+    const pl = MH.player;
+    const near = Math.min(MH.distTiles(a, pl), MH.distTiles(b, pl));
+    const visible = near < 13 && !MH.chat.active && MH.roomOf(a) === MH.roomOf(pl);
+    let res;
+    try { res = visible && MH.ai.hasKey() ? await MH.ai.smallTalk(a.id, b.id, null, why) : MH.ai.offlineSmallTalk(a.id, b.id, null, why); }
+    catch (err) { res = MH.ai.offlineSmallTalk(a.id, b.id, null, why); }
+    const where = MH.world.placeAt(a.x, a.y).name;
+    if (res && res.lines.length) {
+      MH.social.changeRel(a.id, b.id, Math.min(-1, res.rel)); MH.social.changeRel(b.id, a.id, Math.min(-1, res.rel));
+      MH.social.grapevine(res.summary || `${a.ch.name} and ${b.ch.name} argued ${where}.`, [a.id, b.id]);
+      // bystanders remember the scene
+      MH.npcs.forEach((o) => { if (o !== a && o !== b && !o.hidden && MH.distTiles(o, a) < 9 && MH.roomOf(o) === MH.roomOf(a)) MH.social.addMemory(o.id, `Saw ${a.ch.name} and ${b.ch.name} have a row ${where}.`, { imp: 1, kind: 'witness', about: 'town' }); });
+      MH.social.addMemory(a.id, `Had it out with ${b.ch.name} ${where}.`, { imp: 2, about: 'town' });
+      MH.social.addMemory(b.id, `${a.ch.name} came at me ${where}. Ugh.`, { imp: 2, about: 'town' });
+      if (visible) { MH.social.log({ kind: 'overheard', text: `⚡ ${a.ch.name} vs ${b.ch.name} — ${where}`, lines: res.lines }); a.showEmote('anger', 3); await MH.chat.playAmbient(res.lines); }
+      else if (!MH.chat.active) sim.vibeNow(MH.pick([`You hear shouting near ${where}.`, `Somebody is having a row near ${where}.`, `Raised voices drift over from ${where}.`]));
+    }
+    a.busy = b.busy = null;
+    // the loser of the argument storms off
+    const loser = Math.random() < 0.5 ? a : b; loser.planKey = null; loser.planDelay = 0;
+    a.idleT = b.idleT = MH.rand(3, 8);
   };
 
   // ------------------------------------------------------------ approaching the player (rare)
@@ -257,7 +359,7 @@
     const pl = MH.player;
     let best = null, bestScore = 0.9;
     for (const e of MH.npcs) {
-      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest) continue;
+      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest || e.following || e.seek) continue;
       const d = MH.distTiles(e, pl);
       if (d > 14 || d < 2) continue;
       const n = MH.social.npc(e.id);
@@ -289,7 +391,7 @@
   sim.considerSmallTalk = async function () {
     if (MH.settings.ambient === 'off') return;
     const pl = MH.player;
-    const free = MH.npcs.filter((e) => !e.hidden && !e.asleep && !e.busy && sim.approaching !== e && !(e.path && e.path.length > 3) && e.id !== 'scarecrow' && !e.guest);
+    const free = MH.npcs.filter((e) => !e.hidden && !e.asleep && !e.busy && sim.approaching !== e && !(e.path && e.path.length > 3) && e.id !== 'scarecrow' && !e.guest && !e.following && !e.seek);
     const pairs = [];
     for (let i = 0; i < free.length; i++) for (let j = i + 1; j < free.length; j++) {
       const a = free[i], b = free[j];
@@ -508,6 +610,14 @@
         const hostHere = party.loc === 'home' ? MH.isInside(MH.player) : MH.world.placeAt(MH.player.x, MH.player.y).key === party.loc;
         if (hostHere) party.hostTime = (party.hostTime || 0) + 1;
         if (Math.random() < 0.02 && hostHere) MH.render.burst(MH.player.x + MH.rand(-40, 40), MH.player.y - 30, 'note', 3);
+        // uninvited guests sometimes crash the party (rivals of the guests, or the town's chaos agents)
+        if (party.loc === 'home' && hostHere && (party.crashes || 0) < 2 && Math.random() < 1 / 150) {
+          const came = party.arrived || [];
+          const pool = MH.CHARS.filter((c) => !party.invited.includes(c.id) && !c.visitor && !c.mute && !(sim.activePlan(c.id)) && !MH.npcById[c.id].busy && !MH.npcById[c.id].following);
+          const score = (c) => (['maggie', 'chuckles', 'dionne', 'gertie', 'kira'].includes(c.id) ? 2 : 0) + came.filter((g) => ((MH.social.npc(c.id).rel[g] || 0) <= -30)).length * 2 + Math.random() * 2;
+          const pick = pool.sort((a, b) => score(b) - score(a))[0];
+          if (pick) { party.crashes = (party.crashes || 0) + 1; sim.addPlan({ id: pick.id, kind: 'crash', loc: 'home', at: now, until: party.until, partyId: party.id, what: 'crash the party' }); }
+        }
         if (now >= party.until) finishParty(party);
       }
     }
@@ -643,7 +753,7 @@
     if (!id) return;
     const b = R.building;
     for (const e of MH.npcs) {
-      if (e.inRoom || e.hidden || e.busy || e.guest || !e.plan || sim.approaching === e) continue;
+      if (e.inRoom || e.hidden || e.busy || e.guest || e.following || e.seek || !e.plan || sim.approaching === e) continue;
       if (e.plan.loc !== b || (e.plan.mode !== 'out' && e.plan.mode !== 'nap')) continue;
       if (e.state === 'travel' && e.path && e.path.length > 3) continue; // still on the way
       const staff = e.ch.home === b;
@@ -683,6 +793,8 @@
     const every = amb === 'high' ? 18 : amb === 'low' ? 90 : amb === 'off' ? 1e9 : 40;
     sim.smalltalkTimer -= dt;
     if (sim.smalltalkTimer <= 0) { sim.smalltalkTimer = every * MH.rand(0.7, 1.3); sim.considerSmallTalk(); }
+    sim.dramaTimer = (sim.dramaTimer == null ? 60 : sim.dramaTimer) - dt;
+    if (sim.dramaTimer <= 0) { sim.dramaTimer = MH.rand(80, 170); if (Math.random() < 0.6) sim.considerDrama(); }
     sim.approachTimer -= dt;
     if (sim.approachTimer <= 0) { sim.approachTimer = MH.rand(45, 80); sim.considerApproach(); }
     sim.folkTimer -= dt;

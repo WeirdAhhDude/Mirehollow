@@ -150,10 +150,10 @@
   S.witness = function (text, wx, wy, exclude, repDeltas, radius = 9) {
     if (!text) return [];
     const seen = [];
-    const insideHome = MH.world.inInterior(Math.floor(wx / MH.TILE), Math.floor(wy / MH.TILE));
+    const R0 = MH.world.roomAt(Math.floor(wx / MH.TILE), Math.floor(wy / MH.TILE)), room0 = R0 ? R0.id : null;
     MH.npcs.forEach((e) => {
       if (exclude.includes(e.id) || e.hidden || e.asleep) return;
-      if (MH.isInside(e) !== insideHome) return; // walls block the view
+      if (MH.roomOf(e) !== room0) return; // walls block the view
       if (MH.CHAR[e.id].elusive && Math.random() < 0.5) return;
       const d = Math.hypot(e.x - wx, e.y - wy) / MH.TILE;
       if (d > radius) return;

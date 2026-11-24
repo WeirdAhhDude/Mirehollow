@@ -99,10 +99,16 @@ window.MH = window.MH || {};
     textSpeed: 'normal', // slow | normal | fast | instant
     timeScale: 1, // game minutes per real second
     temperature: 0.9,
-    mature: false, // Mature mode (16+): darker themes & strong language, fade-to-black instead of refusals
+    mature: false,
+    contentMode: 'cozy', // 'cozy' | 'mature' | 'custom' — see ai.js "CONTENT RULES"
+    customRules: '',
+    thinking: 'off', // 'off' | 'low' | 'default' — model reasoning (off = fastest, avoids leaked thinking)
+    fastRouting: true, // ask OpenRouter for the lowest-latency provider
     playerName: '',
   };
   MH.settings = Object.assign({}, MH.defaultSettings, MH.store.get('settings', {}));
+  if (MH.settings.mature && MH.settings.contentMode === 'cozy') MH.settings.contentMode = 'mature';
+  if (MH.settings.textSpeed === 'normal' && !MH.settings._v3) { MH.settings._v3 = true; }
   MH.saveSettings = () => MH.store.set('settings', MH.settings);
 
   // ---------- native bridge (Android) ----------

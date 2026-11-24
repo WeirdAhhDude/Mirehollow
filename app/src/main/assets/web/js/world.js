@@ -4,8 +4,8 @@
 'use strict';
 (function (MH) {
   const T = MH.TILE;
-  const W = 172, H = 130, TOWN_W = 150;
-  const G = { GRASS: 0, WOODS: 1, PATH: 2, PLAZA: 3, SAND: 4, WATER: 5, SWAMP: 6, MUD: 7, FIELD: 8, BOARD: 9, DEEP: 10, ROAD: 11, RAIL: 12, PADDY: 13, FLOOR: 14, TATAMI: 15, VOID: 16, STONE: 17, CROSS: 18, WALL: 19 };
+  const W = 220, H = 130, TOWN_W = 150;
+  const G = { GRASS: 0, WOODS: 1, PATH: 2, PLAZA: 3, SAND: 4, WATER: 5, SWAMP: 6, MUD: 7, FIELD: 8, BOARD: 9, DEEP: 10, ROAD: 11, RAIL: 12, PADDY: 13, FLOOR: 14, TATAMI: 15, VOID: 16, STONE: 17, CROSS: 18, WALL: 19, TILEF: 20, RUBBER: 21, CARPET: 22 };
   MH.G = G;
 
   const world = (MH.world = {
@@ -26,7 +26,25 @@
   const setSolid = (x, y, v = 1) => { if (inB(x, y)) world.solid[idx(x, y)] = v; };
   world.setSolid = setSolid;
   world.isWater = (x, y) => { const g = world.g(x, y); return g === G.WATER || g === G.SWAMP || g === G.DEEP; };
-  world.inInterior = (tx, ty) => tx >= world.interior.x0 && tx <= world.interior.x1 && ty >= world.interior.y0 && ty <= world.interior.y1;
+  // ---------------------------------------------------------------- interiors (rooms live off-map, x >= 152)
+  // x0..x1 / y0..y1 include the walls. Two top rows are the back wall; the door gap is in the bottom wall.
+  const ROOMS = {
+    home: { x0: 154, y0: 4, x1: 167, y1: 13, floor: G.FLOOR, wall: '#efe2c8', building: 'home', name: 'your living room', desc: 'inside the player\'s cozy house (wooden floor, low table, cushions, a futon in the corner)' },
+    bakery: { x0: 170, y0: 4, x1: 183, y1: 13, floor: G.TILEF, wall: '#f6e2c2', building: 'bakery', open: [6, 20], name: 'inside the Golden Loaf', desc: 'inside the Golden Loaf Bakery: warm ovens, a glass case of pastries, little café tables, the smell of cinnamon' },
+    gym: { x0: 186, y0: 4, x1: 201, y1: 15, floor: G.RUBBER, wall: '#d8dcd0', building: 'gym', open: [5, 22], name: 'inside the Burrow Gym', desc: 'inside the Burrow Gym: weight racks, punching bags, treadmills, rubber floor, motivational posters' },
+    lab: { x0: 204, y0: 4, x1: 217, y1: 13, floor: G.FLOOR, wall: '#c8d2d6', building: 'lab', open: [8, 23], name: 'inside the bookstore', desc: 'inside the "bookstore": a few dusty bookshelves hiding a cluttered lab with glowing vials and a swirling dimensional sink in the floor' },
+    store: { x0: 154, y0: 18, x1: 167, y1: 27, floor: G.TILEF, wall: '#e8e0c8', building: 'store', open: [8, 20], name: 'inside the General Store', desc: 'inside the General Store: aisles of absolutely everything, a humming drinks fridge, Sable\'s counter' },
+    club: { x0: 170, y0: 18, x1: 185, y1: 29, floor: G.CARPET, wall: '#3a2448', building: 'club', open: [18, 4], name: 'inside the Velvet Antler', desc: 'inside the Velvet Antler: thumping music, a glowing dance floor, a neon bar, a DJ booth and a hanging chair' },
+    townhall: { x0: 188, y0: 18, x1: 201, y1: 27, floor: G.FLOOR, wall: '#e4dccb', building: 'townhall', open: [8, 18], name: 'inside Town Hall', desc: 'inside the crooked Town Hall: the Mayor\'s cluttered desk, rows of meeting chairs, flags and overflowing notice boards' },
+    clinic: { x0: 204, y0: 18, x1: 215, y1: 26, floor: G.TILEF, wall: '#eef2f0', building: 'clinic', open: [0, 24], name: 'inside the clinic', desc: 'inside Doctor Owl\'s clinic: two patient beds, a cabinet of remedies, a desk with immaculate notes' },
+    barber: { x0: 154, y0: 32, x1: 163, y1: 39, floor: G.TILEF, wall: '#f2e8f2', building: 'barber', open: [9, 18], name: 'inside the barbershop', desc: 'inside the barbershop: three barber chairs, mirrors, a waiting sofa and a lot of questionable hair on the floor' },
+  };
+  for (const id in ROOMS) { const R = ROOMS[id]; R.id = id; R.doorX = Math.floor((R.x0 + R.x1) / 2); }
+  world.rooms = ROOMS;
+  world.interior = ROOMS.home;
+  world.roomAt = (tx, ty) => { for (const id in ROOMS) { const R = ROOMS[id]; if (tx >= R.x0 && tx <= R.x1 && ty >= R.y0 && ty <= R.y1) return R; } return null; };
+  world.inInterior = (tx, ty) => !!world.roomAt(tx, ty);
+  world.isOpen = (R) => { if (!R.open) return true; const h = MH.hour(); const [a, b] = R.open; return a <= b ? h >= a && h < b : h >= a || h < b; };
 
   // ---------------------------------------------------------------- buildings
   // x,y,w,h = footprint in tiles (solid). Door in the middle of the bottom row.
@@ -241,7 +259,8 @@
       const fg = world.g(fx, fy);
       if (fg !== G.PLAZA && fg !== G.ROAD && fg !== G.BOARD && fg !== G.STONE && b.kind !== 'stilt') setG(fx, fy, G.PATH);
       if (b.kind !== 'cave' && b.kind !== 'shrine') world.lights.push({ x: (b.x + b.w / 2) * T, y: (b.y + b.h - 1) * T, r: 40, color: b.glow || '#ffd890', window: true, b: bb });
-      world.interactables.push({ type: b.home ? 'enter' : 'door', tx: fx, ty: fy, b: bb, label: b.home ? 'Go inside' : bb.name });
+      const room = ROOMS[b.id];
+      world.interactables.push({ type: room ? 'enter' : 'door', tx: fx, ty: fy, b: bb, room: room ? room.id : null, label: b.home ? 'Go inside' : room ? 'Enter ' + bb.name : bb.name });
       return bb;
     };
     BUILDINGS.forEach(addBuilding);
@@ -263,17 +282,25 @@
       }
     });
 
-    // --- interior of your house
-    const I = world.interior;
-    rect(I.x0, I.y0, I.x1, I.y1, (x, y) => { setSolid(x, y, 0); setG(x, y, G.FLOOR); });
-    rect(I.x0, I.y0, I.x1, I.y0 + 1, (x, y) => { setG(x, y, G.WALL); setSolid(x, y); });
-    for (let y = I.y0; y <= I.y1; y++) { setG(I.x0, y, G.WALL); setSolid(I.x0, y); setG(I.x1, y, G.WALL); setSolid(I.x1, y); }
-    rect(I.x0 + 1, I.y1, I.x1 - 1, I.y1, (x, y) => { setG(x, y, G.WALL); setSolid(x, y); });
-    setG(160, I.y1, G.FLOOR); setSolid(160, I.y1, 0); setG(161, I.y1, G.FLOOR); setSolid(161, I.y1, 0);
+    // --- interiors
+    const roomShell = (R) => {
+      rect(R.x0, R.y0, R.x1, R.y1, (x, y) => { setSolid(x, y, 0); setG(x, y, R.floor); });
+      rect(R.x0, R.y0, R.x1, R.y0 + 1, (x, y) => { setG(x, y, G.WALL); setSolid(x, y); });
+      for (let y = R.y0; y <= R.y1; y++) { setG(R.x0, y, G.WALL); setSolid(R.x0, y); setG(R.x1, y, G.WALL); setSolid(R.x1, y); }
+      rect(R.x0 + 1, R.y1, R.x1 - 1, R.y1, (x, y) => { setG(x, y, G.WALL); setSolid(x, y); });
+      for (const dx of [0, 1]) { setG(R.doorX + dx, R.y1, R.floor); setSolid(R.doorX + dx, R.y1, 0); }
+      world.interactables.push({ type: 'exit', tx: R.doorX, ty: R.y1 - 1, room: R.id, label: 'Go outside' }, { type: 'exit', tx: R.doorX + 1, ty: R.y1 - 1, room: R.id, label: 'Go outside' });
+      world.lights.push({ x: (R.x0 + R.x1 + 1) / 2 * T, y: (R.y0 + R.y1) / 2 * T, r: 140, color: '#ffd890', interior: true });
+      R.staff = []; R.seats = [];
+    };
+    const fur = (type, tx, ty, w = 1, h = 1, opts = {}) => { const p = prop(type, tx, ty, Object.assign({ solid: true, interior: true, fw: w }, opts)); rect(tx, ty - h + 1, tx + w - 1, ty, (x, y) => setSolid(x, y)); return p; };
+    const deco = (type, tx, ty, opts = {}) => flat(type, tx, ty, Object.assign({ interior: true }, opts));
+    Object.values(ROOMS).forEach(roomShell);
+    // your house
     rect(155, 6, 158, 9, (x, y) => setG(x, y, G.TATAMI));
     prop('futon', 156, 7, { solid: true, w: 2, interior: true }); setSolid(157, 7); setSolid(156, 6); setSolid(157, 6);
     prop('lowtable', 160, 9, { solid: true, w: 2, interior: true }); setSolid(161, 9);
-    [[159, 9], [162, 9], [160, 10], [161, 10], [160, 8], [161, 8]].forEach(([x, y]) => flat('cushion', x, y, { interior: true }));
+    [[159, 9], [162, 9], [160, 10], [161, 10], [160, 8], [161, 8]].forEach(([x, y]) => deco('cushion', x, y));
     prop('kitchen', 164, 6, { solid: true, w: 2, interior: true }); setSolid(165, 6);
     prop('fridge', 166, 6, { solid: true, interior: true });
     prop('shelf', 159, 6, { solid: true, interior: true });
@@ -281,12 +308,43 @@
     prop('sofa', 164, 10, { solid: true, w: 2, interior: true }); setSolid(165, 10);
     prop('plant', 155, 12, { solid: true, interior: true });
     prop('plant', 166, 12, { solid: true, interior: true });
-    flat('rug', 160, 11, { interior: true });
-    world.interactables.push({ type: 'exit', tx: 160, ty: 12, label: 'Go outside' }, { type: 'exit', tx: 161, ty: 12, label: 'Go outside' });
+    deco('rug', 160, 11);
     world.interactables.push({ type: 'sleep', tx: 156, ty: 9, label: 'Sleep on the futon' }, { type: 'sleep', tx: 158, ty: 8, label: 'Sleep on the futon' });
     world.interactables.push({ type: 'party', tx: 160, ty: 10, label: 'Plan a party / invite people' }, { type: 'party', tx: 161, ty: 10, label: 'Plan a party / invite people' });
     world.interactables.push({ type: 'fridge', tx: 166, ty: 7, label: 'Open the fridge' });
-    world.lights.push({ x: 160.5 * T, y: 9 * T, r: 120, color: '#ffd890', interior: true });
+    // bakery
+    fur('breadshelf', 171, 7, 1, 2); fur('counter', 172, 8, 5); fur('displaycase', 178, 8, 2); fur('oven', 181, 6); fur('oven', 182, 6);
+    fur('cafetable', 173, 11); fur('cafetable', 180, 11); deco('chair', 172, 11); deco('chair', 174, 11); deco('chair', 179, 11); deco('chair', 181, 11); fur('plant', 182, 12);
+    ROOMS.bakery.staff = [[173, 7], [175, 7], [177, 7], [179, 7]];
+    // gym
+    fur('weightrack', 188, 6, 3); fur('weightrack', 197, 6, 3); fur('treadmill', 192, 6); fur('treadmill', 194, 6);
+    fur('punchbag', 188, 11); fur('punchbag', 199, 11); fur('gymbench', 191, 9, 2); fur('gymbench', 196, 9, 2);
+    deco('mat', 191, 13); deco('mat', 196, 13); deco('poster', 190, 5); deco('poster', 195, 5);
+    ROOMS.gym.staff = [[193, 10], [194, 11], [190, 12]];
+    // bookstore / lab
+    [205, 206, 207, 214, 215, 216].forEach((x, i) => fur('shelf', x, 6, 1, 1, { v: i }));
+    fur('labtable', 209, 8, 3); fur('desk', 205, 10, 2); fur('hole', 214, 10, 1, 1, { flatty: true }); fur('plant', 216, 12);
+    ROOMS.lab.staff = [[210, 7], [208, 7], [212, 9]];
+    // general store
+    fur('shopshelf', 156, 22, 3); fur('shopshelf', 156, 24, 3); fur('shopshelf', 163, 22, 3); fur('shopshelf', 163, 24, 3);
+    fur('cashcounter', 159, 21, 4); fur('drinkfridge', 155, 20); fur('drinkfridge', 166, 20);
+    ROOMS.store.staff = [[160, 20], [161, 20]];
+    // club
+    fur('bar', 171, 21, 4); [171, 172, 173, 174].forEach((x) => deco('stool', x, 22)); fur('djbooth', 180, 20, 2); deco('dancefloor', 176, 25);
+    fur('speaker', 184, 20); fur('speaker', 171, 27); fur('hangchair', 184, 25);
+    ROOMS.club.staff = [[172, 20], [173, 20], [180, 21], [178, 24]];
+    // town hall
+    fur('desk', 193, 21, 3); fur('flag', 190, 20); fur('flag', 199, 20); fur('chairrow', 191, 24, 3); fur('chairrow', 196, 24, 3); fur('board', 200, 22); fur('plant', 189, 26);
+    ROOMS.townhall.staff = [[194, 20], [195, 20]];
+    // clinic
+    fur('clinicbed', 205, 21, 1, 2); fur('clinicbed', 213, 21, 1, 2); fur('desk', 208, 21, 2); fur('cabinet', 211, 20); fur('plant', 214, 25); deco('chair', 207, 24); deco('chair', 208, 24);
+    ROOMS.clinic.staff = [[208, 20], [209, 20]];
+    // barbershop
+    fur('barberchair', 156, 35); fur('barberchair', 158, 35); fur('barberchair', 160, 35); deco('mirror', 156, 33); deco('mirror', 158, 33); deco('mirror', 160, 33);
+    prop('sofa', 161, 37, { solid: true, w: 2, interior: true }); setSolid(162, 37); fur('plant', 155, 38);
+    ROOMS.barber.staff = [[157, 36], [159, 36]];
+    // where each room's inside counts as a location
+    for (const id in ROOMS) { const R = ROOMS[id]; LOCS['in_' + id] = { name: R.name, r: [R.x0 + 1, R.y0 + 2, R.x1 - 1, R.y1 - 1], desc: R.desc, room: id }; }
 
     // --- square furniture
     prop('well', 78, 56, { w: 2 }); setSolid(79, 56);
@@ -453,10 +511,11 @@
   };
   world.placeAt = function (px, py) {
     const tx = Math.floor(px / T), ty = Math.floor(py / T);
-    if (world.inInterior(tx, ty)) return world.locations.myroom;
+    const R = world.roomAt(tx, ty);
+    if (R) return R.id === 'home' ? world.locations.myroom : world.locations['in_' + R.id];
     let best = null, bestA = 1e9;
     for (const k in world.locations) {
-      if (k === 'sky' || k === 'myroom') continue;
+      if (k === 'sky' || k === 'myroom' || k.startsWith('in_')) continue;
       const [x0, y0, x1, y1] = world.locations[k].r;
       if (tx >= x0 - 1 && tx <= x1 + 1 && ty >= y0 - 1 && ty <= y1 + 1) {
         const a = (x1 - x0 + 1) * (y1 - y0 + 1);

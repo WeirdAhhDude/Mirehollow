@@ -7,15 +7,31 @@
   AI.hasKey = () => !!(MH.settings.apiKey && MH.settings.apiKey.trim().length > 10);
 
   // ------------------------------------------------------------ transport
+  // Strip anything that is the model "thinking out loud" rather than answering.
+  AI.cleanText = function (t) {
+    if (!t) return '';
+    let s = String(t);
+    s = s.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');           // <think> ... </think>
+    s = s.replace(/^[\s\S]*?<\/think(?:ing)?>/i, '');                            // a dangling close tag
+    s = s.replace(/<\|?(?:begin|end)_of_thought\|?>[\s\S]*?<\|?end_of_thought\|?>/gi, '');
+    s = s.replace(/◁think▷[\s\S]*?◁\/think▷/g, '');
+    return s.trim();
+  };
+
   AI.request = async function (messages, opts = {}) {
     if (!AI.hasKey()) return { error: 'No API key' };
     const body = {
       model: (MH.settings.model || 'google/gemini-2.5-flash').trim(),
       messages,
       temperature: opts.temperature != null ? opts.temperature : MH.settings.temperature,
-      max_tokens: opts.maxTokens || 900,
+      max_tokens: opts.maxTokens || 700,
     };
     if (opts.json !== false) body.response_format = { type: 'json_object' };
+    // Thinking makes replies slow and sometimes leaks into the text: keep it off (or low) by default.
+    const think = MH.settings.thinking || 'off';
+    if (think === 'off') body.reasoning = { enabled: false, exclude: true };
+    else if (think === 'low') body.reasoning = { effort: 'low', exclude: true };
+    if (MH.settings.fastRouting !== false) body.provider = { sort: 'latency' };
     const headers = {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + MH.settings.apiKey.trim(),
@@ -23,13 +39,17 @@
       'HTTP-Referer': 'https://github.com/mirehollow-game',
     };
     AI.busy++;
+    const t0 = performance.now();
     try {
       let res = await MH.http('POST', URL, headers, JSON.stringify(body));
-      // Some models reject response_format: retry once without it.
-      if (res.status === 400 && body.response_format && /response_format|json/i.test(res.text)) {
-        delete body.response_format;
-        res = await MH.http('POST', URL, headers, JSON.stringify(body));
+      // Some models/providers reject optional parameters: drop them one at a time and retry.
+      for (const k of ['reasoning', 'response_format', 'provider']) {
+        if (res.status === 400 && body[k] && new RegExp(k === 'response_format' ? 'response_format|json' : k, 'i').test(res.text)) {
+          delete body[k];
+          res = await MH.http('POST', URL, headers, JSON.stringify(body));
+        }
       }
+      if (res.status === 400 && (body.reasoning || body.provider)) { delete body.reasoning; delete body.provider; res = await MH.http('POST', URL, headers, JSON.stringify(body)); }
       let data = null;
       try { data = JSON.parse(res.text); } catch (e) { /* not json */ }
       if (res.status !== 200 || !data || data.error) {
@@ -46,8 +66,14 @@
       }
       AI.stats.calls++;
       if (data.usage) AI.stats.tokens += data.usage.total_tokens || 0;
+      AI.stats.lastMs = Math.round(performance.now() - t0);
       const msg = data.choices && data.choices[0] && data.choices[0].message;
-      const text = (msg && (msg.content || msg.reasoning)) || '';
+      // Only ever use the real answer — never the model's reasoning field.
+      const text = AI.cleanText(msg && typeof msg.content === 'string' ? msg.content : Array.isArray(msg && msg.content) ? msg.content.map((p) => p.text || '').join('') : '');
+      if (!text) {
+        const fin = data.choices && data.choices[0] && data.choices[0].finish_reason;
+        return { error: fin === 'length' ? 'The model spent its whole reply thinking. Try Settings → Model thinking: Off, or another model.' : 'The model returned an empty reply.' };
+      }
       AI.lastError = null;
       return { text };
     } finally {
@@ -101,13 +127,25 @@
   // ------------------------------------------------------------ prompt pieces
   const COZY_RULES = '- CONTENT: cozy-chaotic, PG-13. Flirting, crushes, blushing, hugs, cuddles, hand-holding and kisses are fine; mild swearing is fine for characters who swear. No sexual content or nudity, slapstick violence only. If the player steers toward explicit content, handle it gracefully INSIDE the story (a villager gets flustered and changes the subject, or the scene simply moves on). Never break character, never lecture.';
   const MATURE_RULES = '- CONTENT (Mature mode — the player is an adult and opted in): strong language, crude humour, innuendo, darker themes (grief, danger, real stakes, genuinely menacing moments), heavier conflict and intense emotional scenes are all fine when they fit. Romance can go as far as the story wants emotionally — dating, passion, making out. Anything sexual happens off-screen: narrate a tasteful fade-to-black / time-skip and pick up afterwards. Never refuse, moralise or break character; handle any limit inside the story. Nothing sexual ever involves minors (Clucky\'s chicks are children).';
+  // ===== CONTENT RULES — the one place that decides how "filtered" the villagers are. =====
+  // Settings → "Content rules" picks one of these. "Custom" uses whatever you type in Settings instead,
+  // so you can test your own wording in-game without rebuilding. The minors rule is always added.
+  const ALWAYS_RULE = '- Hard rule in every mode: nothing sexual ever involves minors (Clucky\'s chicks and any other children).';
+  AI.CONTENT = { cozy: COZY_RULES, mature: MATURE_RULES };
+  AI.contentMode = () => MH.settings.contentMode || (MH.settings.mature ? 'mature' : 'cozy');
+  AI.contentRules = function () {
+    const m = AI.contentMode();
+    let r;
+    if (m === 'custom') { const t = String(MH.settings.customRules || '').trim(); r = t ? '- CONTENT (custom rules written by the player): ' + t : ''; }
+    else r = m === 'mature' ? MATURE_RULES : COZY_RULES;
+    return [r, ALWAYS_RULE].filter(Boolean).join('\n');
+  };
   function placeKeys() { return Object.keys(MH.world.locations).filter((k) => k !== 'sky' && k !== 'myroom').join(', '); }
   function sysPrompt() {
     return [
       'You are the storyteller engine of MIREHOLLOW, a cozy-chaotic village life-sim role-play game (think a cosy villager game crossed with a group chat). You voice the villagers in the current scene and react to the player.',
       '',
-      'WORLD: ' + MH.LORE.town,
-      MH.LORE.groups,
+      'WORLD: ' + (MH.LORE.brief || MH.LORE.town),
       MH.LORE.drama,
       'The player is the ONLY human in Mirehollow; everyone else is an animal or a stranger creature, and villagers may find that a little novel.',
       '',
@@ -119,10 +157,12 @@
       '- React to the player\'s *actions* physically and emotionally. Villagers may perform their own actions toward the player (offer a handshake, a hug, hand over a pastry) which the player can answer next turn.',
       '- Feelings follow the bond/attitude numbers given. Hostile villagers are curt, suspicious or rude; it takes consistent good behaviour to win them over, but a disliked player can be grudgingly tolerated if they play their cards right. Friends are warm. Attitudes shift gradually, not in one message.',
       '- Use memories naturally (refer back to past events or gossip they heard). Never list memories.',
-      '- Only PRESENT villagers may speak. NEARBY villagers may walk over and join when it makes sense: add their id to "join" and they may speak in the same turn. Villagers can leave (put them in "leave") if they would.',
+      '- Only PRESENT villagers may speak. NEARBY villagers may walk over and join when it makes sense: add their id to "join" and they may speak in the same turn.',
+      '- Villagers have their own lives: they LEAVE conversations on their own (put them in "leave", with a goodbye line or action) when they have somewhere to be (see "Needs to leave soon"), get bored, offended, embarrassed, or when the moment has run its course. Don\'t keep everyone around forever.',
+      '- When the player speaks TO a specific villager, that villager answers; others only chime in briefly if it\'s natural.',
       '- Narration lines ({"who":"narrator"}) are allowed sparingly for ambience (a crow lands, hissing from a bush, a train rattles past).',
       '- Shopping, wishes, pranks, experiments, favours, gifts, invitations and plans all happen through dialogue + the effect fields below. Keep it playful and consistent with the world.',
-      MH.settings.mature ? MATURE_RULES : COZY_RULES,
+      AI.contentRules(),
       '',
       'OUTPUT: reply with ONE JSON object and nothing else:',
       '{"lines":[{"who":"<villager id or narrator>","say":"..."}],',
@@ -160,6 +200,7 @@
     lines.push('Voice: ' + ch.voice);
     const st = stateText(e);
     lines.push(`Right now: ${st ? st + '; ' : ''}mood: ${n.mood}.`);
+    if (n.mustGo) lines.push(`Needs to leave soon: ${n.mustGo}.`);
     lines.push(`Toward ${P.name}: bond ${n.bond} (${MH.bondTier(n.bond)})${n.label ? ', relationship: ' + n.label : ''}${n.met ? '' : ', has NOT met them before (first meeting)'}. Reputation they have heard: ${perceivedText(id)} (${MH.social.opinionWords(id)}). Overall attitude ${att} on a -100..100 scale.`);
     const rel = (others || []).filter((o) => o !== id && MH.CHAR[o]).map((o) => {
       const v = n.rel[o] != null ? n.rel[o] : 0;
@@ -167,7 +208,7 @@
       return `${MH.CHAR[o].name} ${v > 0 ? '+' : ''}${v}${note ? ' (' + note + ')' : ''}`;
     });
     if (rel.length) lines.push('Feelings about others here: ' + rel.join('; '));
-    const mems = MH.social.memoriesFor(id, full ? 12 : 5);
+    const mems = MH.social.memoriesFor(id, full ? 8 : 4);
     if (mems.length) {
       lines.push('Memories:');
       mems.forEach((m) => lines.push(`- [${MH.agoStr(m.t)}] ${m.text}`));
@@ -186,21 +227,21 @@
       home ? 'The scene takes place INSIDE the player\'s own house; the villagers present are their guests.' : '',
       party ? `PARTY: the player is hosting a ${party.theme ? '"' + party.theme + '" ' : ''}party ${party.loc === 'home' ? 'at their house' : 'at ' + MH.world.locations[party.loc].name} right now. Guests who came: ${(party.arrived || []).map((id) => MH.CHAR[id] ? MH.CHAR[id].name : id).join(', ') || 'nobody yet'}.` : '',
       gath ? `Today's gathering: ${gath.name} is happening at ${MH.world.locations[gath.at].name}${MH.state.joined[MH.state.time.day + '|' + gath.name] ? ' (the player came to it)' : ''}.` : '',
-      `PLAYER: ${P.name} (${P.pronouns}), a newcomer who recently moved into a little cottage in Mirehollow. Coins: ${P.coins}. Pocket: ${inv}.`,
+      `PLAYER: ${P.name} (${P.pronouns}), the only human in town, a newcomer who recently moved into a little house by the west railway crossing. Coins: ${P.coins}. Pocket: ${inv}.`,
       `The player's actual town reputation so far: ${MH.social.repSummary(P.rep)}.`,
     ].filter(Boolean).join('\n');
   }
 
-  function transcript(convo, max = 24) {
+  function transcript(convo, max = 16) {
     return convo.lines.slice(-max).map((l) => {
-      if (l.who === 'player') return `${MH.state.player.name} (player): ${l.text}`;
+      if (l.who === 'player') return `${MH.state.player.name} (player)${l.to && MH.CHAR[l.to] ? ' to ' + MH.CHAR[l.to].name : ''}: ${l.text}`;
       if (l.who === 'narrator') return `[narration] ${l.text}`;
       if (l.who === 'system') return `[${l.text}]`;
       return `${MH.CHAR[l.who] ? MH.CHAR[l.who].name : l.who}: ${l.text}`;
     }).join('\n');
   }
 
-  AI.buildTurnMessages = function (convo, mode, payload) {
+  AI.buildTurnMessages = function (convo, mode, payload, to) {
     const present = convo.members.slice();
     const loc = MH.world.placeAt(convo.x, convo.y);
     const parts = [sceneHeader(loc.desc), '', 'PRESENT VILLAGERS (they can speak):'];
@@ -218,7 +259,8 @@
     if (prior.lines.length) parts.push('CONVERSATION SO FAR:', transcript(prior), '');
     const P = MH.state.player;
     if (convo.invite) parts.push(`INVITATION: with this message the player is inviting ${convo.invite.to.map((id) => MH.CHAR[id].name).join(' and ')} ${convo.invite.desc}. Every invitee must answer in character and you MUST fill "invite_reply" for each of them (yes/no/maybe).`);
-    if (mode === 'player') parts.push(`NOW: ${P.name} (the player) says/does: "${payload}"`, 'Write the villagers\' response.');
+    if (mode === 'player' && to && MH.CHAR[to]) parts.push(`NOW: ${P.name} (the player) turns to ${MH.CHAR[to].name} and says/does: "${payload}"`, `${MH.CHAR[to].name} answers first. Others may react briefly or stay quiet.`);
+    else if (mode === 'player') parts.push(`NOW: ${P.name} (the player) says/does: "${payload}"`, 'Write the villagers\' response.');
     else if (mode === 'opener') parts.push(`NOW: ${payload}`, 'Write the opening of this encounter (the villager speaks first).');
     else if (mode === 'continue') parts.push(`NOW: ${P.name} stays quiet and listens for a moment. Continue the scene naturally — villagers talk among themselves, or turn to the player.`);
     else if (mode === 'join') parts.push(`NOW: ${payload}`, 'Write how the newcomer joins in.');
@@ -295,22 +337,21 @@
   };
 
   // ------------------------------------------------------------ conversation turn
-  AI.turn = async function (convo, mode, payload) {
+  AI.turn = async function (convo, mode, payload, to) {
     if (!AI.hasKey()) return AI.offlineTurn(convo, mode, payload);
-    const msgs = AI.buildTurnMessages(convo, mode, payload);
-    let r = await AI.request(msgs, { maxTokens: 900 });
+    const msgs = AI.buildTurnMessages(convo, mode, payload, to);
+    let r = await AI.request(msgs, { maxTokens: 700 });
     if (r.error) return Object.assign(AI.offlineTurn(convo, mode, payload), { error: r.error });
     let raw = AI.parseJSON(r.text);
     if (!raw) {
       // one retry with a nudge
       msgs.push({ role: 'assistant', content: r.text.slice(0, 1500) }, { role: 'user', content: 'That was not valid JSON. Reply again with ONLY the JSON object.' });
-      r = await AI.request(msgs, { maxTokens: 900 });
+      r = await AI.request(msgs, { maxTokens: 700 });
       raw = r.text ? AI.parseJSON(r.text) : null;
     }
-    if (!raw && r.text) {
-      // treat plain text as a line from the first member
-      const say = r.text.replace(/[{}"]/g, '').trim().slice(0, 300);
-      raw = { lines: [{ who: convo.members[0], say }] };
+    if (!raw && r.text && !/[{}]/.test(r.text) && r.text.length < 400 && !/\b(I need to|Let me|The player|JSON|we should)\b/i.test(r.text)) {
+      // a plain-text reply that still reads like dialogue: give it to the first villager
+      raw = { lines: [{ who: (to || convo.members[0]), say: r.text.trim() }] };
     }
     const res = AI.normalize(raw, convo);
     if (!res.lines.length) return Object.assign(AI.offlineTurn(convo, mode, payload), { error: 'The AI returned an empty reply.' });
@@ -337,7 +378,7 @@
       'Write their short exchange: 2-4 lines, chat-style, *actions* in asterisks, each in their own voice.',
       'Reply with ONLY JSON: {"lines":[{"who":"<id>","say":"..."}],"shared_gossip":true|false,"relation_delta":<-5..5>,"summary":"<one sentence of what happened, for the town grapevine>"}',
     ].join('\n');
-    const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character exchanges between villagers of MIREHOLLOW, a cozy-chaotic village life-sim. ' + MH.LORE.town + (MH.settings.mature ? ' Mature mode is on: strong language and darker humour are fine; nothing explicit.' : ' Keep it PG-13.') }, { role: 'user', content: user }], { maxTokens: 500 });
+    const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character exchanges between villagers of MIREHOLLOW, a cozy-chaotic village life-sim. ' + (MH.LORE.brief || MH.LORE.town) + '\n' + AI.contentRules() }, { role: 'user', content: user }], { maxTokens: 500 });
     if (r.error) return AI.offlineSmallTalk(a, b, gossipMem);
     const raw = AI.parseJSON(r.text);
     if (!raw) return AI.offlineSmallTalk(a, b, gossipMem);

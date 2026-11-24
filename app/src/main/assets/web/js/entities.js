@@ -127,19 +127,23 @@
   MH.distTiles = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) / T;
 
   // ------------------------------------------------------------ the player's house
-  MH.isInside = (e) => MH.world.inInterior(Math.floor(e.x / T), Math.floor((e.y - 2) / T));
+  MH.roomOf = (e) => { const R = MH.world.roomAt(Math.floor(e.x / T), Math.floor((e.y - 2) / T)); return R ? R.id : null; };
+  MH.isInside = (e) => MH.roomOf(e) === 'home';
   MH.fadeTo = function (fn) {
     const f = document.getElementById('fade');
     MH.fading = true; f.classList.add('on');
     setTimeout(() => { fn(); MH.render.snap(); setTimeout(() => { f.classList.remove('on'); MH.fading = false; }, 150); }, 450);
   };
-  MH.enterHome = function () {
-    MH.fadeTo(() => { MH.player.setTile(160, 12); MH.player.dir = 'up'; MH.emit('home', { inside: true }); });
+  MH.enterRoom = function (id) {
+    const R = MH.world.rooms[id];
+    MH.fadeTo(() => { MH.player.setTile(R.doorX, R.y1 - 1); MH.player.dir = 'up'; MH.emit('room', { id, inside: true }); });
   };
-  MH.exitHome = function () {
-    const b = MH.world.buildingById.home;
-    MH.fadeTo(() => { MH.player.setTile(b.doorX, b.doorY + 1); MH.player.dir = 'down'; MH.emit('home', { inside: false }); });
+  MH.exitRoom = function (id) {
+    const R = MH.world.rooms[id], b = MH.world.buildingById[R.building];
+    MH.fadeTo(() => { const f = MH.world.nearestWalkable(b.doorX, b.doorY + 1); MH.player.setTile(f.tx, f.ty); MH.player.dir = 'down'; MH.emit('room', { id, inside: false }); });
   };
+  MH.enterHome = () => MH.enterRoom('home');
+  MH.exitHome = () => MH.exitRoom('home');
   // a villager walks in through your door
   MH.npcEnterHome = function (e) {
     const spots = [[159, 11], [162, 11], [158, 10], [163, 9], [159, 8], [162, 8], [157, 11], [164, 11], [156, 10], [165, 8], [163, 12], [158, 12]];

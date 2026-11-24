@@ -23,9 +23,17 @@ The game works offline with simple canned dialogue, but it's meant to be played 
 2. Create an API key (Keys → Create key).
 3. In the game: **⚙️ → Settings & AI** → paste the key → **Test connection**.
 4. Optionally tap **Browse** to pick a different model (default: `google/gemini-2.5-flash`, fast and cheap).
-5. Optional: **Mature mode (16+)**. Off = cozy PG-13. On = strong language, darker themes and heavier drama are
-   allowed and romance can go further; anything sexual fades to black instead of being refused, so scenes don't
-   break immersion. Nothing explicit either way.
+5. **Content rules**: *Cozy (PG-13)*, *Mature (16+)* (strong language, darker themes, heavier drama, romance can go
+   further, anything sexual fades to black instead of being refused) or *Custom*, where you type your own rules
+   in-game to test wording without rebuilding. In every mode a fixed rule is added: nothing sexual involving minors.
+6. **Model thinking**: keep it *Off* for fast replies (and so the model's reasoning never leaks into dialogue).
+   *Prefer the fastest provider* asks OpenRouter for the lowest-latency host of your model.
+
+### Where the prompt rules live in the code
+- `app/src/main/assets/web/js/ai.js` → `COZY_RULES`, `MATURE_RULES`, `ALWAYS_RULE` and `AI.contentRules()` (the
+  block marked `===== CONTENT RULES =====`). `sysPrompt()` right below it holds all the other storytelling
+  instructions (line length, leaving conversations, JSON format).
+- Villager personalities: `js/data_chars.js`. Town description sent to the AI: `MH.LORE.brief` in `js/data_lore.js`.
 
 The key is stored only on your device and is sent only to OpenRouter.
 Each villager reply is one AI call (roughly a few thousand tokens). With a cheap model a long play session
@@ -39,7 +47,8 @@ Settings if you want to save credit.
 | **Move** | Drag on the left half of the screen (floating joystick). Push further to run. Keyboard: WASD / arrows, Shift to run. |
 | **Interact** | Round **A** button (or E / Space): talk, wake someone up, knock on doors, pick flowers & forage, read the Grapevine board, make a wish at the well, go into your house. |
 | **Chat** | Type anything. Put actions in asterisks: `*offers a handshake*`, `*hides behind Vix*`. Villagers answer with their own actions you can respond to. Their lines pop up in bubbles over their (big) portraits. |
-| **Group chats** | Villagers nearby overhear and may wander in; portraits shrink to make room. They can also leave. Tap **… Listen** to stay quiet and let them talk among themselves. |
+| **Group chats** | Villagers nearby overhear and may wander in; portraits shrink to make room. They leave on their own when they have somewhere to be (or get bored). **Tap a portrait to talk to just that person** (tap again to talk to everyone). **… Listen** lets them talk among themselves; **📜 Log** shows the whole conversation. Each character's latest line stays on screen. |
+| **Shops** | The bakery, gym, bookstore/lab, general store, club, town hall, clinic and barbershop can be entered during opening hours — staff work behind their counters and customers drop in. Closed? Knock. |
 | **Give things** | 🎁 in the chat bar, or just write it: `*hands Lily a wildflower*`. |
 | **Invite** | 🏠 in the chat bar: invite whoever you're talking to over to your house, or to meet at the pond/park/shrine/etc. — now, in an hour, tonight or tomorrow. They answer in character. Villagers can also set up meetups on their own. |
 | **Your house** | Right by the west railway crossing. Inside: sleep on the futon, raid the fridge once a day, and plan parties on the low table. |

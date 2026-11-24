@@ -9,6 +9,13 @@
       'A river runs down from the Deep Woods into the duck pond (Lily Pad Cottage, Marina\'s lifeguard tower). West are the residential lanes (Clutch Lane with the Coop, the Honeycomb, the Burrow Gym, the workshop, the post office) and the player\'s house right by the west crossing. ' +
       'There is a leafy park with cherry trees, a sunflower field, flooded rice paddies where the Scarecrow stands, a cornfield and a lonely bus stop to the south. The Old Shrine with its red gate hides up in the woods; Kira\'s den is further in. The swamp (Maggie\'s Stilt House, the Gator Grove) starts past the last lamp post on the East Lane. ' +
       'Plenty of ordinary townsfolk (all animals — the player is the only human in town) go about their day. Nobody gets a quiet afternoon. Recurring gatherings: Sunday Potluck at the Coop, Saturday brunch at the Velvet Antler, Gym Day, Friday LAN Night at the Honeycomb, Thursday swamp cookout, the Bakery morning rush, Saturday picnic in the park and Wednesday lantern evening at the shrine.',
+    // short version used in AI prompts (shorter prompt = faster replies)
+    brief:
+      'MIREHOLLOW: an overgrown countryside town of tiled-roof houses, narrow lanes, utility poles, a little railway with level crossings and a station. ' +
+      'Market Square (Golden Loaf Bakery, the bookstore that is secretly Dr. Penelope\'s lab, crooked Town Hall, General Store, Velvet Antler club, barber, clinic, wishing well); ' +
+      'a river into the duck pond (Lily Pad Cottage, Marina\'s lifeguard tower); residential lanes (the Coop, the Honeycomb, Burrow Gym, post office, workshop, the player\'s house by the west crossing); ' +
+      'park, sunflower field, rice paddies (the Scarecrow), cornfield, bus stop; the Old Shrine and Kira\'s den in the Deep Woods; the swamp (Maggie\'s Stilt House, the Gator Grove) past the last lamp post. ' +
+      'Lots of animal townsfolk; the player is the only human. Weekly gatherings: Sunday Potluck at the Coop, Saturday brunch at the club, Gym Day, Friday LAN Night, Thursday swamp cookout, Saturday picnic in the park, Wednesday lantern evening at the shrine.',
     groups:
       'Loose groups: Nap rotation (Patty, Brenda, Kira). Mom Collective (Clucky, Sunny, Lily, plus Vix). Party Crew (Dionne, Bunny, Marina, Chuckles). Lab Rats (Penelope plus anyone she talks into a sample). Sky/Size Club (Nimbus, Zahra, the Darkborn, Solaris — they duck under doorways and accidentally wreck roofs). The Unholy Trinity (Gertie unaware, Scarecrow unbothered, Mayor trying to escape).',
     drama:

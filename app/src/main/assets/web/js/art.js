@@ -90,8 +90,11 @@
     tatami: ['#c9c48a', '#bdb87c', '#d6d29a', '#8e8a58'],
     void: ['#1c1714', '#1c1714', '#1c1714', '#1c1714'],
     wall: ['#efe2c8', '#e4d6ba', '#f6ecd8', '#9a8466'],
+    tilef: ['#efe8d8', '#e6ddca', '#f8f2e6', '#c8bca4'],
+    rubber: ['#5a5e62', '#53575b', '#646a6e', '#3a3e42'],
+    carpet: ['#3a2450', '#341f48', '#46305e', '#24143a'],
   };
-  const gName = ['grass', 'woods', 'path', 'plaza', 'sand', 'water', 'swamp', 'mud', 'field', 'board', 'deep', 'road', 'rail', 'paddy', 'floor', 'tatami', 'void', 'stone', 'road', 'wall'];
+  const gName = ['grass', 'woods', 'path', 'plaza', 'sand', 'water', 'swamp', 'mud', 'field', 'board', 'deep', 'road', 'rail', 'paddy', 'floor', 'tatami', 'void', 'stone', 'road', 'wall', 'tilef', 'rubber', 'carpet'];
   const isWet = (g) => g === 5 || g === 10;
   const isGreen = (g) => g === 0 || g === 1;
   const isPaved = (g) => g === 11 || g === 18;
@@ -206,14 +209,25 @@
       rr(x, ox + 0.3, oy + 0.3, T - 0.6, T - 0.6, 0.5, P[0], P[3], 0.4);
       for (let k = 1; k < 8; k++) line(x, [[ox + 0.5, oy + k * 2], [ox + T - 0.5, oy + k * 2]], P[1], 0.25, 0.6);
       rr(x, ox + 0.3, oy + 0.3, T - 0.6, 1.2, 0, '#5a7a4a');
+    } else if (t === g.TILEF) {
+      for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) rr(x, ox + i * 8 + 0.3, oy + j * 8 + 0.3, 7.4, 7.4, 0.8, (i + j + tx + ty) % 2 ? P[0] : P[2], P[3], 0.3);
+    } else if (t === g.RUBBER) {
+      for (let i = 0; i < 8; i++) ell(x, ox + MH.hash2(tx * 3 + i, ty, 4) * 16, oy + MH.hash2(tx, ty * 3 + i, 5) * 16, 0.35, 0.35, i % 2 ? '#7a7e82' : '#44484c');
+      line(x, [[ox, oy + 0.3], [ox + T, oy + 0.3]], P[3], 0.4, 0.6);
+    } else if (t === g.CARPET) {
+      if ((tx + ty) % 2 === 0) { x.globalAlpha = 0.35; poly(x, [[ox + 8, oy + 2], [ox + 14, oy + 8], [ox + 8, oy + 14], [ox + 2, oy + 8]], '#6a3a8a'); x.globalAlpha = 1; }
+      ell(x, ox + 8, oy + 8, 0.7, 0.7, '#a86ad0');
     } else if (t === g.WALL) {
-      const top = ty === MH.world.interior.y0;
-      if (ty <= MH.world.interior.y0 + 1 && tx > MH.world.interior.x0 && tx < MH.world.interior.x1) {
-        x.fillStyle = vgrad(x, oy, oy + T, top ? '#f2e6cc' : '#eadcc0', top ? '#eadcc0' : '#d9c8a6');
+      const R = MH.world.roomAt(tx, ty);
+      const top = R && ty === R.y0;
+      if (R && ty <= R.y0 + 1 && tx > R.x0 && tx < R.x1) {
+        const wc = R.wall || '#efe2c8';
+        x.fillStyle = vgrad(x, oy, oy + T, top ? shade(wc, 1.03) : shade(wc, 0.97), top ? shade(wc, 0.97) : shade(wc, 0.88));
         x.fillRect(ox, oy, T, T);
-        if (!top) { rr(x, ox, oy + 8, T, 8, 0, '#9a6a3e'); line(x, [[ox, oy + 8], [ox + T, oy + 8]], '#6a4426', 0.8); }
-        if (top && (tx === 157 || tx === 164)) { rr(x, ox + 1, oy + 3, 14, 11, 1, '#9fd4ee', '#6a4a2e', 1); line(x, [[ox + 8, oy + 3], [ox + 8, oy + 14]], '#6a4a2e', 0.8); x.globalAlpha = 0.5; line(x, [[ox + 3, oy + 12], [ox + 7, oy + 5]], '#ffffff', 1); x.globalAlpha = 1; }
-      } else { x.fillStyle = '#6a4a2e'; x.fillRect(ox, oy, T, T); }
+        if (!top) { const trim = R.id === 'club' ? '#1e1028' : R.id === 'gym' ? '#5a7a5a' : '#9a6a3e'; rr(x, ox, oy + 8, T, 8, 0, trim); line(x, [[ox, oy + 8], [ox + T, oy + 8]], shade(trim, 0.7), 0.8); if (R.id === 'club') line(x, [[ox, oy + 9], [ox + T, oy + 9]], '#ff6ac8', 0.6); }
+        if (top && (tx - R.x0) % 5 === 3 && R.id !== 'club') { rr(x, ox + 1, oy + 3, 14, 11, 1, '#9fd4ee', '#6a4a2e', 1); line(x, [[ox + 8, oy + 3], [ox + 8, oy + 14]], '#6a4a2e', 0.8); x.globalAlpha = 0.5; line(x, [[ox + 3, oy + 12], [ox + 7, oy + 5]], '#ffffff', 1); x.globalAlpha = 1; }
+        if (top && R.id === 'club' && (tx - R.x0) % 3 === 1) { ell(x, ox + 8, oy + 8, 2.5, 2.5, ['#ff6ac8', '#6af0ff', '#fff06a'][tx % 3]); }
+      } else { x.fillStyle = '#5a3e28'; x.fillRect(ox, oy, T, T); }
     } else if (t === g.VOID) {
       x.fillStyle = '#16120f'; x.fillRect(ox, oy, T, T);
     }
@@ -671,8 +685,41 @@
       plant: [18, 34, 9, 31, (x) => { softShadow(x, 9, 31, 7, 2, 0.3); rr(x, 4, 22, 10, 9, 2, '#c87a4a', ink('#c87a4a'), 0.6); canopy(x, 9, 14, 8, TREE_PALS[1], 160, 0.5); }],
       rug: [40, 26, 12, 14, (x) => { rr(x, 1, 1, 38, 24, 6, '#c8604a', ink('#c8604a'), 0.6); rr(x, 4, 4, 32, 18, 4, null, '#f4c84a', 0.8); ell(x, 20, 13, 6, 4, '#e8a04a'); }],
     };
-    const d = defs[type]; if (!d) return null;
-    return sprite('furn_' + type, d[0], d[1], d[2], d[3], d[4]);
+    const W3 = (n) => n * 16 + 8; // wide pieces: anchor on the left tile's centre
+    const more = {
+      counter: [W3(5), 30, 12, 22, (x) => { softShadow(x, 44, 22, 40, 3, 0.3); rr(x, 2, 6, 80, 16, 2, '#c08a56', ink('#c08a56'), 0.8); rr(x, 2, 4, 80, 4, 1.5, '#e8d2a8', ink('#c08a56'), 0.6); for (let i = 0; i < 6; i++) rr(x, 6 + i * 13, 10, 10, 9, 1, '#a8744a', '#7a5030', 0.4); rr(x, 64, 0, 10, 5, 1.2, '#4a4a52', '#2a2a30', 0.4); }],
+      displaycase: [W3(2), 30, 12, 22, (x) => { softShadow(x, 20, 22, 18, 3, 0.3); rr(x, 2, 6, 36, 16, 2, '#d8d0c0', ink('#d8d0c0'), 0.8); rr(x, 4, 7, 32, 9, 1.5, 'rgba(200,235,250,0.75)', '#8aa0aa', 0.5); [[8, '#d8963a'], [14, '#f4c0d0'], [20, '#8a5a3a'], [26, '#f4d06a'], [32, '#e8a84a']].forEach(([a, c]) => { ell(x, a, 13, 2.2, 1.6, c, ink(c), 0.3); }); x.globalAlpha = 0.5; line(x, [[6, 15], [12, 8]], '#ffffff', 1); x.globalAlpha = 1; }],
+      oven: [20, 30, 10, 26, (x) => { softShadow(x, 10, 26, 9, 2, 0.3); rr(x, 1, 2, 18, 24, 2, '#9a9ea4', ink('#9a9ea4'), 0.8); rr(x, 3, 9, 14, 11, 1.5, '#2a2024', '#1a1014', 0.4); ell(x, 10, 15, 5, 3, '#e86a2a'); ell(x, 10, 15, 3, 1.6, '#ffc84a'); [5, 10, 15].forEach((a) => ell(x, a, 5, 1, 1, '#3a3a40')); }],
+      breadshelf: [20, 42, 10, 38, (x) => { softShadow(x, 10, 38, 9, 2, 0.3); rr(x, 1, 2, 18, 36, 1.5, '#a87a4a', ink('#a87a4a'), 0.8); for (let r = 0; r < 4; r++) { line(x, [[2, 10 + r * 8], [18, 10 + r * 8]], '#6a4a2a', 0.8); for (let k = 0; k < 3; k++) ell(x, 5 + k * 5, 7.5 + r * 8, 2.2, 1.6, ['#d8963a', '#c8803a', '#e8b060'][(k + r) % 3], '#7a4a1a', 0.3); } }],
+      cafetable: [20, 22, 10, 18, (x) => { softShadow(x, 10, 18, 8, 2, 0.3); rr(x, 9, 9, 2, 9, 0.6, '#5a4a40'); ell(x, 10, 8, 8, 4, '#f4eee2', ink('#d8ccb8'), 0.7); ell(x, 8, 7, 1.6, 1, '#c8a070'); ell(x, 12.5, 7.5, 1.4, 1.2, '#f8f4ec', '#9a8a70', 0.3); }],
+      chair: [16, 14, 8, 11, (x) => { rr(x, 3, 3, 10, 8, 2, '#c8784a', ink('#c8784a'), 0.6); rr(x, 4, 1, 8, 3, 1, '#a85a3a'); }],
+      weightrack: [W3(3), 30, 12, 24, (x) => { softShadow(x, 28, 24, 26, 3, 0.3); rr(x, 2, 8, 52, 3, 1, '#4a4e54', ink('#4a4e54'), 0.6); rr(x, 2, 18, 52, 3, 1, '#4a4e54', ink('#4a4e54'), 0.6); rr(x, 3, 6, 2.5, 18, 0.8, '#3a3e44'); rr(x, 50, 6, 2.5, 18, 0.8, '#3a3e44'); for (let i = 0; i < 6; i++) { ell(x, 8 + i * 8, 7, 2.6, 3.4, ['#2a2a30', '#c83a3a', '#2a2a30', '#3a6ac8', '#2a2a30', '#f4c84a'][i], '#1a1a1e', 0.4); ell(x, 8 + i * 8, 17, 2.2, 2.8, '#2a2a30', '#1a1a1e', 0.4); } }],
+      treadmill: [20, 30, 10, 24, (x) => { softShadow(x, 10, 24, 9, 2, 0.3); rr(x, 2, 12, 16, 12, 2, '#3a3e44', ink('#3a3e44'), 0.6); rr(x, 4, 13, 12, 9, 1, '#22262a'); rr(x, 3, 2, 2, 12, 0.6, '#8a8e94'); rr(x, 15, 2, 2, 12, 0.6, '#8a8e94'); rr(x, 3, 1, 14, 4, 1.2, '#5a5e64', ink('#5a5e64'), 0.5); rr(x, 7, 2, 6, 2, 0.5, '#6af07a'); }],
+      punchbag: [16, 40, 8, 36, (x) => { softShadow(x, 8, 36, 6, 2, 0.3); line(x, [[8, 0], [8, 8]], '#5a5a5a', 0.8); rr(x, 3, 8, 10, 24, 4, '#c83a3a', ink('#c83a3a'), 0.8); rr(x, 3, 12, 10, 2, 0, '#8a2020'); rr(x, 3, 26, 10, 2, 0, '#8a2020'); x.globalAlpha = 0.35; rr(x, 4.5, 10, 2, 20, 1, '#ffffff'); x.globalAlpha = 1; }],
+      gymbench: [W3(2), 20, 12, 15, (x) => { softShadow(x, 20, 15, 17, 2, 0.3); rr(x, 6, 12, 2, 4, 0.5, '#4a4a4a'); rr(x, 30, 12, 2, 4, 0.5, '#4a4a4a'); rr(x, 2, 6, 34, 6, 2, '#2a3a5a', ink('#2a3a5a'), 0.7); rr(x, 10, 0, 18, 2, 1, '#8a8e94'); ell(x, 9, 1, 2, 3, '#2a2a30'); ell(x, 29, 1, 2, 3, '#2a2a30'); }],
+      mat: [W3(3), 18, 12, 13, (x) => { rr(x, 2, 2, 52, 12, 2, '#3a8a6a', ink('#3a8a6a'), 0.6); line(x, [[19, 2], [19, 14]], '#2a6a4a', 0.5); line(x, [[37, 2], [37, 14]], '#2a6a4a', 0.5); }],
+      poster: [16, 16, 8, 12, (x) => { rr(x, 2, 1, 12, 13, 0.6, '#f8f0dc', '#8a7a60', 0.5); x.fillStyle = '#c83a3a'; x.font = 'bold 3px sans-serif'; x.textAlign = 'center'; x.fillText('LEG', 8, 6); x.fillText('DAY', 8, 10); }],
+      labtable: [W3(3), 34, 12, 26, (x) => { softShadow(x, 28, 26, 26, 3, 0.3); rr(x, 2, 12, 52, 14, 1.5, '#e8ecee', ink('#c8ccd0'), 0.8); rr(x, 2, 10, 52, 3, 1, '#4a5258'); [[8, '#8affc8'], [14, '#ff6ac8'], [22, '#6ac0ff'], [30, '#f4e04a'], [40, '#8affc8']].forEach(([a, c], i) => { rr(x, a - 1.5, 1 + (i % 2) * 2, 3, 9 - (i % 2) * 2, 1, 'rgba(240,250,255,0.6)', '#7a8a90', 0.4); rr(x, a - 1.2, 5 + (i % 2), 2.4, 4.6 - (i % 2), 0.8, c); }); ell(x, 48, 7, 3, 2, '#5a4a7a', '#2a1a3a', 0.4); }],
+      hole: [36, 22, 8, 14, (x) => { ell(x, 10, 10, 9, 5.5, '#0c0816', '#3a2a5a', 1); for (let i = 0; i < 3; i++) { x.beginPath(); x.ellipse(10, 10, 7 - i * 2, 4 - i * 1.2, i, 0.3, 4); x.strokeStyle = ['#8a5ae8', '#5ac8e8', '#e85ac8'][i]; x.lineWidth = 0.6; x.stroke(); } x.fillStyle = '#c8b8f0'; x.font = '2.6px sans-serif'; x.fillText('do not', 18, 4); x.fillText('step', 18, 7); }],
+      desk: [W3(2), 28, 12, 20, (x) => { softShadow(x, 20, 20, 17, 3, 0.3); rr(x, 2, 6, 36, 14, 1.5, '#8a5a34', ink('#8a5a34'), 0.8); rr(x, 2, 4, 36, 3, 1, '#a8744a'); rr(x, 6, 0, 8, 5, 0.5, '#f8f4e8', '#9a8a70', 0.4); rr(x, 16, 1, 6, 4, 0.4, '#f8f0c8', '#9a8a70', 0.4); ell(x, 30, 2, 2, 2, '#f4f0ea', '#9a8a70', 0.4); }],
+      shopshelf: [W3(3), 32, 12, 24, (x) => { softShadow(x, 28, 24, 26, 3, 0.3); rr(x, 2, 0, 52, 24, 1.5, '#d8d0c0', ink('#d8d0c0'), 0.8); for (let r = 0; r < 3; r++) { line(x, [[3, 8 + r * 7.5], [53, 8 + r * 7.5]], '#9a9080', 0.7); for (let k = 0; k < 10; k++) rr(x, 4 + k * 5, 2.5 + r * 7.5, 3.6, 5, 0.6, ['#e85a4a', '#4a8ad8', '#f4c84a', '#5ab060', '#e07ab0', '#f0f0e8'][(k * 3 + r) % 6]); } }],
+      cashcounter: [W3(4), 30, 12, 22, (x) => { softShadow(x, 36, 22, 34, 3, 0.3); rr(x, 2, 6, 68, 16, 2, '#3a7a4a', ink('#3a7a4a'), 0.8); rr(x, 2, 4, 68, 4, 1.5, '#5a9a6a', ink('#3a7a4a'), 0.5); rr(x, 50, -2, 12, 8, 1.2, '#4a4a52', '#2a2a30', 0.5); rr(x, 52, 0, 8, 3, 0.5, '#6af07a'); rr(x, 10, 0, 8, 5, 1, '#1a1a1e'); }],
+      drinkfridge: [20, 40, 10, 36, (x) => { softShadow(x, 10, 36, 9, 2, 0.3); rr(x, 1, 2, 18, 34, 2, '#e8ecee', ink('#d8dce0'), 0.8); rr(x, 3, 4, 14, 28, 1, 'rgba(200,235,250,0.8)', '#8aa0aa', 0.5); for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) rr(x, 4 + k * 3.2, 6 + r * 6.6, 2.4, 5, 0.8, ['#e85a4a', '#4a8ad8', '#f4c84a', '#5ab060'][(k + r) % 4]); }],
+      bar: [W3(4), 34, 12, 24, (x) => { softShadow(x, 36, 24, 34, 3, 0.3); rr(x, 2, 8, 68, 16, 2, '#2a1a30', ink('#5a2a6a'), 0.8); rr(x, 2, 6, 68, 4, 1.5, '#5a3a6a', '#ff6ac8', 0.6); [[10, '#ff6ac8'], [16, '#6af0ff'], [40, '#fff06a'], [58, '#a0ff6a']].forEach(([a, c]) => { rr(x, a - 1, 0, 2.4, 6, 0.8, c, ink(c), 0.3); }); line(x, [[2, 22], [70, 22]], '#ff6ac8', 0.6); }],
+      stool: [16, 14, 8, 11, (x) => { rr(x, 7, 6, 2, 6, 0.5, '#5a5a62'); ell(x, 8, 5, 4.4, 2.4, '#c83a8a', ink('#c83a8a'), 0.6); }],
+      djbooth: [W3(2), 34, 12, 24, (x) => { softShadow(x, 20, 24, 17, 3, 0.3); rr(x, 2, 10, 36, 14, 2, '#1a1a22', ink('#3a3a48'), 0.8); ell(x, 11, 8, 6, 3, '#2a2a30', '#6af0ff', 0.6); ell(x, 29, 8, 6, 3, '#2a2a30', '#ff6ac8', 0.6); ell(x, 11, 8, 1, 0.6, '#6af0ff'); ell(x, 29, 8, 1, 0.6, '#ff6ac8'); for (let i = 0; i < 5; i++) rr(x, 16 + i * 2, 13, 1.2, 5 - (i % 3), 0.3, ['#6af07a', '#f4c84a', '#e85a4a'][i % 3]); }],
+      dancefloor: [W3(4) + 8, 58, 12, 50, (x) => { for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) rr(x, 2 + i * 16, 2 + j * 16, 15, 15, 1.5, ['#ff6ac8', '#6af0ff', '#fff06a', '#a0ff6a', '#b08aff'][(i + j * 2) % 5], 'rgba(255,255,255,0.4)', 0.5); x.globalAlpha = 0.25; rr(x, 2, 2, 63, 47, 2, '#ffffff'); x.globalAlpha = 1; }],
+      speaker: [18, 34, 9, 30, (x) => { softShadow(x, 9, 30, 8, 2, 0.3); rr(x, 2, 2, 14, 28, 2, '#1e1e24', ink('#3a3a44'), 0.8); ell(x, 9, 10, 4.4, 4.4, '#3a3a44', '#6a6a78', 0.5); ell(x, 9, 22, 5.4, 5.4, '#3a3a44', '#6a6a78', 0.5); ell(x, 9, 22, 2, 2, '#ff6ac8'); }],
+      hangchair: [24, 40, 12, 36, (x) => { softShadow(x, 12, 36, 9, 2, 0.3); line(x, [[12, 0], [12, 10]], '#c8a870', 0.8); x.beginPath(); x.ellipse(12, 22, 10, 12, 0, 0, Math.PI * 2); x.fillStyle = 'rgba(232,200,150,0.9)'; x.fill(); x.strokeStyle = '#9a7a4a'; x.lineWidth = 0.9; x.stroke(); ell(x, 12, 26, 7, 5, '#ff6ac8', ink('#ff6ac8'), 0.5); }],
+      flag: [16, 40, 8, 36, (x) => { softShadow(x, 8, 36, 4, 1.5, 0.3); rr(x, 7, 2, 1.6, 34, 0.5, '#c8a84a'); poly(x, [[8.6, 3], [15.5, 4], [15, 13], [8.6, 12]], '#3a6ab0', ink('#3a6ab0'), 0.5); ell(x, 12, 8, 1.8, 1.8, '#f4c84a'); }],
+      chairrow: [W3(3), 22, 12, 16, (x) => { for (let i = 0; i < 3; i++) { rr(x, 3 + i * 16, 6, 10, 9, 1.5, '#7a5a8a', ink('#7a5a8a'), 0.6); rr(x, 3 + i * 16, 2, 10, 4, 1, '#5a3a6a', ink('#5a3a6a'), 0.5); } }],
+      clinicbed: [20, 40, 10, 34, (x) => { softShadow(x, 10, 34, 9, 2, 0.3); rr(x, 1, 2, 18, 32, 2, '#f4f6f6', ink('#c8ccd0'), 0.8); rr(x, 2, 12, 16, 21, 1.5, '#9ad0e8', ink('#9ad0e8'), 0.5); rr(x, 4, 3, 12, 7, 2, '#ffffff', '#c8ccd0', 0.4); }],
+      cabinet: [20, 38, 10, 34, (x) => { softShadow(x, 10, 34, 9, 2, 0.3); rr(x, 1, 2, 18, 32, 1.5, '#f2f2ee', ink('#d8d8d4'), 0.8); rr(x, 3, 4, 14, 12, 1, 'rgba(200,235,250,0.8)', '#8aa0aa', 0.5); [[6, '#e85a4a'], [10, '#5ab060'], [14, '#f4c84a']].forEach(([a, c]) => rr(x, a - 1, 9, 2.4, 6, 0.8, c)); rr(x, 7, 6, 6, 1.6, 0.5, '#e83a3a'); line(x, [[3, 24], [17, 24]], '#c8c8c4', 0.5); }],
+      barberchair: [20, 32, 10, 26, (x) => { softShadow(x, 10, 26, 8, 2, 0.3); rr(x, 8.5, 18, 3, 8, 0.6, '#8a8e94'); ell(x, 10, 26, 6, 1.6, '#6a6e74'); rr(x, 3, 8, 14, 11, 2.5, '#c83a3a', ink('#c83a3a'), 0.7); rr(x, 4, 1, 12, 9, 2.5, '#d84a4a', ink('#c83a3a'), 0.7); }],
+      mirror: [16, 16, 8, 12, (x) => { ell(x, 8, 7, 6, 6.5, 'rgba(210,235,250,0.95)', '#c8a84a', 1); x.globalAlpha = 0.5; line(x, [[5, 10], [9, 3]], '#ffffff', 1); x.globalAlpha = 1; }],
+    };
+    const d = defs[type] || more[type]; if (!d) return null;
+    return sprite('furn_' + type + (p.v != null && type === 'shelf' ? p.v % 2 : ''), d[0], d[1], d[2], d[3], d[4]);
   }
 
   art.prop = function (p) {

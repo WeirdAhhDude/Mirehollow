@@ -77,7 +77,11 @@
     m.querySelector('.body').appendChild(bodyEl);
     m.querySelector('.x').onclick = () => (opts.onClose ? opts.onClose() : ui.closeModal());
     if (opts.noClose) m.querySelector('.x').remove();
-    m.addEventListener('pointerdown', (e) => { if (e.target === m && !opts.noClose) ui.closeModal(); });
+    // tapping the dark backdrop closes simple pop-ups, but never forms (Settings, party planner…) —
+    // a stray tap or scroll at the edge used to make those vanish.
+    m.addEventListener('pointerdown', (e) => { if (e.target === m && !opts.noClose && !opts.keep && !m.querySelector('input,select,textarea')) ui.closeModal(); });
+    // keep focused inputs visible above the soft keyboard
+    m.addEventListener('focusin', (e) => { if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) setTimeout(() => { try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (err) {} }, 350); });
     $('#modals').appendChild(m);
     ui.modalOpen = true;
     return m;
@@ -284,7 +288,7 @@
       ui.closeModal();
       ui.toast('💌 Invitations sent!', 3);
     };
-    ui.modal('🎉 Plan a party', body);
+    ui.modal('🎉 Plan a party', body, { keep: true });
   };
 
   ui.openProfile = function (id) {
@@ -415,7 +419,8 @@
       <p><b>Move</b>: drag anywhere on the left half of the screen (or WASD / arrows). Push further to run.</p>
       <p><b>Interact</b>: the round button on the right (or E / Space) — talk, knock on doors, pick flowers, read the board, toss a wish in the well, rest at home.</p>
       <p><b>Chat like a role-play</b>: type anything. Put actions in asterisks: <i>*offers a handshake*</i>, <i>*hides behind Vix*</i>. Villagers answer with their own actions too.</p>
-      <p><b>Group chats</b>: villagers nearby can overhear and wander in. Tap <b>…</b> to stay quiet and let them talk among themselves.</p>
+      <p><b>Group chats</b>: villagers nearby can overhear and wander in (and leave when they have somewhere to be). Tap a portrait to talk to just that person; tap it again to talk to everyone. <b>… Listen</b> lets them talk among themselves. <b>📜 Log</b> shows everything that was said.</p>
+      <p><b>Shops</b>: the bakery, gym, bookstore, general store, club, town hall, clinic and barbershop can be entered during opening hours.</p>
       <p><b>Bonds & reputation</b>: everyone remembers what you do. Witnesses gossip. Some villagers will like you just for your reputation, others will hate you for the same thing.</p>
       <p><b>Your house</b>: it's right by the west railway crossing. Go inside to sleep, raid the fridge, and plan parties on the low table. Invite people over (or to meet somewhere) with the 🏠 button while chatting.</p>
       <p><b>Events</b>: towns gatherings happen every week (see Journal → Plans). Just show up to join.</p>
@@ -434,8 +439,13 @@
       <div class="row"><input id="sModel" value="${MH.esc(S.model)}" placeholder="provider/model-name"><button class="btn small ghost" id="sBrowse">Browse</button></div>
       <div id="modelList" class="modellist hidden"><input id="mSearch" placeholder="Search models…"><div class="ml"></div></div>
       <div class="row"><button class="btn small" id="sTest">Test connection</button><span id="sTestOut" class="muted small"></span></div>
-      <label class="toggle"><input type="checkbox" id="sMature" ${S.mature ? 'checked' : ''}> Mature mode (16+)</label>
-      <p class="muted small">Off: cozy PG-13. On: strong language, darker themes and heavier drama are allowed, and romance can go further — anything sexual fades to black instead of being refused, so scenes don't break immersion. Nothing explicit either way.</p>
+      <label>Model thinking</label>
+      <select id="sThink"><option value="off">Off — fastest (recommended)</option><option value="low">Low</option><option value="default">Model default (slowest)</option></select>
+      <label class="toggle"><input type="checkbox" id="sFast" ${S.fastRouting !== false ? 'checked' : ''}> Prefer the fastest provider</label>
+      <label>Content rules</label>
+      <select id="sContent"><option value="cozy">Cozy (PG-13)</option><option value="mature">Mature (16+)</option><option value="custom">Custom — write your own</option></select>
+      <p class="muted small" id="sContentHelp"></p>
+      <textarea id="sCustom" class="rules hidden" rows="6" placeholder="Write the content rules the villagers should follow…">${MH.esc(S.customRules || '')}</textarea>
       <label>Villager small talk (uses AI calls when you can see them)</label>
       <select id="sAmb"><option value="off">Off</option><option value="low">Low</option><option value="normal">Normal</option><option value="high">Lively</option></select>
       <label>Creativity <small id="sTempV">${S.temperature}</small></label>
@@ -449,6 +459,18 @@
       <p class="muted small">AI calls this session: <span id="sCalls">${MH.ai.stats.calls}</span> · tokens: ${MH.ai.stats.tokens}</p>
       <div class="row"><button class="btn" id="sDone">Save settings</button></div></div>`);
     body.querySelector('#sAmb').value = S.ambient;
+    body.querySelector('#sThink').value = S.thinking || 'off';
+    const cSel = body.querySelector('#sContent'), cTa = body.querySelector('#sCustom'), cHelp = body.querySelector('#sContentHelp');
+    cSel.value = MH.ai.contentMode();
+    const showContent = () => {
+      const m = cSel.value;
+      cTa.classList.toggle('hidden', m !== 'custom');
+      if (m === 'custom' && !cTa.value.trim()) cTa.value = MH.ai.CONTENT.mature.replace(/^- CONTENT \([^)]*\): /, '');
+      cHelp.textContent = m === 'cozy' ? 'Cozy-chaotic PG-13: flirting, kisses, mild swearing. Explicit stuff is steered away inside the story.'
+        : m === 'mature' ? 'Strong language, darker themes, heavier drama; romance can go further and anything sexual fades to black instead of being refused.'
+        : 'Your text replaces the content rules sent to the AI (it starts as a copy of Mature — edit freely to test). The AI provider\'s own policies still apply, and the "never anything sexual with minors" rule is always added.';
+    };
+    cSel.onchange = showContent; showContent();
     body.querySelector('#sSpeed').value = S.textSpeed;
     body.querySelector('#sTime').value = String(S.timeScale);
     const key = body.querySelector('#sKey');
@@ -461,7 +483,10 @@
       S.textSpeed = body.querySelector('#sSpeed').value;
       S.timeScale = parseFloat(body.querySelector('#sTime').value) || 1;
       S.temperature = parseFloat(body.querySelector('#sTemp').value) || 0.9;
-      S.mature = body.querySelector('#sMature').checked;
+      S.contentMode = cSel.value; S.mature = cSel.value === 'mature';
+      S.customRules = cTa.value;
+      S.thinking = body.querySelector('#sThink').value;
+      S.fastRouting = body.querySelector('#sFast').checked;
       MH.saveSettings();
     };
     body.querySelector('#sTest').onclick = async () => {
@@ -471,7 +496,7 @@
       out.textContent = 'Testing…';
       const r = await MH.ai.request([{ role: 'user', content: 'Reply with JSON {"ok":true,"line":"<a one-sentence cozy greeting from a fox baker>"}' }], { maxTokens: 120 });
       if (r.error) out.textContent = '❌ ' + r.error;
-      else { const j = MH.ai.parseJSON(r.text); out.textContent = '✅ ' + (j && j.line ? j.line : r.text.slice(0, 80)); }
+      else { const j = MH.ai.parseJSON(r.text); out.textContent = '✅ ' + (j && j.line ? j.line : r.text.slice(0, 80)) + ` (${(MH.ai.stats.lastMs / 1000).toFixed(1)}s)`; }
     };
     body.querySelector('#sBrowse').onclick = async () => {
       const box = body.querySelector('#modelList');
@@ -510,7 +535,7 @@
       MH.store.del('save'); location.reload();
     };
     body.querySelector('#sDone').onclick = () => { apply(); ui.toast('Settings saved' + (MH.ai.hasKey() ? ' — AI on' : ' — offline mode')); fromTitle ? ui.showTitle() : ui.closeModal(); ui.updateHud(); };
-    ui.modal('Settings & AI', body, { onClose: () => { apply(); fromTitle ? ui.showTitle() : ui.closeModal(); } });
+    ui.modal('Settings & AI', body, { keep: true, onClose: () => { apply(); fromTitle ? ui.showTitle() : ui.closeModal(); } });
   };
 
   // ------------------------------------------------------------ title & creator

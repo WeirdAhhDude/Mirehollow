@@ -136,6 +136,7 @@
       e.planDelay -= dt;
       if (e.planDelay > 0) { idleWander(e, dt); return; }
       e.planDelay = null;
+      if (e.inRoom) { const R = MH.world.rooms[e.inRoom]; e.inRoom = null; e.staffSpot = null; const f = MH.world.doorFront(R.building); e.setTile(f.tx, f.ty); }
       const wasGuest = e.guest;
       e.plan = p; e.planKey = key; e.activity = activityText(e, p); e.asleep = false;
       if (wasGuest && !(p.mode === 'plan' && p.loc === 'home')) { e.guest = false; unhideAt(e, 'home'); }
@@ -174,8 +175,14 @@
     e.idleT -= dt;
     if (e.idleT > 0) return;
     e.idleT = MH.rand(5, 14);
+    if (e.staffSpot) { // shop staff potter about behind their counter
+      const R = MH.world.rooms[e.inRoom];
+      if (R && Math.random() < 0.5) { const sp = MH.pick(R.staff); if (!MH.npcs.some((o) => o !== e && o.inRoom === e.inRoom && o.tile().tx === sp[0] && o.tile().ty === sp[1])) { MH.npcGoTo(e, sp[0], sp[1]); e.staffSpot = sp; } }
+      else e.dir = MH.pick(['down', 'down', 'left', 'right']);
+      return;
+    }
     if (e.id === 'patty' && Math.random() < 0.25) { e.asleep = true; return; }
-    const loc = e.guest ? 'myroom' : e.plan ? e.plan.loc : e.ch.home;
+    const loc = e.inRoom ? 'in_' + e.inRoom : e.guest ? 'myroom' : e.plan ? e.plan.loc : e.ch.home;
     const s = MH.world.randomSpot(loc === 'home' ? 'myroom' : loc);
     if (Math.hypot(s.tx * T - e.x, s.ty * T - e.y) / T < 10) MH.npcGoTo(e, s.tx, s.ty);
     else if (Math.random() < 0.3) e.dir = MH.pick(['down', 'left', 'right', 'up']);
@@ -244,7 +251,7 @@
   }
 
   sim.considerApproach = function () {
-    if (MH.chat.active || sim.approaching || MH.ui.modalOpen || MH.isInside(MH.player)) return;
+    if (MH.chat.active || sim.approaching || MH.ui.modalOpen || MH.roomOf(MH.player)) return;
     const now = MH.absMinutes();
     if (now - (MH.state.lastApproach || -99999) < 300) return; // at most one every ~5 game hours
     const pl = MH.player;
@@ -298,7 +305,7 @@
     let { a, b } = pick;
     if (a.ch.mute || (a.folk && !b.folk)) [a, b] = [b, a];
     sim.pairCool[pick.k] = MH.absMinutes() + 300;
-    const visible = pick.near < 12 && !MH.chat.active && MH.isInside(a) === MH.isInside(pl);
+    const visible = pick.near < 12 && !MH.chat.active && MH.roomOf(a) === MH.roomOf(pl);
     const gm = MH.social.pickGossip(a.id, b.id) || null;
     a.busy = b.busy = 'smalltalk';
     a.path = b.path = null;
@@ -335,7 +342,9 @@
   sim.vibeNow = function (text) { if (text && text !== sim.lastVibe) { sim.lastVibe = text; MH.emit('vibe', text); } };
   function randomVibe() {
     const h = MH.hour(), w = MH.state.weather;
-    if (MH.isInside(MH.player)) return MH.pick(['The house creaks softly.', 'A train rumbles past outside; the windows hum.', 'Somewhere outside, cicadas.', 'The fridge hums contentedly.']);
+    const room = MH.roomOf(MH.player);
+    if (room === 'home') return MH.pick(['The house creaks softly.', 'A train rumbles past outside; the windows hum.', 'Somewhere outside, cicadas.', 'The fridge hums contentedly.']);
+    if (room) return MH.pick(({ bakery: ['The ovens tick as they heat.', 'A tray of cinnamon rolls comes out. Everyone pretends not to stare.'], gym: ['Somebody drops a weight. Box doesn\'t flinch.', 'The punching bag creaks on its chain.'], lab: ['Something in a vial goes "blorp".', 'The dimensional sink hums a low note.'], store: ['The drinks fridge hums.', 'A price tag judges you silently.'], club: ['The bass thumps through the floor.', 'The dance floor lights shift colour.'], townhall: ['Papers rustle in a draft.', 'A clock ticks, slightly wrong.'], clinic: ['It smells of mint and antiseptic.', 'Somewhere, a quiet "hoo".'], barber: ['Snip, snip. Snip.', 'Hair drifts across the floor.'] })[room] || ['It\'s cozy in here.']);
     const place = MH.world.placeAt(MH.player.x, MH.player.y).key;
     let pool;
     if (w === 'storm') pool = MH.VIBES.storm;
@@ -526,19 +535,27 @@
   function findTarget() {
     const pl = MH.player;
     if (MH.chat.active) return null;
+    const t = pl.tile();
+    // doors / furniture you're standing on (or right next to) win over people nearby
+    let door = null, dd = 9;
+    for (const it of MH.world.interactables) {
+      if (Math.abs(it.tx - t.tx) > 1 || Math.abs(it.ty - t.ty) > 1) continue;
+      const d = Math.hypot(it.tx * T + 8 - pl.x, it.ty * T + 13 - pl.y) / T;
+      if (d < dd) { dd = d; door = it; }
+    }
     let best = null, bd = 2.1;
     for (const e of MH.npcs) {
       if (e.hidden) continue;
       const d = MH.distTiles(e, pl) - (MH.art.chibiScale(e.ch) > 1 ? 0.8 : 0);
       if (d < bd) { bd = d; best = e; }
     }
-    if (best) return { kind: 'npc', e: best, label: (best.asleep ? 'Wake ' : 'Talk to ') + best.ch.name };
-    const t = pl.tile();
-    for (const it of MH.world.interactables) {
-      if (Math.abs(it.tx - t.tx) <= 1 && Math.abs(it.ty - t.ty) <= 1) {
-        const label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : 'Knock: ' + it.b.name) : it.label;
-        return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
-      }
+    const doorFirst = door && (dd < 0.75 || !best || dd < bd - 0.3);
+    if (best && !doorFirst) return { kind: 'npc', e: best, label: (best.asleep ? 'Wake ' : 'Talk to ') + best.ch.name };
+    if (door) {
+      const it = door;
+      let label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : 'Knock: ' + it.b.name) : it.label;
+      if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
+      return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
     }
     let pb = null, pd = 1.3;
     for (const p of MH.world.props) {
@@ -575,8 +592,13 @@
     else if (t.kind === 'board') MH.ui.openGrapevine();
     else if (t.kind === 'well') MH.ui.wellPrompt();
     else if (t.kind === 'door') sim.knock(t.it.b);
-    else if (t.kind === 'enter') sim.goInside();
-    else if (t.kind === 'exit') sim.goOutside();
+    else if (t.kind === 'enter') {
+      const R = MH.world.rooms[t.it.room];
+      if (R.id === 'home') sim.goInside();
+      else if (MH.world.isOpen(R)) { MH.enterRoom(R.id); setTimeout(() => sim.vibeNow(R.id === 'club' && MH.hour() < 21 ? 'The Velvet Antler is just warming up.' : 'You step ' + R.name.replace(/^inside /, 'into ') + '.'), 600); }
+      else sim.knock(t.it.b);
+    }
+    else if (t.kind === 'exit') { if (t.it.room === 'home') sim.goOutside(); else MH.exitRoom(t.it.room); }
     else if (t.kind === 'party') MH.ui.openPartyPlanner();
     else if (t.kind === 'fridge') sim.fridge();
   };
@@ -608,6 +630,42 @@
     MH.chat.start([e.id], 'opener', `${MH.state.player.name} knocked on the door of ${b.generic ? e.ch.name + '\'s house' : b.name} ${late ? 'in the middle of the night' : 'at ' + MH.clockStr()}, and ${e.ch.name} opened it${late ? ' (they were asleep)' : ''}. They react in character.`);
   };
 
+  // ------------------------------------------------------------ shops & public interiors
+  // When the player is inside a shop, whoever is hanging around that shop comes in too.
+  function roomTick() {
+    const R = MH.world.roomAt(Math.floor(MH.player.x / T), Math.floor((MH.player.y - 2) / T));
+    const id = R && R.id !== 'home' ? R.id : null;
+    if (sim.curRoom && sim.curRoom !== id) {
+      const left = MH.world.rooms[sim.curRoom];
+      MH.npcs.forEach((e) => { if (e.inRoom === left.id && !e.busy) { e.inRoom = null; e.staffSpot = null; const sp = MH.world.randomSpot(left.building); e.setTile(sp.tx, sp.ty); e.path = null; } });
+    }
+    sim.curRoom = id;
+    if (!id) return;
+    const b = R.building;
+    for (const e of MH.npcs) {
+      if (e.inRoom || e.hidden || e.busy || e.guest || !e.plan || sim.approaching === e) continue;
+      if (e.plan.loc !== b || (e.plan.mode !== 'out' && e.plan.mode !== 'nap')) continue;
+      if (e.state === 'travel' && e.path && e.path.length > 3) continue; // still on the way
+      const staff = e.ch.home === b;
+      let spot = null;
+      if (staff && R.staff.length) { const used = new Set(MH.npcs.filter((o) => o.inRoom === id && o.staffSpot).map((o) => o.staffSpot.join())); spot = R.staff.find((s2) => !used.has(s2.join())); }
+      if (!spot) { const r = MH.world.randomSpot('in_' + id); spot = [r.tx, r.ty]; }
+      e.setTile(spot[0], spot[1]); e.inRoom = id; e.staffSpot = staff ? spot : null; e.asleep = false; e.path = null; e.state = 'idle'; e.dir = 'down';
+    }
+  }
+
+  // Does this villager have somewhere else to be? (used so they can leave conversations on their own)
+  sim.mustGo = function (e) {
+    const p = sim.plan(e.id), here = MH.world.placeAt(e.x, e.y).key;
+    if (e.guest && p.mode === 'plan' && p.loc === 'home') return null;
+    if (p.mode === 'inside') return MH.hour() >= 20 || MH.hour() < 6 ? 'it\'s late and they want to get home to bed' : 'they need to get back to ' + (MH.world.locations[p.loc] ? MH.world.locations[p.loc].name : 'their place');
+    if (p.gathering && p.loc !== here) return 'they\'re expected at the ' + p.gathering;
+    if (p.mode === 'plan' && p.loc !== here && !(p.loc === 'home' && here === 'myroom')) return 'they promised to be at ' + (p.loc === 'home' ? 'the player\'s house' : MH.world.locations[p.loc].name) + ' about now';
+    const work = e.ch.schedule && e.ch.home && p.loc === e.ch.home && here !== p.loc && here !== 'in_' + p.loc && !e.ch.folk;
+    if (work) return 'they have to get back to ' + MH.world.locations[p.loc].name;
+    return null;
+  };
+
   // ------------------------------------------------------------ main update
   let slow = 0;
   sim.update = function (dt) {
@@ -617,6 +675,7 @@
     trainTick(dt);
     slow += dt;
     if (slow > 1) { slow = 0; gatheringTick(); partyTick(); }
+    roomTick();
     if (MH.ui.modalOpen) { sim.target = null; MH.emit('target', null); return; }
     sim.target = findTarget();
     MH.emit('target', sim.target);

@@ -51,15 +51,15 @@
   function updateCamera(dt, snap) {
     const p = MH.player;
     // indoors: zoom so the whole room fits the screen width
-    const I0 = MH.world.interior, insideNow = !MH.titleMode && MH.world.inInterior(Math.floor(p.x / T), Math.floor(p.y / T));
-    R.zoom = insideNow ? Math.min(R.baseZoom, canvas.width / ((I0.x1 - I0.x0 + 1) * T + 6)) : R.baseZoom;
+    const I0 = MH.titleMode ? null : MH.world.roomAt(Math.floor(p.x / T), Math.floor(p.y / T));
+    R.zoom = I0 ? Math.min(R.baseZoom, canvas.width / ((I0.x1 - I0.x0 + 1) * T + 6)) : R.baseZoom;
     const vw = R.viewW(), vh = R.viewH();
     let fx = R.cam.tx != null ? R.cam.tx : p.x, fy = R.cam.ty != null ? R.cam.ty : p.y - 12;
     let tx = fx - vw / 2, ty = fy - vh / 2;
     const ptx = Math.floor(p.x / T), pty = Math.floor(p.y / T);
-    const I = MH.world.interior;
+    const I = I0;
     let x0 = 0, y0 = 0, x1 = MH.world.TOWN_W * T, y1 = MH.world.H * T;
-    if (MH.world.inInterior(ptx, pty) && !MH.titleMode) { x0 = I.x0 * T - 8; y0 = I.y0 * T - 24; x1 = (I.x1 + 1) * T + 8; y1 = (I.y1 + 1) * T + 16; }
+    if (I) { x0 = I.x0 * T - 8; y0 = I.y0 * T - 24; x1 = (I.x1 + 1) * T + 8; y1 = (I.y1 + 1) * T + 16; }
     tx = x1 - x0 < vw ? (x0 + x1) / 2 - vw / 2 : MH.clamp(tx, x0, x1 - vw);
     ty = y1 - y0 < vh ? (y0 + y1) / 2 - vh / 2 : MH.clamp(ty, y0, y1 - vh);
     if (snap || Math.abs(tx - R.cam.x) > vw * 1.5 || Math.abs(ty - R.cam.y) > vh * 1.5) { R.cam.x = tx; R.cam.y = ty; }
@@ -158,6 +158,7 @@
   // ------------------------------------------------------------ train
   function drawTrain(tr) {
     const y = 36 * T + 16; // centre between rails
+    ctx.save(); ctx.beginPath(); ctx.rect(-400, 0, MH.world.TOWN_W * T + 400, MH.world.H * T); ctx.clip();
     const carW = 7 * T, carH = 26, gap = 3;
     for (let i = 0; i < tr.cars; i++) {
       const x0 = tr.x + (tr.dir > 0 ? -i : i) * (carW + gap) - carW / 2;
@@ -172,6 +173,7 @@
       if (i === 0) { ctx.fillStyle = '#ffd86a'; ctx.beginPath(); ctx.arc(tr.dir > 0 ? carW - 3 : 3, carH - 7, 1.8, 0, 7); ctx.fill(); }
       ctx.restore();
     }
+    ctx.restore();
   }
 
   // ------------------------------------------------------------ main draw
@@ -185,6 +187,9 @@
     ctx.setTransform(z, 0, 0, z, -cx * z, -cy * z);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
 
+    // indoors: only the current room is visible
+    const RM = MH.titleMode ? null : MH.world.roomAt(Math.floor(MH.player.x / T), Math.floor((MH.player.y - 2) / T));
+    if (RM) { ctx.save(); ctx.beginPath(); ctx.rect(RM.x0 * T, RM.y0 * T - 40, (RM.x1 - RM.x0 + 1) * T, (RM.y1 - RM.y0 + 1) * T + 40); ctx.clip(); }
     // ground chunks
     const CHW = MH.art.CHUNK * T;
     const c0x = Math.max(0, Math.floor(cx / CHW)), c1x = Math.floor((cx + vw) / CHW), c0y = Math.max(0, Math.floor(cy / CHW)), c1y = Math.floor((cy + vh) / CHW);
@@ -228,7 +233,7 @@
     }
     for (const e of MH.npcs) if (!e.hidden && e.x > cx - 60 && e.x < cx + vw + 60 && e.y > cy - 20 && e.y < cy + vh + 90) list.push({ y: e.y, e });
     if (!MH.titleMode) list.push({ y: MH.player.y, e: MH.player });
-    if (MH.train && MH.train.active) list.push({ y: 37 * T + 10, train: MH.train });
+    if (MH.train && MH.train.active && !RM) list.push({ y: 37 * T + 10, train: MH.train });
     list.sort((a, b) => a.y - b.y);
     for (const it of list) {
       if (it.p) { const s = MH.art.prop(it.p); ctx.drawImage(s.img, it.p.x + s.ox + (it.p.w === 2 ? 8 : 0), it.p.y + s.oy, s.w, s.h); }
@@ -237,6 +242,7 @@
       else drawEntity(it.e);
     }
 
+    if (RM) ctx.restore();
     // utility wires (high in the air, drawn above everything)
     ctx.strokeStyle = 'rgba(40,36,40,0.75)'; ctx.lineWidth = 0.55;
     ctx.beginPath();
@@ -278,6 +284,16 @@
 
     // cloud shadows drifting over the town (outdoors only)
     const inside = MH.world.inInterior(Math.floor(MH.player.x / T), Math.floor(MH.player.y / T)) && !MH.titleMode;
+    // club lights
+    if (inside && MH.roomOf(MH.player) === 'club') {
+      ctx.globalCompositeOperation = 'lighter';
+      ['rgba(255,90,200,0.22)', 'rgba(90,220,255,0.2)', 'rgba(255,240,90,0.16)'].forEach((c, i) => {
+        const lx = (177.5 + Math.sin(t * (0.9 + i * 0.4) + i * 2) * 5) * T, ly = (24 + Math.cos(t * (0.7 + i * 0.3) + i) * 3) * T;
+        const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, 70); g.addColorStop(0, c); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(lx - 70, ly - 70, 140, 140);
+      });
+      ctx.globalCompositeOperation = 'source-over';
+    }
     if (!inside) {
       ctx.fillStyle = 'rgba(20,40,30,0.07)';
       for (let i = 0; i < 5; i++) {

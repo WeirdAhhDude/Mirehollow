@@ -9,7 +9,7 @@
 
   // map bubbles fade after a while (short lines quicker); conversation bubbles stay until that character speaks again
   const holdFor = (text) => MH.clamp(1.4 + String(text).length * 0.045, 2, 10);
-  const cps = () => ({ slow: 30, normal: 70, fast: 140, instant: 1e6 }[MH.settings.textSpeed] || 70);
+  const cps = () => ({ slow: 17, normal: 70, fast: 140, instant: 1e6 }[MH.settings.textSpeed] || 70);
 
   chat.init = function () {
     el = {
@@ -26,6 +26,7 @@
     el.star.onclick = () => wrapAction();
     el.give.onclick = () => MH.ui.openGivePicker();
     el.invite.onclick = () => MH.ui.openInvitePicker();
+    const fb = document.getElementById('btnFight'); if (fb) fb.onclick = () => MH.ui.openFightPicker();
     el.log.onclick = () => MH.ui.toggleLog();
     el.logTop.onclick = () => MH.ui.toggleLog();
     el.toChip.onclick = () => chat.setTarget(null);
@@ -35,14 +36,13 @@
       // pick the character whose body is nearest the tap (wide artwork overlaps neighbours)
       let card = null, bd = 1e9;
       el.cast.querySelectorAll('.card:not(.leaving)').forEach((c2) => { const r = c2.getBoundingClientRect(); const d = Math.abs(r.left + r.width / 2 - e.clientX); if (d < bd) { bd = d; card = c2; } });
+      // tapping picks who you talk to; it never skips anyone's line
       if (card && chat.convo && chat.convo.members.length > 1 && e.target.closest('img')) chat.setTarget(chat.to === card.dataset.id ? null : card.dataset.id);
-      chat.skip();
     });
     el.says.addEventListener('pointerdown', (e) => {
       const s = e.target.closest('.say'); if (!s) return;
       s.classList.toggle('expand');
       if (chat.convo && chat.convo.members.length > 1 && s.dataset.id) chat.setTarget(s.dataset.id);
-      chat.skip();
     });
     requestAnimationFrame(layoutLoop);
   };
@@ -71,6 +71,7 @@
   // who the player is talking to in a group (tap a portrait)
   chat.setTarget = function (id) {
     chat.to = id && chat.convo && chat.convo.members.includes(id) ? id : null;
+    if (chat.to) chat.front = chat.to; // tapped: they come to the front until someone else speaks
     el.cast.querySelectorAll('.card').forEach((c) => c.classList.toggle('target', c.dataset.id === chat.to));
     el.tags.querySelectorAll('.tag').forEach((t) => t.classList.toggle('target', t.dataset.id === chat.to));
     applyLayers();
@@ -163,6 +164,7 @@
     s.d.classList.remove('thinking', 'expand'); s.d.classList.add('on');
     const card = el.cast.querySelector(`.card[data-id="${id}"]`);
     if (card) card.classList.add('talking');
+    chat.front = id; applyLayers();
   }
   function cardThinking(ids, on) {
     ids.forEach((id) => {
@@ -186,10 +188,13 @@
   }
   // Layers: the character you picked is on top, then the main person you're talking to,
   // then everyone else in the order they joined. Portraits AND their bubbles follow these layers.
+  // Layers: whoever spoke last (or whoever you just tapped) is on top, portrait AND bubble,
+  // until somebody else speaks; then the person you're talking to; then everyone in join order.
   function layerOrder() {
     const c = chat.convo; if (!c) return [];
     const order = c.members.slice();
-    if (chat.to && order.includes(chat.to)) { order.splice(order.indexOf(chat.to), 1); order.unshift(chat.to); }
+    const lift = (id) => { if (id && order.includes(id)) { order.splice(order.indexOf(id), 1); order.unshift(id); } };
+    lift(chat.to); lift(chat.front);
     return order;
   }
   function applyLayers() {
@@ -265,10 +270,12 @@
 
   // ------------------------------------------------------------ lifecycle
   function nearbyIds(c) {
+    if (c.phone) return [];
     const room = MH.roomOf(MH.player);
     return MH.npcs.filter((e) => !e.hidden && !c.members.includes(e.id) && MH.roomOf(e) === room && Math.hypot(e.x - c.x, e.y - c.y) / T < 9 && e.busy !== 'talking').map((e) => e.id);
   }
   function center(c) {
+    if (c.phone) { MH.render.focus(MH.player.x, MH.player.y); return; }
     const ents = c.members.map((id) => MH.npcById[id]).concat([MH.player]);
     c.x = ents.reduce((s, e) => s + e.x, 0) / ents.length;
     c.y = ents.reduce((s, e) => s + e.y, 0) / ents.length;
@@ -278,6 +285,7 @@
 
   chat.start = function (ids, mode, payload) {
     if (chat.active) { ids.forEach((id) => chat.addMember(id, 'joined')); return; }
+    if (mode === 'phone') return startPhone(ids[0], payload);
     const extra = [];
     ids.forEach((id) => {
       const e = MH.npcById[id];
@@ -286,7 +294,7 @@
     const comps = (MH.state.companions || []).filter((id) => !ids.includes(id) && !extra.includes(id) && MH.npcById[id] && MH.distTiles(MH.npcById[id], MH.player) < 10);
     const members = ids.concat(extra, comps);
     const c = { id: MH.uid(), members: [], nearby: [], lines: [], x: 0, y: 0, started: MH.absMinutes(), turn: 0, spoke: {}, joinedTurn: {} };
-    chat.convo = c; chat.active = true; chat.to = null;
+    chat.convo = c; chat.active = true; chat.to = null; chat.front = null;
     MH.state.convoCount++;
     members.forEach((id) => chat.addMember(id, null, true));
     if (extra.length) {
@@ -311,8 +319,26 @@
     }
   };
 
+  // texting: the villager stays wherever they are
+  function startPhone(id, incoming) {
+    const e = MH.npcById[id]; if (!e) return;
+    const c = { id: MH.uid(), members: [id], nearby: [], lines: [], x: MH.player.x, y: MH.player.y, started: MH.absMinutes(), turn: 0, spoke: {}, joinedTurn: {}, phone: true };
+    chat.convo = c; chat.active = true; chat.to = null; chat.front = null;
+    c.joinedTurn[id] = 0; c.spoke[id] = 0;
+    const n = MH.social.npc(id); n.lastTalk = MH.absMinutes(); n.talks++;
+    el.root.classList.remove('hidden'); el.root.classList.add('phone');
+    document.body.classList.add('chatting');
+    el.cast.innerHTML = ''; el.tags.innerHTML = ''; clearSays(); el.me.classList.remove('on'); chat.meB = null;
+    renderCast(); chat.setTarget(null);
+    MH.render.focus(MH.player.x, MH.player.y);
+    MH.social.log({ kind: 'sys', text: '— 📱 Texting ' + e.ch.name + ' —', convo: c.id });
+    el.input.value = ''; chat.pendingInvite = null;
+    el.input.placeholder = `Text ${e.ch.name}…`;
+    if (incoming) { c.lines.push({ who: id, text: incoming }); MH.social.log({ kind: 'line', who: id, text: incoming, convo: c.id }); cardSay(id, incoming); }
+  }
+
   chat.addMember = function (id, how, initial) {
-    const c = chat.convo; if (!c || c.members.includes(id)) return;
+    const c = chat.convo; if (!c || c.members.includes(id) || c.phone) return;
     const e = MH.npcById[id]; if (!e) return;
     if (MH.sim.approaching === e) MH.sim.approaching = null;
     c.members.push(id);
@@ -360,7 +386,8 @@
       const n = MH.social.npc(id); n.met = true; n.lastTalk = MH.absMinutes(); n.mustGo = null;
     });
     chat.active = false; chat.convo = null; chat.waiting = false; chat.pendingInvite = null; chat.queued = false; chat.to = null;
-    el.root.classList.add('hidden'); el.root.classList.remove('waiting');
+    el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone');
+    MH.fight && MH.fight.hideOffer();
     document.body.classList.remove('chatting');
     el.input.blur(); el.me.classList.remove('on'); chat.meB = null; el.send.classList.remove('queued');
     clearSays();
@@ -384,10 +411,34 @@
     chat.meB = { full: (to ? '→ ' + MH.CHAR[to].name + ': ' : '') + text, shown: 0 };
     el.me.innerHTML = ''; el.me.classList.add('on');
     if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
-    c.violence = chat.detectViolence(text, c, to);
+    c.violence = c.phone ? null : chat.detectViolence(text, c, to);
+    // ⚔️ "fight for real" from the chat bar counts as starting a fight
+    if (c.challenge && !/squares up|sparring/i.test(text)) c.challenge = null;
+    if (c.challenge && c.challenge.kind === 'brawl' && !c.violence) c.violence = { victim: c.challenge.with, playful: false, act: 'squares up to fight them for real' };
     chat.pendingInvite = null;
     chat.runTurn('player', text, to);
   };
+  // a villager drags the player somewhere: fade, move both, carry on talking there
+  chat.drag = function (c, by, to) {
+    const e = MH.npcById[by]; if (!e || !c.members.includes(by)) return;
+    const L = to === 'home' ? MH.world.locations.home : MH.world.locations[to]; if (!L) return;
+    const fade = document.getElementById('fade'); fade.classList.add('on');
+    setTimeout(() => {
+      if (MH.roomOf(MH.player)) { const R = MH.world.rooms[MH.roomOf(MH.player)]; if (R.id === 'home') MH.exitHome(); else MH.exitRoom(R.id); }
+      const sp = to === 'home' ? MH.world.doorFront('home') : MH.world.randomSpot(to);
+      MH.player.setTile(sp.tx, sp.ty);
+      const n2 = MH.world.nearestWalkable(sp.tx + 1, sp.ty); e.setTile(n2.tx, n2.ty); e.hidden = false; e.path = null;
+      (MH.state.companions || []).forEach((id) => { const f = MH.npcById[id]; if (f && f !== e) { const s2 = MH.world.nearestWalkable(sp.tx - 1, sp.ty); f.setTile(s2.tx, s2.ty); } });
+      c.members.filter((id) => id !== by && !(MH.state.companions || []).includes(id)).forEach((id) => chat.removeMember(id, 'is left behind'));
+      const txt = `${e.ch.name} dragged ${MH.state.player.name} to ${L.name}`;
+      c.lines.push({ who: 'system', text: txt });
+      MH.social.log({ kind: 'sys', text: '🫳 ' + txt + '.', convo: c.id });
+      MH.social.addMemory(by, `Dragged ${MH.state.player.name} to ${L.name}.`, { imp: 2 });
+      center(c); MH.render.snap(); fade.classList.remove('on');
+      MH.ui.toast(`🫳 ${e.ch.name} drags you to ${L.name}!`, 3);
+    }, 650);
+  };
+
   // *punches Vix* and friends: physical attacks in the player's *actions*
   const VIOLENCE = /\b(punch\w*|hit|hits|hitting|slap\w*|kick\w*|stab\w*|shov\w*|smack\w*|headbutt\w*|attack\w*|assault\w*|beat\w* (?:up|on)|tackl\w*|bites?|biting|chok\w*|strangl\w*|elbows?|uppercut\w*|socks?|decks?|clobber\w*|wallop\w*|pummel\w*|shoots?|shot|throws? (?:a |the |my )?\w+ at|swings? at|bonks?|whacks?|body ?slam\w*|suplex\w*|karate.?chop\w*|spits? (?:on|at)|trips?|scratch\w*|claws?|kneecap\w*|knees? (?:him|her|them)|stomps? on|pushes|punts?)\b/i;
   const PLAYFUL = /\b(playful\w*|gentl\w*|lightly|light|pretend\w*|fake\w*|mock\w*|softly|teasing\w*|boops?|pillow|high.?five|fist.?bump|nudges?|pokes?)\b/i;
@@ -489,12 +540,19 @@
       chat.skipFlag = false;
     }
     if (chat.convo !== c) return;
+    const v0 = c.violence, ch0 = c.challenge; c.challenge = null;
     enforceViolence(c, res); c.violence = null;
+    if (ch0 && !res.fight && c.members.includes(ch0.with) && !res.leave.includes(ch0.with)) {
+      if (ch0.kind === 'brawl') res.fight = { with: ch0.with, kind: 'brawl', starter: 'player', auto: true };
+      else if (res.offline && MH.fight.power(ch0.with) >= 2 && MH.social.attitude(ch0.with) > -20) res.fight = { with: ch0.with, kind: 'spar', starter: 'player' };
+    }
+    if (v0 && !v0.playful && !res.fight && c.members.includes(v0.victim) && !res.leave.includes(v0.victim) && MH.fight && (MH.social.isTough(v0.victim) || MH.fight.power(v0.victim) >= 2)) res.fight = { with: v0.victim, kind: 'brawl', starter: 'player', auto: true };
+    else if (v0 && res.fight) { res.fight.starter = 'player'; if (res.fight.kind === 'brawl') res.fight.auto = true; }
     applyEffects(c, res);
     renderCast();
     if (res.end) { setTimeout(() => chat.convo === c && chat.end(), 2600); return; }
     codeLeaves(c);
-    codeJoins(c);
+    if (!c.phone && !res.fight && !res.drag) codeJoins(c);
   }
 
   // No time limit in conversations: villagers only leave when the story makes them (the AI's "leave"),
@@ -529,6 +587,8 @@
     for (const id in res.memory) S.addMemory(id, res.memory[id], { imp: res.violent ? 4 : 2, kind: 'self' });
     for (const id in res.label) { S.npc(id).label = res.label[id]; MH.ui.toast(`${MH.CHAR[id].name}: “${res.label[id]}”`); }
     const rep = S.applyRep(res.reputation, c.members);
+    if (c.phone) res.witness = '';
+    if ((P.invisUntil || 0) > MH.absMinutes()) res.witness = ''; // nobody else sees a thing
     if (res.witness) {
       const seen = S.witness(res.witness, c.x, c.y, c.members, rep);
       if (res.violent) seen.forEach((id) => { S.changeBond(id, S.isTough(id) ? -2 : -4); const n = S.npc(id); if (n && !S.isTough(id)) n.mood = 'frightened'; });
@@ -537,7 +597,14 @@
       if (seen.length) MH.ui.toast('👀 ' + seen.map((id) => MH.CHAR[id].name).slice(0, 3).join(', ') + (seen.length > 3 ? ' +' + (seen.length - 3) : '') + ' saw that');
     }
     res.give.forEach((g) => { S.giveItem(g.item, g.from); MH.ui.toast(`${MH.itemIcon(g.item)} Got ${g.item}${g.from && MH.CHAR[g.from] ? ' from ' + MH.CHAR[g.from].name : ''}`); });
-    res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) { MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); if (MH.quests) MH.quests.onGive(it, g.to, c.members); } });
+    res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) { MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); if (MH.quests) MH.quests.onGive(it, g.to, c.members); if (/\bphone\b/i.test(it.name) && MH.phone) MH.phone.give(g.to || c.members[0]); } });
+    if (res.hurt) { MH.fight.damage(res.hurt, { by: c.members[0] }); MH.ui.toast(`💥 −${res.hurt} HP`, 2); MH.render.flash = 0.12; }
+    if (res.fight && MH.fight && c.members.includes(res.fight.with)) {
+      const f = res.fight;
+      if (f.auto) setTimeout(() => chat.convo === c && MH.fight.inChat(c, f), 500);
+      else MH.fight.offer(c, f);
+    }
+    if (res.drag && !res.fight) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to), 700);
     if (MH.quests) {
       (res.questDone || []).forEach((qid) => MH.quests.complete(qid, c.members));
       MH.quests.onTalk(c);

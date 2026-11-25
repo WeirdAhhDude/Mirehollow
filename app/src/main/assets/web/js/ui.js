@@ -13,6 +13,7 @@
     $('#btnMenu').onclick = () => ui.openMenu();
     $('#logClose').onclick = () => ui.toggleLog(false);
     $('#jobPill').onclick = () => ui.openJournal('jobs');
+    $('#btnPhone').onclick = () => MH.phone.open();
     MH.on('target', (t) => {
       const b = $('#btnA');
       b.classList.toggle('on', !!t);
@@ -230,6 +231,25 @@
     d.querySelector('#plParty').onclick = () => ui.openPartyPlanner();
     return d;
   }
+
+  // ------------------------------------------------------------ challenge someone (from the chat bar)
+  ui.openFightPicker = function () {
+    const c = MH.chat.convo; if (!c || c.phone) { ui.toast('You can\'t fight over the phone.'); return; }
+    ui.closeGivePicker();
+    const box = h(`<div id="givePicker" class="picker"><div class="ph">Fight…</div><div class="who"></div><div class="row"><button class="btn small ghost" id="fpSpar">🤝 Friendly spar</button><button class="btn small danger" id="fpReal">⚔️ Fight for real</button></div><p class="muted small">Sparring is friendly (some villagers love it). A real fight is violence: people will remember. Equip a weapon from your Pocket first if you have one.</p></div>`);
+    let target = chat_to_or_first();
+    function chat_to_or_first() { return MH.chat.to && c.members.includes(MH.chat.to) ? MH.chat.to : c.members[0]; }
+    const who = box.querySelector('.who');
+    c.members.forEach((id) => {
+      const b = h(`<button class="chip ${id === target ? 'sel' : ''}">${MH.esc(MH.CHAR[id].name)} <small>(${MH.fight.DIFF[MH.clamp(MH.fight.power(id), 1, 5)]})</small></button>`);
+      b.onclick = () => { target = id; who.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); };
+      who.appendChild(b);
+    });
+    box.querySelector('#fpSpar').onclick = () => { c.challenge = { with: target, kind: 'spar' }; MH.chat.insertText(`*challenges ${MH.CHAR[target].name} to a friendly sparring match* `); ui.closeGivePicker(); };
+    box.querySelector('#fpReal').onclick = () => { c.challenge = { with: target, kind: 'brawl' }; MH.chat.insertText(`*squares up to fight ${MH.CHAR[target].name} for real* `); ui.closeGivePicker(); };
+    document.getElementById('chat').appendChild(box);
+    ui.giveOpen = true;
+  };
 
   // ------------------------------------------------------------ invitations (from the chat bar)
   ui.openInvitePicker = function () {
@@ -483,12 +503,14 @@
 
   function tabPocket() {
     const P = MH.state.player;
-    const d = h(`<div class="pocket"><div class="coins">🪙 ${P.coins} coins</div><div class="items"></div><p class="muted small">Give things to villagers from the 🎁 button while chatting, or just write it: <i>*hands Lily a wildflower*</i>.</p></div>`);
+    const gadgets = [P.phone ? '📱 phone' : '', P.boots ? '👢 gravity boots' : '', P.translator ? '📡 translator collar' : '', (P.bhCharges || 0) > 0 ? `🕳️ black hole sniper (${P.bhCharges})` : ''].filter(Boolean);
+    const d = h(`<div class="pocket"><div class="coins">🪙 ${P.coins} coins · ❤️ ${Math.round(MH.fight.hp())} HP${P.weapon && MH.WEAPONS[P.weapon] ? ' · ' + MH.esc(MH.WEAPONS[P.weapon].name) : ''}</div>${gadgets.length ? `<p class="small">Gear: ${gadgets.join(' · ')}</p>` : ''}<div class="items"></div><p class="muted small">Give things to villagers from the 🎁 button while chatting, or just write it: <i>*hands Lily a wildflower*</i>.</p></div>`);
     const it = d.querySelector('.items');
     if (!P.inv.length) it.appendChild(h(`<div class="empty">Empty. Pick flowers (🌼), berries, mushrooms, seashells… or charm a villager into giving you something.</div>`));
     P.inv.forEach((x, i) => {
-      const use = MH.shop && MH.shop.usable(x);
-      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}${use ? `<button class="use">${use.cat === 'food' ? 'Eat' : 'Use'}</button>` : ''}<button class="drop" title="Drop">✕</button></div>`);
+      const use = MH.shop && MH.shop.usable(x), wpn = MH.shop && MH.shop.weaponOf(x);
+      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}${use ? `<button class="use">${use.cat === 'food' ? 'Eat' : 'Use'}</button>` : ''}${wpn ? `<button class="use eq">${P.weapon === wpn ? 'Equipped ✔' : 'Equip'}</button>` : ''}<button class="drop" title="Drop">✕</button></div>`);
+      if (wpn) b.querySelector('.eq').onclick = () => { MH.shop.equip(x); ui.openJournal('pocket'); };
       b.querySelector('.drop').onclick = async () => { if (x.quest && !(await ui.confirm(`Throw away ${x.name}? It's for a favour you promised.`, 'Throw away', 'Keep'))) return; P.inv.splice(i, 1); ui.openJournal('pocket'); };
       if (use) b.querySelector('.use').onclick = () => { MH.shop.use(i); if (ui.modalOpen) ui.openJournal('pocket'); };
       it.appendChild(b);
@@ -530,14 +552,14 @@
     const W = MH.world.W, H = MH.world.H, s = 3;
     cv.width = W * s; cv.height = H * s;
     const x = cv.getContext('2d');
-    const col = ['#86c35c', '#4e8a48', '#d6bf92', '#cfc6b4', '#ead9a8', '#58aed6', '#5d7a52', '#7f6a48', '#9c784c', '#b5875a', '#3f8cc0', '#8e9096', '#6a6258', '#7fb6b0', '#c8955e', '#c9c48a', '#16120f', '#b9b3a6', '#8e9096', '#6a4a2e'];
+    const col = ['#86c35c', '#4e8a48', '#d6bf92', '#cfc6b4', '#ead9a8', '#58aed6', '#5d7a52', '#7f6a48', '#9c784c', '#b5875a', '#3f8cc0', '#8e9096', '#6a6258', '#7fb6b0', '#c8955e', '#c9c48a', '#16120f', '#b9b3a6', '#8e9096', '#6a4a2e', '#efe8d8', '#5a5e62', '#3a2450', '#7a6450', '#c2b8a6', '#a6c86a', '#a89c88', '#7ccac8', '#9ad8f4'];
     const Wt = MH.world.TOWN_W;
     cv.width = Wt * s;
     for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < Wt; tx++) { x.fillStyle = col[MH.world.g(tx, ty)] || '#000'; x.fillRect(tx * s, ty * s, s, s); }
     MH.world.buildings.forEach((b) => { x.fillStyle = b.roof || '#666'; x.fillRect(b.x * s, b.y * s, b.w * s, b.h * s); });
     x.font = 'bold 9px sans-serif'; x.textAlign = 'center';
     MH.world.buildings.forEach((b) => { if (b.generic) return; x.fillStyle = '#fff'; x.strokeStyle = '#000'; x.lineWidth = 2; const n = b.name.split(' (')[0].replace('The ', ''); x.strokeText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); x.fillText(n, (b.x + b.w / 2) * s, (b.y - 0.5) * s); });
-    [['Park', 53, 83], ['Sunflowers', 53, 100], ['Rice paddies', 82, 106], ['Cornfield', 114, 108], ['Swamp', 140, 75], ['Deep Woods', 40, 8], ['Pond', 100, 84], ['River', 108, 52]].forEach(([n, tx, ty]) => { x.fillStyle = '#fff'; x.strokeText(n, tx * s, ty * s); x.fillText(n, tx * s, ty * s); });
+    [['Park', 53, 83], ['Sunflowers', 53, 100], ['Rice paddies', 82, 106], ['Cornfield', 114, 108], ['Swamp', 140, 75], ['Deep Woods', 40, 8], ['Pond', 100, 84], ['River', 108, 52], ['Lookout Hill', 22, 131], ['Crag Heights', 116, 128], ['Orchard', 60, 140], ['Waterfall', 116, 162], ['Hollow Crags', 64, 166], ['Pine Forest', 24, 178], ['Scrublands', 120, 180]].forEach(([n, tx, ty]) => { x.fillStyle = '#fff'; x.strokeText(n, tx * s, ty * s); x.fillText(n, tx * s, ty * s); });
     MH.world.buildings.forEach((b) => { if (b.generic) return; });
     x.fillStyle = '#ff2a6a'; x.beginPath(); x.arc(MH.player.x / 16 * s, MH.player.y / 16 * s, 4, 0, 7); x.fill();
   }
@@ -580,7 +602,7 @@
 
   // ------------------------------------------------------------ pause menu & settings
   ui.openMenu = function () {
-    const body = h(`<div class="menu"><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="journal">Journal</button><button class="btn" data-a="settings">Settings & AI</button><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="reset">🔁 Reset today</button><button class="btn ghost" data-a="help">How to play</button><button class="btn ghost" data-a="title">Back to title</button></div>`);
+    const body = h(`<div class="menu"><button class="btn" data-a="resume">Resume</button><button class="btn" data-a="journal">Journal</button><button class="btn" data-a="settings">Settings & AI</button><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="reset">🔁 Reset today</button><button class="btn ghost" data-a="help">How to play</button><button class="btn ghost" data-a="slots">👥 Switch character</button><button class="btn ghost" data-a="title">Back to title</button></div>`);
     ui.modal('Mirehollow', body);
     body.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
@@ -591,6 +613,7 @@
       if (a === 'help') ui.openHelp();
       if (a === 'reset') ui.openDayReset();
       if (a === 'title') { MH.save(); ui.closeModal(); ui.showTitle(); }
+      if (a === 'slots') { MH.save(); ui.closeModal(); ui.showTitle(); }
     }));
   };
 
@@ -621,6 +644,10 @@
       <p><b>Shops</b>: the bakery, gym, bookstore, general store, club, town hall, clinic and barbershop can be entered during opening hours. Buy things at the counters; <b>Mirehollow Mall</b> (south of the square, by the park) has five kiosks: food, gifts, clothes you can wear, home decor and fun stuff. Sable at the General Store buys what you forage.</p>
       <p><b>Jobs</b>: ask for work at a shop's counter (or at the Post Office / Maggie's Stilt House) for coins. Journal → Jobs lists them all.</p>
       <p><b>Favours</b>: villagers sometimes ask you for help — accept or decline. Journal → Favours tracks them.</p>
+      <p><b>Health & fights</b>: the ❤️ bar is your health. Fights are a reflex game — tap the circles when the shrinking ring meets them, drag the sliders — harder against tougher opponents. ⚔️ in the chat bar challenges someone (a friendly spar or a real fight). Buy a bat at the General Store or worse at the bandits' black market, and equip it from your Pocket. Eat, soak in the onsen or visit the clinic to heal. At 0 HP you black out: you might be robbed, rescued — or die and restart the day.</p>
+      <p><b>Phones</b>: buy one at the mall (Fun & Phones), then 📱 at the top to text villagers who have phones. Give a spare phone to anyone who doesn't.</p>
+      <p><b>The highlands</b>: south of town — Lookout Hill, Crag Heights with the onsen, the orchard, the waterfall and the bandits' Hollow Crags. Look for stairs cut into the cliffs.</p>
+      <p><b>Characters</b>: ⚙️ → 👥 Switch character to play up to 4 different characters (try a saint and a menace).</p>
       <p><b>Bonds & reputation</b>: everyone remembers what you do. Witnesses gossip. Some villagers will like you just for your reputation, others will hate you for the same thing.</p>
       <p><b>Your house</b>: it's right by the west railway crossing. Go inside to sleep, raid the fridge, and plan parties on the low table. Invite people over (or to meet somewhere) with the 🏠 button while chatting.</p>
       <p><b>Events</b>: towns gatherings happen every week (see Journal → Plans). Just show up to join.</p>
@@ -742,8 +769,8 @@
       f.querySelector('#impGo').onclick = () => go(f.querySelector('#impTa').value);
     };
     body.querySelector('#sReset').onclick = () => {
-      if (!confirm('Delete your Mirehollow save? This cannot be undone.')) return;
-      MH.store.del('save'); location.reload();
+      if (!confirm(`Delete this character's save (slot ${MH.slot})? This cannot be undone.`)) return;
+      MH.store.del(MH.slotKey('save')); MH.store.del(MH.slotKey('dayStart')); location.reload();
     };
     body.querySelector('#sDone').onclick = () => { apply(); ui.toast('Settings saved' + (MH.ai.hasKey() ? ' — AI on' : ' — offline mode')); fromTitle ? ui.showTitle() : ui.closeModal(); ui.updateHud(); };
     ui.modal('Settings & AI', body, { keep: true, onClose: () => { apply(); fromTitle ? ui.showTitle() : ui.closeModal(); } });
@@ -752,18 +779,29 @@
   // ------------------------------------------------------------ title & creator
   ui.showTitle = function () {
     ui.lockModal = true;
-    const has = !!MH.store.get('save', null);
+    if (MH.state && !MH.titleMode) MH.save();
+    const has = !!MH.store.get(MH.slotKey('save'), null);
     const body = h(`<div class="title"><div class="logo">Mirehollow</div><div class="tag">A green little village of crooked cottages, chaotic neighbours and a swamp just past the last lamp post.</div>
-      <div class="tbtns">${has ? '<button class="btn big" data-a="continue">Continue</button>' : ''}<button class="btn ${has ? '' : 'big'}" data-a="new">${has ? 'New game' : 'Move to Mirehollow'}</button><button class="btn ghost" data-a="settings">Settings & AI ${MH.ai.hasKey() ? '✅' : ''}</button></div>
+      <div class="tbtns">${has ? '<button class="btn big" data-a="continue">Continue</button>' : ''}<button class="btn ghost" data-a="settings">Settings & AI ${MH.ai.hasKey() ? '✅' : ''}</button></div>
+      <h4 class="slotsh">Your characters</h4><div class="slots"></div>
       <div class="foot">${MH.ai.hasKey() ? 'AI villagers: ' + MH.esc(MH.settings.model) : 'Tip: add an OpenRouter key in Settings for AI villagers.'}</div></div>`);
     ui.modal('', body, { cls: 'titlescreen', noClose: true });
-    body.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
+    const sl = body.querySelector('.slots');
+    for (let n = 1; n <= MH.SLOTS; n++) {
+      const st = MH.store.get(MH.slotKey('save', n), null);
+      const rep = st ? MH.social.repSummary(st.player.rep || {}) : '';
+      const card = h(`<div class="slot ${n === MH.slot && st ? 'cur' : ''}">${st ? `<div class="sinfo"><b>${MH.esc(st.player.name)}</b><small>Day ${st.time.day + 1} · 🪙 ${st.player.coins} · ${MH.esc(rep)}</small></div><button class="btn small" data-a="play">Play</button><button class="btn small ghost" data-a="new">New</button><button class="btn small danger" data-a="del">🗑</button>` : `<div class="sinfo"><b>Slot ${n}</b><small>Empty</small></div><button class="btn small" data-a="new">New character</button>`}</div>`);
+      card.querySelectorAll('[data-a]').forEach((b) => (b.onclick = async () => {
+        const a = b.dataset.a;
+        if (a === 'play') { MH.setSlot(n); ui.lockModal = false; ui.closeModal(); MH.startGame(MH.store.get(MH.slotKey('save'))); }
+        if (a === 'new') { if (st && !(await ui.confirm(`Start a new character in slot ${n}? ${st.player.name}'s game will be overwritten.`, 'Start over', 'Cancel'))) return; MH.setSlot(n); ui.openCreator(false); }
+        if (a === 'del') { if (!(await ui.confirm(`Delete ${st.player.name} (slot ${n})? This cannot be undone.`, 'Delete', 'Cancel'))) return; MH.store.del(MH.slotKey('save', n)); MH.store.del(MH.slotKey('dayStart', n)); ui.showTitle(); }
+      }));
+      sl.appendChild(card);
+    }
+    body.querySelectorAll('.tbtns [data-a]').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
-      if (a === 'continue') { ui.lockModal = false; ui.closeModal(); MH.startGame(MH.store.get('save')); }
-      if (a === 'new') {
-        if (has && !confirm('Start a new game? Your current save will be overwritten.')) return;
-        ui.openCreator(false);
-      }
+      if (a === 'continue') { ui.lockModal = false; ui.closeModal(); MH.startGame(MH.store.get(MH.slotKey('save'))); }
       if (a === 'settings') ui.openSettings(true);
     }));
   };

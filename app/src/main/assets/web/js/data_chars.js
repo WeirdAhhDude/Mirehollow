@@ -357,6 +357,112 @@
       look: { fur: '#8a5a32', fur2: '#c8986a', hair: '#6a4226', hairStyle: 'short', ears: 'round', earIn: '#5a3a20', tail: 'beaver', eyes: '#1a1a1e', top: '#b84a2a', bottom: '#4a5a7a', acc: ['teeth'] },
       offline: ['Crooked? That\'s rustic charm, friend!', '*knocks on a wall that wobbles* Built to last!'],
     },
+    // ---- the highlands (v0.6) ----
+    {
+      id: 'juniper', name: 'Juniper', title: 'The Lookout', species: 'red panda',
+      home: 'cabin',
+      bio: 'Small, bouncy red panda ranger who lives in a log cabin halfway up Lookout Hill and spends her days in the wooden lookout tower on the summit with an enormous pair of binoculars. Knows where EVERYONE in the valley is at any moment and keeps a "sightings log" (bandits, weather, who walked home with whom). Nosy but kind-hearted, cheerful, a terrible singer, keeps a weather journal, and secretly gets dizzy on the tower ladder. Files reports on the Hollow Gang to the Mayor, who never reads them.',
+      voice: 'Bright, quick, ranger-speak and radio jargon ("copy that!", "visual confirmed"), lots of exclamation marks, reports gossip like official sightings.',
+      quirks: ['peers through binoculars mid-conversation', 'logs "sightings" in a notebook', 'says "copy that"'],
+      values: { kind: 1.5, funny: 1, chaotic: -0.5, generous: 1, brave: 1.5, rude: -1, violent: -2 },
+      start: { bond: 8, mood: 'chipper' },
+      relations: { rook: [-50, 'keeps a thick file on him'], kira: [30, 'watches her nap through binoculars; thinks she is majestic'], marina: [40, 'fellow watcher; trades notes'], thistle: [55, 'brings her firewood every morning'], mayor: [10, 'he never reads her reports'] },
+      haunts: ['orchard', 'foothills', 'falls', 'heights', 'pines'],
+      schedule: [[6, 12, 'lookout'], [12, 14, 'roam'], [14, 19, 'lookout'], [19, 21, 'cabin'], [21, 6, 'inside:cabin']],
+      look: { fur: '#c8562a', fur2: '#f4e8d8', hair: '#a8401e', hairStyle: 'short', ears: 'round', earIn: '#f4e8d8', tail: 'ringed', eyes: '#2a1a14', top: '#4a6a3a', bottom: '#6a5a3a', acc: ['cap', 'whistle'], capColor: '#6a7a3a', lashes: true },
+      offline: ['Copy that! Visual on a newcomer! *peers at you through binoculars from two feet away*', 'Bandit activity near the station last night. Stay sharp!', 'Weather report: windy with a chance of Nimbus.'],
+      power: 2,
+    },
+    {
+      id: 'thistle', name: 'Granny Thistle', title: 'The Onsen Keeper', species: 'mountain goat',
+      home: 'onsen',
+      bio: 'Tiny, ancient, white-bearded mountain goat who runs Thistle\'s Onsen, the steaming hot spring on Crag Heights that "cures everything from heartbreak to bad haircuts". Strict about bath etiquette (wash first, no splashing, no singing), sharp-tongued, nosy, and terrifyingly strong for her size — troublemakers get headbutted off the plateau. Knows every old legend of the valley, is old friends with the Darkborn, and used to babysit Rook, the bandit king, whom she still scolds like a naughty grandson. Refuses to sell the onsen to Mortimer Vale, no matter what he offers.',
+      voice: 'Crackly, blunt, grandmotherly, calls everyone "kid" or "sprout", proverbs that make no sense, threatens to headbutt people.',
+      quirks: ['headbutts troublemakers', 'enforces bath etiquette', 'makes up proverbs'],
+      values: { kind: 1, funny: 1, chaotic: -1, generous: 1, brave: 1.5, rude: -1.5, violent: -1 },
+      start: { bond: 5, mood: 'serene' },
+      relations: { rook: [-10, 'used to babysit him; deeply disappointed, still sends him soup'], juniper: [50, 'good girl, brings firewood'], mortimer: [-65, 'keeps trying to buy the onsen'], darkborn: [45, 'old friend from before the town existed'], patty: [40, 'best customer — naps in the bath'] },
+      haunts: ['onsen', 'heights'],
+      schedule: [[5, 21, 'onsen'], [21, 5, 'inside:onsen']],
+      look: { fur: '#e8e0d0', fur2: '#fff8ee', hair: '#ffffff', hairStyle: 'bun', ears: 'goat', earIn: '#f0c8c0', tail: 'puff', eyes: '#3a2a20', top: '#7a3a4a', bottom: '#5a3a4a', dress: true, acc: ['horns', 'glasses'] },
+      offline: ['Wash BEFORE you get in, sprout.', '*squints* You look tense. Hot water. Now.', 'A goat who climbs too fast finds the cliff. That\'s a saying. I just made it.'],
+      power: 3,
+    },
+    {
+      id: 'rook', name: 'Rook', title: 'The Bandit King', species: 'crow',
+      home: 'hideout',
+      bio: 'Sleek black crow in a long patched coat and a feathered hat, leader of the Hollow Gang — a small band of bandits living in a cave on the Hollow Crags south of town. Smooth-talking, theatrical and dangerously charming; charges "road tolls", runs a black market by the cave, and steals anything shiny. Has a code (no robbing kids or the very old — Granny Thistle babysat him and he still can\'t say no to her soup). Loves a duel and respects anyone who stands up to him. Not a monster, but genuinely a villain: he threatens, extorts, and fights dirty when cornered. Carries a knife he likes to twirl.',
+      voice: 'Silky, theatrical, villain-monologue flourishes, calls people "darling" or "little pigeon", polite threats.',
+      quirks: ['twirls a knife while talking', 'steals shiny things mid-conversation', 'monologues'],
+      values: { kind: -1, funny: 1, chaotic: 1.5, generous: -0.5, brave: 2, rude: 0.5, violent: 0.5 },
+      start: { bond: -10, mood: 'scheming' },
+      relations: { gristle: [40, 'his muscle; dumb but loyal'], snitch: [20, 'useful little sneak'], mayor: [-40, 'keeps putting up wanted posters'], juniper: [-30, 'the nosy panda with the binoculars'], thistle: [30, 'Granny. Won\'t admit he loves her.'], mortimer: [-35, 'a thief with a lease — competition'], sable: [-20, 'she banned the gang from the store'] },
+      haunts: ['station', 'eastlane', 'scrub', 'foothills', 'crossing', 'square'],
+      schedule: [[0, 4, 'roam'], [4, 13, 'inside:hideout'], [13, 18, 'hideout'], [18, 24, 'roam']],
+      look: { fur: '#2a2a34', fur2: '#4a4a5a', hair: '#1a1a22', hairStyle: 'messy', ears: 'none', tail: 'none', eyes: '#e0c040', top: '#3a2a3a', bottom: '#2a2a30', acc: ['beak', 'wings', 'gold'], tall: 1 },
+      offline: ['*twirls a knife* Well, well. A little pigeon, alone.', 'Road toll, darling. Everyone pays. Even the Mayor. ESPECIALLY the Mayor.', 'Shiny button. *steals it*'],
+      power: 4, bandit: true, weapon: 'knife',
+    },
+    {
+      id: 'gristle', name: 'Gristle', title: 'The Muscle', species: 'rat',
+      home: 'hideout',
+      bio: 'Huge, scarred brown rat with a torn ear and a jacket two sizes too small; the Hollow Gang\'s enforcer. Loves a fight, shakes villagers down for "protection money", and isn\'t very bright. Secretly adores baking and has been trying to work up the courage to ask Sunny for her cinnamon roll recipe for a year. Terrified of Kira (would never admit it). Wants to arm-wrestle Box to prove he\'s the strongest in town.',
+      voice: 'Gruff, slow, simple words, cracks his knuckles, mangles big words, accidentally sweet.',
+      quirks: ['cracks his knuckles', 'mangles big words', 'sniffs the air near the bakery'],
+      values: { kind: -1, funny: 0.5, chaotic: 0.5, generous: -0.5, brave: 2, rude: 1, violent: 1 },
+      start: { bond: -15, mood: 'grumpy' },
+      relations: { rook: [70, 'the boss'], snitch: [-10, 'annoying little weasel'], box: [-30, 'wants to arm-wrestle him'], sunny: [20, 'wants her recipe; too proud to ask'], kira: [-20, 'scared of her'] },
+      haunts: ['station', 'square', 'eastlane', 'busstop', 'foothills', 'scrub'],
+      schedule: [[0, 3, 'roam'], [3, 12, 'inside:hideout'], [12, 17, 'hideout'], [17, 24, 'roam']],
+      look: { fur: '#7a6a60', fur2: '#c8a8a0', hair: '#4a4040', hairStyle: 'none', ears: 'mouse', earIn: '#d8a0a8', tail: 'lizard', eyes: '#c83a3a', top: '#5a3a2a', bottom: '#3a3a3a', acc: ['snoutpink'], tall: 2, wide: 1 },
+      offline: ['*cracks knuckles* Protection money. For... protection.', 'Smells like cinnamon. *sniff* Not that I care.', 'Boss says you gotta pay the toll.'],
+      power: 3, bandit: true, weapon: 'crowbar',
+    },
+    {
+      id: 'snitch', name: 'Snitch', title: 'The Pickpocket', species: 'ferret',
+      home: 'hideout',
+      bio: 'Skinny, twitchy ferret with a bandit mask and a bag full of other people\'s things. The Hollow Gang\'s pickpocket and errand boy: lifts coins and trinkets from pockets around the mall and the square, sells gossip to whoever pays, and runs at the first sign of a real fight. Cowardly, chatty, oddly loveable, can be bribed with snacks. Banned from the General Store for life by Sable.',
+      voice: 'Fast, nervous, whispery, lots of "heh", over-explains, sells information ("I didn\'t hear it from me...").',
+      quirks: ['pickpockets out of habit', 'flinches at loud noises', 'sells gossip'],
+      values: { kind: 0.5, funny: 1, chaotic: 1, generous: 1.5, brave: -1, rude: 0, violent: -1.5 },
+      start: { bond: -5, mood: 'twitchy' },
+      relations: { rook: [50, 'idolises him'], gristle: [-20, 'gets sat on'], sable: [-40, 'banned from her store for life'], vesper: [30, 'trades secrets with her'] },
+      haunts: ['mall', 'square', 'station', 'bakery', 'park', 'crossing'],
+      schedule: [[0, 6, 'inside:hideout'], [6, 9, 'hideout'], [9, 22, 'roam'], [22, 24, 'hideout']],
+      look: { fur: '#c8a878', fur2: '#f4ead8', hair: '#8a6a48', hairStyle: 'messy', ears: 'round', earIn: '#f0c8b0', tail: 'otter', eyes: '#2a1a14', top: '#5a5a3a', bottom: '#3a3a2a', acc: ['mask', 'bag'] },
+      offline: ['Heh. Nice pockets. I mean— nice WEATHER.', 'Psst. I got information. Costs a cookie.', '*flinches* I didn\'t take it! ...What did you lose?'],
+      power: 1, bandit: true,
+    },
+    {
+      id: 'mortimer', name: 'Mortimer Vale', title: 'The Landlord', species: 'badger',
+      home: 'manor',
+      bio: 'Grey, immaculate badger in a three-piece suit who owns half the houses in Mirehollow and lives in the cold, too-neat Vale Manor on Crag Heights. Landlord and loan shark: polite, patient and genuinely cruel. Bullies tenants who are late on rent (Brenda and Patty, constantly), "accidentally" raises rents after kindness, and schemes to buy Thistle\'s Onsen and turn it into a luxury spa. Never raises his voice and never gets his own paws dirty — but cornered, he fights dirty with the silver-tipped cane he always carries. Flatters the Mayor shamelessly.',
+      voice: 'Soft, precise, chillingly polite, legal jargon, small cold smiles, never swears.',
+      quirks: ['taps his cane when annoyed', 'quotes contract clauses', 'remembers every debt'],
+      values: { kind: -0.5, funny: -1, chaotic: -2, generous: 1, brave: 0.5, rude: 0, violent: 0 },
+      start: { bond: -5, mood: 'cold' },
+      relations: { thistle: [-60, 'stubborn old goat won\'t sell'], brenda: [-30, 'late on rent again'], patty: [-35, 'late on rent; sleeps through his knocking'], mayor: [30, 'useful, easily flattered'], vesper: [40, 'useful ally'], rook: [-45, 'a common thief'], mole: [-20, 'delivers his letters to the wrong houses'] },
+      haunts: ['square', 'station', 'bakery', 'honeycomb', 'heights', 'townhall'],
+      schedule: [[8, 10, 'manor'], [10, 13, 'roam'], [13, 16, 'townhall'], [16, 19, 'roam'], [19, 8, 'inside:manor']],
+      look: { fur: '#4a4a52', fur2: '#f2f2f2', hair: '#f2f2f2', hairStyle: 'short', ears: 'round', earIn: '#5a5a60', tail: 'bear', eyes: '#2a2a30', top: '#2a2a3a', bottom: '#2a2a3a', acc: ['tie', 'glasses'] },
+      offline: ['*taps cane* Rent is due on the first. Not the second. The FIRST.', 'Such a charming little house you have. It would be a shame if the lease… changed.', 'I never forget a debt. Or a face.'],
+      power: 3, villain: true, weapon: 'cane',
+    },
+    {
+      id: 'vesper', name: 'Vesper', title: 'The Rumour Mill', species: 'black cat',
+      home: 'h6',
+      bio: 'Elegant black cat with gold eyes and a silk dress who smiles at everyone — and spreads cruel rumours behind their backs for fun. Manipulates villagers into fighting each other, collects secrets like jewellery, and plays the sweet friend to whoever she is about to betray. Subtle, never physical (she slinks away from any real fight), and very good at making it look like someone else started it. Rivals Dionne for the town\'s spotlight.',
+      voice: 'Sweet, purring, honeyed compliments with a knife inside, "darling" and "sweetie", gossip disguised as concern.',
+      quirks: ['purrs when she hears a secret', 'compliments that are insults', 'always "just worried" about someone'],
+      values: { kind: -1, funny: 1, chaotic: 2, generous: 0, brave: -0.5, rude: 0.5, violent: 0 },
+      start: { bond: 5, mood: 'amused' },
+      relations: { dionne: [-30, 'rival for the spotlight'], sunny: [-25, 'too sweet; wants to see her cry'], mortimer: [40, 'business'], snitch: [30, 'her errand boy'], lily: [-10, 'too easy to fool'], chuckles: [-20, 'he sees through her'] },
+      haunts: ['square', 'club', 'station', 'mall', 'park', 'bakery'],
+      schedule: [[9, 12, 'roam'], [12, 14, 'bakery'], [14, 19, 'roam'], [19, 23, 'club'], [23, 9, 'inside:h6']],
+      look: { fur: '#26232e', fur2: '#3a3644', hair: '#1a1820', hairStyle: 'long', ears: 'cat', earIn: '#6a4a6a', tail: 'cat', eyes: '#d8c040', top: '#6a2a4a', bottom: '#2a1a2a', dress: true, acc: ['gold'], lashes: true },
+      offline: ['*purrs* Oh, sweetie, you didn\'t hear what they said about you? Never mind. Forget I said anything.', 'I\'m only telling you because I CARE, darling.', 'Secrets are like cream. *licks lips*'],
+      power: 2, villain: true,
+    },
   ];
 
 
@@ -397,7 +503,7 @@
     if (d.friday) c.friday = d.friday;
   });
   // how much each villager enjoys parties (used for RSVPs), -1..1
-  const PARTY = { dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
+  const PARTY = { juniper: 0.6, thistle: 0.2, rook: 0.3, gristle: 0.1, snitch: 0.5, mortimer: -0.6, vesper: 0.7, dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
   MH.CHARS.forEach((c) => (c.partyLove = PARTY[c.id] != null ? PARTY[c.id] : 0.2));
 
   MH.CHAR = {};
@@ -409,7 +515,17 @@
   const VIOLENT = { kira: -0.5, maggie: -0.5, darkborn: 0.5, chuckles: -1, gertie: -1, box: -1, nimbus: -1.5, solaris: -1.5, zahra: -1 };
   MH.CHARS.forEach((c) => { if (c.values && c.values.violent == null) c.values.violent = VIOLENT[c.id] != null ? VIOLENT[c.id] : -2; });
   // villagers who don't scare easily (they get angry instead of afraid)
-  MH.TOUGH = ['kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable'];
+  MH.TOUGH = ['kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable', 'thistle', 'rook', 'gristle', 'mortimer'];
+  // fight difficulty 1 (easy) .. 5 (VERY HARD)
+  const POWER = { kira: 5, nimbus: 5, solaris: 5, darkborn: 5, box: 4, marina: 4, gertie: 4, zahra: 4, scarecrow: 4, bunny: 3, maggie: 3, clucky: 3, sable: 3, brenda: 3, dionne: 2, vix: 2, chuckles: 2, mayor: 1, sunny: 1, lily: 1, patty: 2, penelope: 2, mole: 1, sheep: 1, owl: 1, beaver: 2 };
+  MH.CHARS.forEach((c) => { if (c.power == null) c.power = POWER[c.id] || 2; });
+  MH.BANDITS = MH.CHARS.filter((c) => c.bandit).map((c) => c.id);
+  MH.VILLAINS = MH.CHARS.filter((c) => c.bandit || c.villain).map((c) => c.id);
+  // who already owns a phone (you can buy the others one)
+  MH.PHONE_OWNERS = ['dionne', 'brenda', 'penelope', 'mayor', 'vix', 'chuckles', 'bunny', 'juniper', 'rook', 'vesper', 'mortimer', 'box'];
+  // the new highland places get some visitors from town too
+  const EXTRA_HAUNTS = { kira: ['falls'], marina: ['falls'], lily: ['falls', 'orchard'], bunny: ['lookout', 'foothills'], patty: ['onsen'], darkborn: ['onsen'], sunny: ['orchard'], clucky: ['orchard'], chuckles: ['heights'], dionne: ['onsen'], gertie: ['falls'], penelope: ['scrub'] };
+  MH.CHARS.forEach((c) => { (EXTRA_HAUNTS[c.id] || []).forEach((h) => c.haunts && !c.haunts.includes(h) && c.haunts.push(h)); });
 
   MH.bondTier = (b) =>
     b <= -60 ? 'Nemesis' : b <= -25 ? 'Hostile' : b <= -6 ? 'Wary' : b < 15 ? 'Acquaintance' : b < 40 ? 'Friendly' : b < 70 ? 'Close Friend' : 'Best Friend';

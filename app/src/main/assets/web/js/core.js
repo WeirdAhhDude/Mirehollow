@@ -189,15 +189,23 @@ window.MH = window.MH || {};
     await MH.idb.del('portrait_' + id);
     MH.applyCharEdits(id);
   };
+  // ---------- character slots: slot 1 keeps the original keys ('save', 'dayStart'), others get a number ----------
+  MH.SLOTS = 4;
+  MH.slot = MH.store.get('slot', 1);
+  MH.slotKey = (base, n) => { const k = n || MH.slot; return k === 1 ? base : base + k; };
+  MH.setSlot = (n) => { MH.slot = n; MH.store.set('slot', n); };
+
   // ---------- full backup: game + character edits + uploaded portraits + settings (never the API key) ----------
   MH.backup = {
     async build() {
       MH.save();
-      const state = (MH.state && !MH.titleMode) ? MH.state : MH.store.get('save', null);
+      const state = (MH.state && !MH.titleMode) ? MH.state : MH.store.get(MH.slotKey('save'), null);
+      const slots = {};
+      for (let n = 1; n <= MH.SLOTS; n++) { const st = n === MH.slot && MH.state && !MH.titleMode ? MH.state : MH.store.get(MH.slotKey('save', n), null); if (st) slots[n] = st; }
       const portraits = {};
       for (const id in MH.charEdits) if (MH.charEdits[id].customPortrait) { const url = await MH.idb.get('portrait_' + id); if (url) portraits[id] = url; }
       const settings = Object.assign({}, MH.settings); delete settings.apiKey;
-      return { format: 'mirehollow-backup', version: 1, exported: new Date().toISOString(), state, charEdits: MH.charEdits, portraits, settings };
+      return { format: 'mirehollow-backup', version: 2, exported: new Date().toISOString(), state, slots, currentSlot: MH.slot, charEdits: MH.charEdits, portraits, settings };
     },
     async export() {
       const b = await MH.backup.build();
@@ -222,6 +230,14 @@ window.MH = window.MH || {};
         await MH.loadCustomPortraits();
         // settings (keep this device's API key)
         if (data.settings) { const key = MH.settings.apiKey; Object.assign(MH.settings, data.settings); MH.settings.apiKey = key; MH.saveSettings(); }
+        if (data.slots && typeof data.slots === 'object') {
+          for (let n = 1; n <= MH.SLOTS; n++) { MH.store.del(MH.slotKey('save', n)); MH.store.del(MH.slotKey('dayStart', n)); }
+          for (const n in data.slots) if (data.slots[n] && data.slots[n].npcs) MH.store.set(MH.slotKey('save', +n), data.slots[n]);
+          MH.setSlot(+data.currentSlot || 1);
+          const cur = MH.store.get(MH.slotKey('save'), null);
+          if (cur) MH.backup.loadGame(cur);
+          return !!cur;
+        }
         if (data.state) MH.backup.loadGame(data.state);
         return !!data.state;
       }

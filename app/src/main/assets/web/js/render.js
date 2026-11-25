@@ -141,7 +141,11 @@
     // soft shadow
     ctx.fillStyle = 'rgba(20,30,20,0.24)';
     ctx.beginPath(); ctx.ellipse(e.x, e.y + 0.5, 6.5 * sc, 2.4 * sc, 0, 0, Math.PI * 2); ctx.fill();
-    const float = ch.id === 'zahra' || ch.id === 'nimbus' || ch.id === 'darkborn' ? Math.sin(MH.now * 2 + e.x) * 1.5 - 2 : 0;
+    const flying = e.isPlayer && MH.state && (MH.state.player.flyUntil || 0) > MH.absMinutes();
+    const float = ch.id === 'zahra' || ch.id === 'nimbus' || ch.id === 'darkborn' ? Math.sin(MH.now * 2 + e.x) * 1.5 - 2 : flying ? -10 + Math.sin(MH.now * 5) * 2 : 0;
+    const ghost = e.isPlayer && MH.state && (MH.state.player.invisUntil || 0) > MH.absMinutes();
+    if (ghost) ctx.globalAlpha = 0.35;
+    if (flying) { ctx.fillStyle = 'rgba(255,150,40,0.85)'; ctx.beginPath(); ctx.ellipse(e.x - 3, e.y - 4 + float + 8, 1.6, 3 + Math.random() * 3, 0, 0, 7); ctx.ellipse(e.x + 3, e.y - 4 + float + 8, 1.6, 3 + Math.random() * 3, 0, 0, 7); ctx.fill(); }
     const img = MH.art.chibiFrame(ch, e.dir, e.asleep ? 0 : e.frame);
     const w = MH.art.CW * sc, h = MH.art.CH * sc;
     if (e.asleep && ch.id !== 'scarecrow') {
@@ -153,6 +157,7 @@
     // name-free emotes
     if (e.asleep && Math.floor(MH.now * 1.2) % 3 !== 0) MH.art.drawEmote(ctx, 'zzz', e.x + 6, e.y - 22 - ((MH.now * 4) % 4), 0.9);
     else if (e.emote && e.emote.until > MH.now) MH.art.drawEmote(ctx, e.emote.name, e.x, R.headTop(e) - 9 + Math.sin(MH.now * 8), 1);
+    if (ghost) ctx.globalAlpha = 1;
   }
 
   // ------------------------------------------------------------ train
@@ -204,7 +209,7 @@
     ctx.beginPath();
     for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
       const g = MH.world.g(tx, ty);
-      if (g !== MH.G.WATER && g !== MH.G.DEEP && g !== MH.G.PADDY) continue;
+      if (g !== MH.G.WATER && g !== MH.G.DEEP && g !== MH.G.PADDY && g !== MH.G.SPRING) continue;
       const ph = MH.hash2(tx, ty, 77) * 6.28, v = Math.sin(t * 1.5 + ph);
       if (v < 0.55) continue;
       const ox = tx * T + MH.hash2(tx, ty, 5) * 10 + (g === MH.G.WATER && ty < 77 ? (t * 6) % 6 : 0), oy = ty * T + 3 + MH.hash2(tx, ty, 6) * 10;

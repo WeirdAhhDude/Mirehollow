@@ -9,7 +9,7 @@
     if (!MH.state || MH.titleMode) return;
     const st = MH.state;
     if (st.log.length > 400) st.log = st.log.slice(-400);
-    MH.store.set('save', st);
+    MH.store.set(MH.slotKey('save'), st);
   };
   MH.onPause = () => MH.save();
   window.addEventListener('pagehide', () => MH.save());
@@ -26,6 +26,7 @@
     for (const id in st.npcs) { const n = st.npcs[id]; n.perceived = Object.assign({ violent: 0 }, n.perceived || {}); }
     st.player.wardrobe = st.player.wardrobe || []; st.player.decor = st.player.decor || []; st.player.violence = st.player.violence || 0;
     st.quests = st.quests || []; st.jobsDone = st.jobsDone || {}; if (st.job === undefined) st.job = null;
+    if (st.player.hp == null) st.player.hp = 100;
     st.plans = st.plans || []; st.parties = st.parties || []; st.joined = st.joined || {}; st.companions = st.companions || [];
     if (st.lastApproach == null) st.lastApproach = -99999;
     if ((st.version || 1) < 2) { st.version = 2; st.player.tx = 37; st.player.ty = 33; } // new, bigger town
@@ -34,6 +35,7 @@
   }
 
   MH.loadState = function (st) {
+    if (MH.chat && MH.chat.active) MH.chat.end();
     MH.state = migrate(st);
     if (MH.state.today.nimbus == null || !MH.state.today.announced) MH.sim.newDay(true);
     MH.makePlayer();
@@ -46,25 +48,26 @@
     afterLoad();
     MH.ui.updateHud();
     MH.emit('companions');
+    MH.fight && MH.fight.updateHud(); MH.phone && MH.phone.updateHud();
   };
   // things that live in the world but are driven by the save (decor, job litter)
   function afterLoad() {
     MH.shop && MH.shop.placeDecor();
     MH.jobs && MH.jobs.restore();
-    const snap = MH.store.get('dayStart', null);
+    const snap = MH.store.get(MH.slotKey('dayStart'), null);
     if (!snap || snap.day !== MH.state.time.day || snap.created !== MH.state.created) MH.daySnapshot();
   }
 
   // ---------- "Reset today": a snapshot of the game at the start of each day
   MH.daySnapshot = function () {
     if (!MH.state || MH.titleMode) return;
-    try { MH.store.set('dayStart', { day: MH.state.time.day, created: MH.state.created, state: JSON.parse(JSON.stringify(MH.state)) }); } catch (e) { console.warn('snapshot', e); }
+    try { MH.store.set(MH.slotKey('dayStart'), { day: MH.state.time.day, created: MH.state.created, state: JSON.parse(JSON.stringify(MH.state)) }); } catch (e) { console.warn('snapshot', e); }
   };
   MH.dayReset = {
-    canRewind() { const s2 = MH.store.get('dayStart', null); return !!(s2 && s2.state && s2.day === MH.state.time.day && s2.created === MH.state.created); },
+    canRewind() { const s2 = MH.store.get(MH.slotKey('dayStart'), null); return !!(s2 && s2.state && s2.day === MH.state.time.day && s2.created === MH.state.created); },
     // undo everything since the start of the day
     rewind() {
-      const s2 = MH.store.get('dayStart', null); if (!s2 || !s2.state) return false;
+      const s2 = MH.store.get(MH.slotKey('dayStart'), null); if (!s2 || !s2.state) return false;
       if (MH.chat.active) MH.chat.end();
       MH.loadState(JSON.parse(JSON.stringify(s2.state)));
       MH.save();
@@ -101,6 +104,7 @@
     afterLoad();
     MH.save();
     MH.ui.updateHud();
+    MH.fight && MH.fight.updateHud(); MH.phone && MH.phone.updateHud();
     setTimeout(() => MH.ui.vibe('You\'ve just moved into a little house by the railway crossing in Mirehollow. The swamp is past the last lamp post. Bring bug spray.'), 500);
     if (!MH.store.get('seenHelp', false)) { setTimeout(() => { MH.ui.openHelp(); MH.store.set('seenHelp', true); }, 1500); }
     // The Mayor comes to welcome you.

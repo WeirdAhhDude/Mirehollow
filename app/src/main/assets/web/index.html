@@ -17,12 +17,14 @@
       <div class="hl">
         <div class="pill clock"><b id="hudTime">--:--</b><span id="hudDay"></span></div>
         <div class="pill place" id="hudPlace"></div>
+        <div id="hpBar" class="pill hp"><span>❤️</span><div class="bar"><i></i></div><b>100</b></div>
         <div id="party"></div>
         <button id="jobPill" class="pill job hidden"></button>
       </div>
       <div class="hr">
         <div class="pill" id="hudCoins"></div>
         <span id="hudAi" class="aidot" title=""></span>
+        <button id="btnPhone" class="hb hidden" title="Phone">📱<span class="badge"></span></button>
         <button id="btnJournal" class="hb" title="Journal (J)">📖</button>
         <button id="btnLog" class="hb" title="Chat log (L)">💬</button>
         <button id="btnMenu" class="hb" title="Menu (Esc)">⚙️</button>
@@ -48,6 +50,7 @@
           <button id="btnChatLog" class="qb" title="Chat log">📜 Log</button>
           <button id="btnInvite" class="qb" title="Invite someone over or to meet somewhere">🏠 Invite</button>
           <button id="btnGive" class="qb" title="Give something">🎁 Give</button>
+          <button id="btnFight" class="qb" title="Spar or fight">⚔️ Fight</button>
           <button id="btnStar" class="qb" title="Insert an *action*">✱ Action</button>
           <button data-act="*waves*">👋</button>
           <button data-act="*hugs*">🤗</button>
@@ -88,6 +91,8 @@
   <script src="js/shop.js"></script>
   <script src="js/jobs.js"></script>
   <script src="js/quests.js"></script>
+  <script src="js/fight.js"></script>
+  <script src="js/phone.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

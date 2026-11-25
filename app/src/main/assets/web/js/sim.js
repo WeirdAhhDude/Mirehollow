@@ -74,6 +74,7 @@
     const ch = MH.CHAR[id], h = MH.hour(), d = MH.weekday();
     const ap = sim.activePlan(id);
     if (ap) return { mode: 'plan', loc: ap.loc, plan: ap };
+    if (MH.fight && MH.fight.isHurt(MH.npcById[id]) && id !== 'owl') return { mode: 'out', loc: 'clinic', hurt: true };
     if (ch.visitor && !MH.state.today[ch.visitor]) return { mode: 'away', loc: 'sky' };
     if (id === 'scarecrow') return { mode: 'out', loc: MH.state.today.scarecrowSpot || 'paddies' };
     const g = MH.GATHERINGS.find((x) => x.day === d && h >= x.from && h < x.to && x.who.includes(id));
@@ -102,6 +103,7 @@
     const L = MH.world.locations[plan.loc];
     const name = L ? L.name : 'somewhere';
     if (plan.mode === 'plan') return plan.plan.kind === 'party' ? 'heading to the player\'s party' : plan.plan.kind === 'visit' ? 'visiting the player\'s house as arranged' : 'waiting at ' + name + ' for the player, as arranged (' + (plan.plan.what || 'a meetup') + ')';
+    if (plan.hurt) return 'limping to the clinic after a fight, bruised and sore';
     if (plan.gathering) return 'at the ' + plan.gathering;
     if (plan.outing) return 'out with friends (' + plan.outing + ') at ' + name;
     if (plan.mode === 'nap') return 'napping at ' + name;
@@ -346,6 +348,27 @@
     p.a.seek = { target: p.b.id, t: 40, why: note };
     p.a.showEmote('anger', 2);
   };
+  // the Hollow Gang and the town's bullies go after other villagers now and then
+  const HARASS = {
+    rook: (b) => `Rook corners ${b} and demands a "road toll", twirling his knife`,
+    gristle: (b) => `Gristle shakes ${b} down for "protection money", cracking his knuckles`,
+    snitch: (b) => `Snitch tries to pickpocket ${b} and gets caught red-handed`,
+    mortimer: (b) => `Mortimer Vale hounds ${b} about money they supposedly owe him, coldly threatening them`,
+    vesper: (b) => `Vesper sweetly spreads a cruel rumour about ${b} to their face, trying to make them cry`,
+  };
+  sim.considerHarass = function () {
+    if (MH.settings.ambient === 'off') return;
+    const bullies = MH.npcs.filter((e) => MH.VILLAINS.includes(e.id) && !e.hidden && !e.asleep && !e.busy && !e.following && !e.guest && !e.seek && sim.approaching !== e && !(MH.fight && MH.fight.isHurt(e)));
+    if (!bullies.length) return;
+    const a = MH.pick(bullies);
+    const victims = MH.npcs.filter((v) => v !== a && !v.hidden && !v.busy && !v.asleep && !v.following && !v.guest && !MH.VILLAINS.includes(v.id) && !MH.social.isTough(v.id) && v.id !== 'scarecrow' && !v.ch.visitor && MH.roomOf(v) === MH.roomOf(a) && MH.distTiles(v, a) < 30);
+    if (!victims.length) return;
+    victims.sort((x, y) => MH.distTiles(x, a) - MH.distTiles(y, a));
+    const b = MH.pick(victims.slice(0, 4));
+    const why = HARASS[a.id] ? HARASS[a.id](b.ch.name) : `${a.ch.name} picks on ${b.ch.name}`;
+    a.seek = { target: b.id, t: 45, why, harass: true };
+    if (Math.min(MH.distTiles(a, MH.player), MH.distTiles(b, MH.player)) < 22 && !MH.chat.active) sim.vibeNow(`${a.ch.name} is heading for ${b.ch.name}… that can't be good.`);
+  };
   sim.argue = async function (a, b, why) {
     if (a.busy || b.busy) return;
     a.busy = b.busy = 'smalltalk'; a.path = b.path = null;
@@ -368,6 +391,11 @@
       else if (!MH.chat.active) sim.vibeNow(MH.pick([`You hear shouting near ${where}.`, `Somebody is having a row near ${where}.`, `Raised voices drift over from ${where}.`]));
     }
     a.busy = b.busy = null;
+    // sometimes it doesn't stay verbal
+    const rel = MH.social.npc(a.id).rel[b.id] || 0;
+    const bully = MH.VILLAINS.includes(a.id) && a.id !== 'vesper' && a.id !== 'snitch';
+    if (MH.fight && ((bully && Math.random() < 0.3) || (rel <= -50 && MH.fight.power(a.id) >= 2 && MH.fight.power(b.id) >= 2 && Math.random() < 0.15))) { await MH.fight.npcFight(a, b, why); return; }
+    if (bully && visible) sim.vibeNow(`${b.ch.name} looks shaken after that run-in with ${a.ch.name}.`);
     // the loser of the argument storms off
     const loser = Math.random() < 0.5 ? a : b; loser.planKey = null; loser.planDelay = 0;
     a.idleT = b.idleT = MH.rand(3, 8);
@@ -390,13 +418,14 @@
   }
 
   sim.considerApproach = function () {
-    if (MH.chat.active || sim.approaching || MH.ui.modalOpen || MH.roomOf(MH.player)) return;
+    if (MH.chat.active || sim.approaching || MH.ui.modalOpen || MH.roomOf(MH.player) || (MH.fight && (MH.fight.active || MH.fight._ko))) return;
     const now = MH.absMinutes();
     if (now - (MH.state.lastApproach || -99999) < 300) return; // at most one every ~5 game hours
     const pl = MH.player;
     let best = null, bestScore = 0.9;
     for (const e of MH.npcs) {
-      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest || e.following || e.seek || MH.social.isAfraid(e.id)) continue;
+      if (e.hidden || e.asleep || e.busy || e.folk || e.ch.elusive || e.id === 'sable' || e.guest || e.following || e.seek || MH.social.isAfraid(e.id) || (MH.fight && MH.fight.isHurt(e))) continue;
+      if ((MH.state.player.invisUntil || 0) > now) continue;
       const d = MH.distTiles(e, pl);
       if (d > 14 || d < 2) continue;
       const n = MH.social.npc(e.id);
@@ -407,16 +436,20 @@
       if (fresh.length) score += 0.55;
       if (att >= 55) score += 0.45;
       if (att <= -40 && fresh.length) score += 0.3;
-      const favour = att >= 8 && MH.quests && MH.quests.canOffer(e.id) && Math.random() < 0.35;
+      const favour = !e.ch.bandit && att >= 8 && MH.quests && MH.quests.canOffer(e.id) && Math.random() < 0.35;
       if (favour) score += 0.7;
+      const quiet = MH.hour() >= 19 || MH.hour() < 5 || !['square', 'well', 'bakery', 'station', 'mall', 'myroom'].includes(MH.world.placeAt(pl.x, pl.y).key);
+      const mug = e.ch.bandit && e.id !== 'snitch' && att < 15 && quiet && Math.random() < 0.5;
+      if (mug) score += 0.9;
       if (e.ch.mute) score -= 0.4;
-      if (score > bestScore) { bestScore = score; best = { e, fresh, n, att, favour }; }
+      if (score > bestScore) { bestScore = score; best = { e, fresh, n, att, favour, mug }; }
     }
     if (!best || Math.random() < 0.4) return;
-    const { e, fresh, n, att, favour } = best;
+    const { e, fresh, n, att, favour, mug } = best;
     const P = MH.state.player;
     let reason;
-    if (favour && (!fresh.length || Math.random() < 0.5)) reason = `${e.ch.name} came over because they need a favour from ${P.name}: they ask the player to help with something specific to their life (offer it as a "quest" — the player may refuse).`;
+    if (mug) reason = `${e.ch.name} corners the player to mug them, demanding coins (a "road toll"). If the player refuses, stalls or fights back, set "fight" with kind "mugging".`;
+    else if (favour && (!fresh.length || Math.random() < 0.5)) reason = `${e.ch.name} came over because they need a favour from ${P.name}: they ask the player to help with something specific to their life (offer it as a "quest" — the player may refuse).`;
     else if (fresh.length) { const m = fresh[fresh.length - 1]; m.discussed = true; reason = `${e.ch.name} walked up to ${P.name} on purpose because of this: "${m.text}". They want to bring it up.`; }
     else if (att >= 55) reason = `${e.ch.name} spotted ${P.name}, whom they really like, and came over to chat.`;
     else reason = `${e.ch.name} came over to ${P.name} with something on their mind.`;
@@ -757,6 +790,7 @@
     else if (t.kind === 'exit') { if (t.it.room === 'home') sim.goOutside(); else MH.exitRoom(t.it.room); }
     else if (t.kind === 'party') MH.ui.openPartyPlanner();
     else if (t.kind === 'fridge') sim.fridge();
+    else if (t.kind === 'spring') sim.soak();
   };
 
   sim.goInside = function () {
@@ -775,6 +809,17 @@
     MH.ui.toast(`${MH.itemIcon(snack)} Took a ${snack.toLowerCase()} from the fridge`);
   };
 
+  sim.soak = function () {
+    const P = MH.state.player;
+    if (P.coins < 5) { sim.vibeNow('Granny Thistle: "Five coins, sprout. The water isn\'t free and neither am I."'); return; }
+    MH.social.addCoins(-5);
+    const f = document.getElementById('fade'); f.classList.add('on');
+    setTimeout(() => {
+      MH.state.time.minutes += 45; MH.fight.heal(100); f.classList.remove('on');
+      sim.vibeNow('You soak in the steaming water until every ache melts away. (Full health, −5 coins)');
+      const g = MH.npcById.thistle; if (g && !g.hidden && MH.distTiles(g, MH.player) < 14) { MH.social.addMemory('thistle', `${P.name} paid for a soak at the onsen. Good manners.`, { imp: 1 }); MH.social.changeBond('thistle', 1); }
+    }, 700);
+  };
   sim.knock = function (b) {
     const inside = MH.npcs.filter((e) => e.hidden && !e.busy && e.insideLoc === b.id && !e.ch.visitor);
     if (!inside.length) { sim.vibeNow(`You knock on the door of ${b.generic ? 'the house' : b.name}. Nobody answers.`); return; }
@@ -822,6 +867,21 @@
     return null;
   };
 
+  // Snitch lifts things from your pocket if you stand too close (once a day at most)
+  function pickpocketTick() {
+    const s = MH.npcById.snitch, P = MH.state.player;
+    if (!s || s.hidden || s.busy || MH.chat.active || MH.state.today.snitched || (P.invisUntil || 0) > MH.absMinutes()) return;
+    if (MH.distTiles(s, MH.player) > 1.7 || Math.random() > 0.12) return;
+    MH.state.today.snitched = true;
+    const items = P.inv.filter((x) => !x.quest && (x.price || 0) <= 40); // small stuff only
+    let what;
+    if (items.length && Math.random() < 0.6) { const it = MH.pick(items); P.inv.splice(P.inv.indexOf(it), 1); what = 'your ' + it.name; }
+    else { const c = Math.min(P.coins, MH.randi(5, 15)); if (!c) return; P.coins -= c; what = c + ' coins'; }
+    MH.social.addMemory('snitch', `Lifted ${what.replace('your ', P.name + "'s ")} without them noticing. Heh.`, { imp: 2 });
+    MH.ui.toast(`👛 Your pocket feels lighter… (${what} gone. Was that Snitch?)`, 4.5);
+    sim.flee(s);
+  }
+
   // ------------------------------------------------------------ main update
   let slow = 0;
   sim.update = function (dt) {
@@ -830,8 +890,13 @@
     scarecrowTick(dt);
     trainTick(dt);
     slow += dt;
-    if (slow > 1) { slow = 0; gatheringTick(); partyTick(); MH.jobs && MH.jobs.tick(); MH.quests && MH.quests.tick(); }
-    if (MH.player) MH.player.speed = 74 * ((MH.state.player.buffUntil || 0) > MH.absMinutes() ? 1.35 : 1);
+    if (slow > 1) { slow = 0; gatheringTick(); partyTick(); MH.jobs && MH.jobs.tick(); MH.quests && MH.quests.tick(); MH.fight && MH.fight.tick(); MH.phone && (MH.phone.tick(), MH.phone.updateHud()); pickpocketTick(); }
+    const PS = MH.state.player, nowA = MH.absMinutes();
+    if (MH.player) MH.player.speed = 74 * ((PS.buffUntil || 0) > nowA ? 1.35 : 1) * (PS.boots ? 1.25 : 1);
+    // the jetpack runs out: land somewhere you can stand
+    if (PS.flyUntil && PS.flyUntil <= nowA) { PS.flyUntil = 0; const t = MH.player.tile(); if (!MH.world.walkable(t.tx, t.ty)) { const s = MH.world.nearestWalkable(t.tx, t.ty); MH.player.setTile(s.tx, s.ty); } MH.ui.toast('🚀 The jetpack sputters out. You land with a thud.', 3); }
+    sim.harassTimer = (sim.harassTimer == null ? 90 : sim.harassTimer) - dt;
+    if (sim.harassTimer <= 0) { sim.harassTimer = MH.rand(90, 200); if (Math.random() < 0.55) sim.considerHarass(); }
     roomTick();
     if (MH.ui.modalOpen) { sim.target = null; MH.emit('target', null); return; }
     sim.target = findTarget();

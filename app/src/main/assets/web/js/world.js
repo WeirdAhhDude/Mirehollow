@@ -4,14 +4,17 @@
 'use strict';
 (function (MH) {
   const T = MH.TILE;
-  const W = 220, H = 130, TOWN_W = 150;
-  const G = { GRASS: 0, WOODS: 1, PATH: 2, PLAZA: 3, SAND: 4, WATER: 5, SWAMP: 6, MUD: 7, FIELD: 8, BOARD: 9, DEEP: 10, ROAD: 11, RAIL: 12, PADDY: 13, FLOOR: 14, TATAMI: 15, VOID: 16, STONE: 17, CROSS: 18, WALL: 19, TILEF: 20, RUBBER: 21, CARPET: 22 };
+  const W = 220, H = 200, TOWN_W = 150;
+  // CLIFF = rock face / rim of a raised plateau (solid), STAIRS = carved steps up a cliff,
+  // HIGH = highland grass on top of plateaus, ROCK = stony scree, SPRING = hot-spring water, FALLS = waterfall
+  const G = { GRASS: 0, WOODS: 1, PATH: 2, PLAZA: 3, SAND: 4, WATER: 5, SWAMP: 6, MUD: 7, FIELD: 8, BOARD: 9, DEEP: 10, ROAD: 11, RAIL: 12, PADDY: 13, FLOOR: 14, TATAMI: 15, VOID: 16, STONE: 17, CROSS: 18, WALL: 19, TILEF: 20, RUBBER: 21, CARPET: 22, CLIFF: 23, STAIRS: 24, HIGH: 25, ROCK: 26, SPRING: 27, FALLS: 28 };
   MH.G = G;
 
   const world = (MH.world = {
     W, H, TOWN_W,
     ground: new Uint8Array(W * H),
     solid: new Uint8Array(W * H),
+    level: new Uint8Array(W * H), // 0 = valley floor, 1-2 = plateaus
     props: [], buildings: [], locations: {}, lights: [], interactables: [], poles: [], wires: [], crossings: [],
     interior: { x0: 154, y0: 4, x1: 167, y1: 13 },
   });
@@ -25,7 +28,8 @@
   world.isSolid = (x, y) => !inB(x, y) || world.solid[idx(x, y)] === 1;
   const setSolid = (x, y, v = 1) => { if (inB(x, y)) world.solid[idx(x, y)] = v; };
   world.setSolid = setSolid;
-  world.isWater = (x, y) => { const g = world.g(x, y); return g === G.WATER || g === G.SWAMP || g === G.DEEP; };
+  world.isWater = (x, y) => { const g = world.g(x, y); return g === G.WATER || g === G.SWAMP || g === G.DEEP || g === G.SPRING || g === G.FALLS; };
+  world.lvl = (x, y) => (inB(x, y) ? world.level[idx(x, y)] : 0);
   // ---------------------------------------------------------------- interiors (rooms live off-map, x >= 152)
   // x0..x1 / y0..y1 include the walls. Two top rows are the back wall; the door gap is in the bottom wall.
   const ROOMS = {
@@ -72,6 +76,12 @@
     B('station', 'Mirehollow Station', 87, 28, 10, 6, { roof: ROOF.teal, wall: '#ece4d4', kind: 'station', sign: 'MIREHOLLOW' }),
     B('shrine', 'The Old Shrine', 70, 3, 9, 5, { roof: '#4a4046', wall: '#b04a34', kind: 'shrine' }),
     B('mall', 'Mirehollow Mall', 64, 78, 12, 6, { roof: ROOF.teal, wall: '#f2ece2', kind: 'shop', sign: 'MIREHOLLOW MALL', awning: ['#e0604a', '#fff4e8'], storeys: 2 }),
+    // --- the highlands (south): Crag Heights village on a plateau, Lookout Hill, the bandits' Hollow
+    B('onsen', 'Thistle\'s Onsen', 122, 131, 8, 5, { roof: '#7a4a3a', wall: '#ecdcc4', kind: 'shop', sign: 'ONSEN ♨', awning: ['#3a6a8a', '#f4f0e8'] }),
+    B('manor', 'Vale Manor', 100, 131, 9, 6, { roof: '#3a3440', wall: '#d4ccbc', kind: 'house', storeys: 2, big: true }),
+    B('cabin', 'Juniper\'s Cabin', 25, 144, 5, 4, { roof: '#7a5a34', wall: '#c8a070', kind: 'house' }),
+    B('hideout', 'The Hollow (bandit hideout)', 60, 170, 7, 4, { kind: 'cave' }),
+    B('crowsnest', 'Crow\'s Nest Cottage', 84, 141, 6, 5, { roof: '#4a4a5a', wall: '#d8d0c4', kind: 'house' }),
   ];
   // Generic houses for the townsfolk.
   const HOUSES = [
@@ -79,6 +89,7 @@
     [6, 26, 6, 6], [14, 26, 6, 6], [23, 26, 6, 6], [46, 27, 6, 5], [54, 27, 6, 5], [62, 27, 7, 5],
     [33, 63, 6, 5], [26, 76, 6, 5], [6, 76, 6, 5], [14, 76, 7, 5], [33, 76, 6, 5],
     [112, 40, 6, 6], [120, 40, 6, 6], [120, 50, 6, 5], [104, 56, 6, 5], [120, 64, 6, 5],
+    [112, 131, 6, 5], [110, 143, 6, 5], [135, 143, 5, 5], [93, 145, 6, 5],
   ];
   const HOUSE_ROOFS = [ROOF.terracotta, ROOF.slate, ROOF.blue, ROOF.terracotta, '#9a5a3a', ROOF.dark, ROOF.moss];
   const HOUSE_WALLS = ['#f4ecdc', '#e8dcc4', '#f2f0ea', '#d8c4a4', '#e6e2d6', '#c8b49a'];
@@ -123,9 +134,22 @@
     stilthouse: { name: 'the Stilt House', r: [135, 54, 143, 56], desc: 'on the boardwalk below Maggie\'s Stilt House' },
     gatorgrove: { name: 'the Gator Grove', r: [132, 96, 142, 98], desc: 'at the muddy Gator Grove, with suspicious hissing from the bushes' },
     sky: { name: 'the sky', r: [76, 55, 80, 58], desc: 'somewhere above the clouds' },
+    // highlands
+    foothills: { name: 'the foothills', r: [40, 126, 90, 158], desc: 'in the breezy foothills south of town, boulders in the long grass and cliffs rising ahead' },
+    orchard: { name: 'the orchard', r: [46, 132, 72, 150], desc: 'in the old apple orchard in the foothills, bees humming between the trees' },
+    lookout: { name: 'Lookout Hill', r: [14, 132, 30, 141], desc: 'on the windy summit of Lookout Hill (two cliff levels up), with a wooden lookout tower and a view over the whole town' },
+    cabin: { name: 'Juniper\'s Cabin', r: [24, 148, 31, 150], desc: 'outside Juniper\'s log cabin halfway up Lookout Hill' },
+    heights: { name: 'Crag Heights', r: [92, 130, 140, 152], desc: 'up on Crag Heights, a little village on a raised plateau with cliffs all around and stairs carved into the rock' },
+    onsen: { name: 'Thistle\'s Onsen', r: [120, 136, 130, 144], desc: 'by the steaming outdoor hot spring of Thistle\'s Onsen on Crag Heights' },
+    manor: { name: 'Vale Manor', r: [100, 137, 108, 138], desc: 'outside the cold, too-neat Vale Manor on Crag Heights' },
+    crowsnest: { name: 'Crow\'s Nest Cottage', r: [84, 146, 89, 147], desc: 'outside a shabby cottage at the foot of the cliffs' },
+    falls: { name: 'the waterfall', r: [110, 155, 122, 160], desc: 'at the pool below the waterfall that spills off Crag Heights, mist in the air' },
+    hideout: { name: 'the Hollow Crags', r: [54, 174, 74, 184], desc: 'up on the Hollow Crags, a barren rocky plateau around the bandits\' cave — not a nice place to be alone' },
+    scrub: { name: 'the scrublands', r: [90, 162, 146, 192], desc: 'in the dry rocky scrublands at the southern edge of the valley' },
+    pines: { name: 'the Pine Forest', r: [2, 156, 48, 197], desc: 'in the dark, quiet Pine Forest at the south-west of the valley' },
   };
   // Public places townsfolk wander between.
-  world.PUBLIC = ['square', 'well', 'bakery', 'station', 'crossing', 'northlane', 'lanes', 'park', 'river', 'pond', 'sunflowers', 'paddies', 'busstop', 'shrine', 'store', 'postoffice', 'club', 'mall', 'mall'];
+  world.PUBLIC = ['square', 'well', 'bakery', 'station', 'crossing', 'northlane', 'lanes', 'park', 'river', 'pond', 'sunflowers', 'paddies', 'busstop', 'shrine', 'store', 'postoffice', 'club', 'mall', 'mall', 'foothills', 'orchard', 'heights', 'falls'];
 
   // ---------------------------------------------------------------- painting helpers
   function rect(x0, y0, x1, y1, fn) { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (inB(x, y)) fn(x, y); }
@@ -156,10 +180,129 @@
   const freeTile = (x, y) => inB(x, y) && !world.isSolid(x, y) && !world.isWater(x, y);
   const nearType = (x, y, r, ...types) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (types.includes(world.g(x + dx, y + dy))) return true; return false; };
 
+  // ---------------------------------------------------------------- highlands: plateaus with cliff faces
+  // A plateau's top is walkable; around it the rim is rock (CLIFF, solid). Its south side is a 2-tile
+  // cliff face you see from the front (like CrossCode's ledges); stairs are cut into the faces.
+  const plateaus = [];
+  function plateau(x0, y0, x1, y1, level, ground, seed) {
+    const top = [];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      // nibble the corners so they look natural, not boxy
+      const jag = MH.hash2(x >> 1, y >> 1, seed) < 0.35;
+      const edge = Math.min(x - x0, x1 - x, y - y0, y1 - y);
+      if (edge === 0 && jag && y !== y1) continue; // keep the south edge whole so stairs line up
+      if ((x - x0 < 2 || x1 - x < 2) && (y - y0 < 2 || y1 - y < 2) && edge < 1 + (MH.hash2(x, y, seed + 1) < 0.5 ? 1 : 0)) continue;
+      top.push([x, y]);
+      setG(x, y, ground); world.level[idx(x, y)] = level;
+    }
+    plateaus.push({ level, top });
+  }
+  function carveCliffs() {
+    const isCliff = new Set();
+    const mark = (x, y) => { if (!inB(x, y)) return; setG(x, y, G.CLIFF); setSolid(x, y, 1); isCliff.add(x + ',' + y); };
+    // lower plateaus first, so higher ones cut their rims into them
+    plateaus.slice().sort((a, b) => a.level - b.level).forEach((P) => {
+      for (const [x, y] of P.top) {
+        const L = world.level[idx(x, y)];
+        if (L !== P.level) continue;
+        const below = world.level[idx(x, y + 1)];
+        if (below < L && !isCliff.has(x + ',' + (y + 1))) { mark(x, y + 1); mark(x, y + 2); world.level[idx(x, y + 1)] = L; world.level[idx(x, y + 2)] = L - 1; }
+        for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [-1, -1], [1, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (inB(nx, ny) && world.level[idx(nx, ny)] < L && !isCliff.has(nx + ',' + ny)) mark(nx, ny);
+        }
+      }
+    });
+  }
+  // stairs: a 2-wide flight cut through a cliff from (x, yTop) down to (x, yBottom)
+  function stairs(x, y0, y1) {
+    for (const dx of [0, 1]) for (let y = y0 - 1; y <= y1 + 1; y++) {
+      if (y < y0 || y > y1) { if (world.g(x + dx, y) !== G.CLIFF) continue; } // extend through any extra rim rock
+      setG(x + dx, y, G.STAIRS); setSolid(x + dx, y, 0);
+    }
+  }
+  function highlands() {
+    // valley floor: meadows with patches of stony scree and a pine forest
+    rect(1, 126, TOWN_W - 2, H - 2, (x, y) => {
+      const n = MH.art.vnoise(x, y, 9, 21);
+      if (y > 189 || (x < 8 && y > 152) || (x < 46 && y > 162 && n < 0.62)) setG(x, y, G.WOODS);
+      else if (x > 88 && y > 160 && n < 0.55) setG(x, y, G.ROCK);
+      else if (n < 0.16) setG(x, y, G.ROCK);
+    });
+    // Lookout Hill: two levels, a summit with a lookout tower
+    plateau(8, 129, 36, 149, 1, G.HIGH, 31);
+    plateau(14, 131, 30, 139, 2, G.ROCK, 32);
+    // Crag Heights: the plateau village
+    plateau(92, 129, 141, 151, 1, G.HIGH, 33);
+    // the Hollow Crags: bandit country
+    plateau(52, 167, 77, 185, 1, G.ROCK, 34);
+    carveCliffs();
+    stairs(21, 140, 141);   // summit -> hill
+    stairs(22, 150, 151);   // hill -> valley
+    stairs(100, 152, 153);  // Crag Heights (west stairs)
+    stairs(133, 152, 153);  // Crag Heights (east stairs)
+    stairs(63, 186, 187);   // the Hollow Crags
+    stairs(77, 175, 175); setG(78, 175, G.STAIRS); setSolid(78, 175, 0); // side ramp to the crags from the road
+    // a creek on Crag Heights spills over the edge as a waterfall into a pool
+    rect(116, 145, 117, 151, (x, y) => setG(x, y, G.WATER));
+    rect(116, 152, 117, 153, (x, y) => { setG(x, y, G.FALLS); setSolid(x, y, 1); });
+    for (let y = 154; y < 161; y++) for (let x = 111; x < 123; x++) {
+      const d = ((x - 116.5) / 5.5) ** 2 + ((y - 157) / 3.4) ** 2;
+      if (d < 0.45) setG(x, y, G.DEEP); else if (d < 1) setG(x, y, G.WATER); else if (d < 1.4 && world.g(x, y) !== G.CLIFF) setG(x, y, G.SAND);
+    }
+    // the onsen's outdoor bath
+    rect(121, 139, 128, 143, (x, y) => setG(x, y, (x === 121 || x === 128 || y === 139 || y === 143) ? G.STONE : G.SPRING));
+    // roads & paths
+    paintPath([[79, 124], [79, 192]], 2);              // main road on into the valley
+    paintPath([[42, 100], [42, 160]], 2);              // west road down to the hills
+    paintPath([[42, 160], [120, 160]], 2);             // valley road
+    paintPath([[22, 152], [22, 160], [42, 160]], 2, G.PATH);
+    paintPath([[100, 154], [100, 160]], 2, G.PATH);
+    paintPath([[133, 154], [133, 160], [120, 160]], 2, G.PATH);
+    paintPath([[63, 188], [63, 191], [79, 191]], 2, G.PATH);
+    paintPath([[94, 137], [139, 137]], 2, G.PATH);       // Crag Heights high street
+    paintPath([[100, 139], [100, 151]], 2, G.PATH);
+    paintPath([[133, 139], [133, 151]], 2, G.PATH);
+    paintPath([[22, 142], [22, 149]], 2, G.PATH);
+    paintPath([[24, 148], [31, 148]], 1, G.PATH);
+    paintPath([[48, 141], [70, 141]], 1, G.PATH);       // orchard lane
+  }
+  function highlandProps() {
+    const rng = MH.seeded(777);
+    // Lookout tower on the summit, lanterns on Crag Heights
+    prop('lookout', 22, 135, { w: 2 }); setSolid(23, 135); setSolid(22, 134); setSolid(23, 134);
+    [[96, 136], [112, 139], [131, 136], [104, 150], [131, 150]].forEach(([x, y]) => { if (!world.isSolid(x, y)) { const p = prop('lantern', x, y); world.lights.push({ x: p.x, y: p.y - 26, r: 54, color: '#ffd890', lamp: true }); } });
+    // steam over the hot spring
+    [[123, 141], [126, 140], [125, 142]].forEach(([x, y]) => flat('steam', x, y, { solid: false }));
+    [[120, 138], [129, 138], [120, 144], [129, 144]].forEach(([x, y]) => { if (!world.isSolid(x, y)) prop('rock', x, y); });
+    world.interactables.push(...[[124, 138], [125, 138], [126, 138], [122, 144], [127, 144]].map(([x, y]) => ({ type: 'spring', tx: x, ty: y, label: '♨ Soak in the hot spring' })));
+    // the bandits' black market, by their cave
+    prop('stall', 71, 176, { color: '#3a2a3a' }); setSolid(70, 176); setSolid(72, 176);
+    for (const dx of [-1, 0, 1]) world.interactables.push({ type: 'counter', tx: 71 + dx, ty: 177, shop: 'blackmarket', label: '🗡️ Black market' });
+    // orchard rows (apples to pick)
+    for (let y = 133; y <= 149; y += 4) for (let x = 48; x <= 71; x += 4) if (!world.isSolid(x, y) && world.g(x, y) !== G.PATH && world.g(x, y) !== G.ROAD) prop('tree', x, y, { fruit: true, pick: MH.hash2(x, y, 5) < 0.6 ? 'apple' : null });
+    // scatter: boulders, pines, scrub, dead trees, flowers
+    for (let i = 0; i < 2600; i++) {
+      const x = rng.int(2, TOWN_W - 3), y = rng.int(127, H - 3);
+      const g = world.g(x, y);
+      if (world.isSolid(x, y) || nearType(x, y, 1, G.ROAD, G.PATH, G.STAIRS, G.CLIFF, G.PLAZA, G.WATER, G.SPRING, G.STONE, G.FALLS)) continue;
+      if (world.isSolid(x, y + 1) || world.isSolid(x + 1, y) || world.isSolid(x - 1, y)) continue;
+      const r = rng();
+      if (g === G.WOODS) { if (r < 0.45) prop('cedar', x, y); else if (r < 0.55) prop('tree', x, y, { dark: true }); else if (r < 0.62) flat('fern', x, y); else if (r < 0.65) flat('mushroom', x, y, { pick: 'mushroom' }); }
+      else if (g === G.ROCK) { if (r < 0.12) prop('rock', x, y); else if (r < 0.2) prop('deadtree', x, y); else if (r < 0.26) flat('tallgrass', x, y); }
+      else if (g === G.HIGH) { if (r < 0.1) prop('cedar', x, y); else if (r < 0.2) flat('flowers', x, y, { color: rng.pick(['#f4d03a', '#ffffff', '#b08af0']), pick: 'wildflower' }); else if (r < 0.26) prop('rock', x, y, { small: true }); else if (r < 0.32) flat('tallgrass', x, y); }
+      else if (g === G.GRASS && y < 190) { if (r < 0.08) prop('tree', x, y); else if (r < 0.13) prop('rock', x, y); else if (r < 0.2) prop('bush', x, y, { berry: r < 0.15, pick: r < 0.15 ? 'berries' : null }); else if (r < 0.3) flat('flowers', x, y, { color: rng.pick(['#f07ac0', '#f4d03a', '#ffffff', '#8a7af0']), pick: 'wildflower' }); else if (r < 0.36) flat('tallgrass', x, y); }
+    }
+    // poles along the valley road
+    const line2 = []; for (let x = 44; x <= 118; x += 9) line2.push([x, 158]);
+    const L = []; line2.forEach(([x, y]) => { if (!world.isSolid(x, y) && !world.isWater(x, y) && world.g(x, y) !== G.ROAD) { const p = prop('pole', x, y, { lamp: L.length % 2 === 0 }); world.poles.push(p); if (p.lamp) world.lights.push({ x: p.x + 6, y: p.y - 58, r: 56, color: '#fff0c8', lamp: true }); L.push(p); } });
+    for (let i = 0; i < L.length - 1; i++) world.wires.push([L[i], L[i + 1]]);
+  }
+
   world.gen = function () {
     const rng = MH.seeded(4242);
     world.ground.fill(G.GRASS); world.solid.fill(0);
-    world.props.length = 0; world.buildings.length = 0; world.lights.length = 0; world.interactables.length = 0;
+    world.props.length = 0; world.buildings.length = 0; world.lights.length = 0; world.interactables.length = 0; world.level.fill(0); plateaus.length = 0;
     world.poles.length = 0; world.wires.length = 0; world.crossings.length = 0;
 
     // void + interior area
@@ -173,7 +316,7 @@
     rect(126, 0, TOWN_W - 1, 30, (x, y) => { if (MH.hash2(x >> 2, y >> 2, 1) < 0.85 || y < 26) setG(x, y, G.WOODS); });
 
     // --- swamp (east)
-    for (let y = 28; y < H; y++) {
+    for (let y = 28; y < 126; y++) {
       const edge = 130 + Math.round(Math.sin(y * 0.17) * 1.5 + Math.sin(y * 0.05) * 2);
       for (let x = edge; x < TOWN_W; x++) {
         const n = MH.art.vnoise(x, y, 5, 7) * 0.7 + MH.art.vnoise(x, y, 2.2, 8) * 0.3;
@@ -218,6 +361,7 @@
     paintPath([[42, 23], [42, 100]], 2);                // west road (crosses the tracks)
     paintPath([[79, 23], [79, 48]], 2);                 // main road north
     paintPath([[79, 68], [79, 124]], 2);                // main road south
+    highlands();                                        // the valley, plateaus and cliffs to the south
     paintPath([[116, 23], [116, 72]], 2);               // east road
     paintPath([[4, 32], [78, 32]], 2);                  // lane along the tracks
     paintPath([[4, 58], [42, 58]], 2);                  // Clutch Lane
@@ -364,9 +508,9 @@
     counter('store', [[160, 22], [161, 22]], 'store');
     counter('club', [[172, 22], [173, 22]], 'club');
     fur('desk', 188, 13, 2); counter('gym', [[188, 14], [189, 14]]);
-    counter('lab', [[210, 9], [211, 9]]);
+    counter('lab', [[210, 9], [211, 9]], 'lab');
     counter('townhall', [[194, 22], [195, 22]]);
-    counter('clinic', [[208, 22], [209, 22]]);
+    counter('clinic', [[208, 22], [209, 22]], 'clinic');
     counter('barber', [[156, 37], [157, 37]]);
     // where each room's inside counts as a location
     for (const id in ROOMS) { const R = ROOMS[id]; LOCS['in_' + id] = { name: R.name, r: [R.x0 + 1, R.y0 + 2, R.x1 - 1, R.y1 - 1], desc: R.desc, room: id }; }
@@ -483,7 +627,7 @@
     }
     // --- village greenery: big lush trees, hedges, flowers
     for (let i = 0; i < 1500; i++) {
-      const x = rng.int(1, 128), y = rng.int(14, H - 2);
+      const x = rng.int(1, 128), y = rng.int(14, 128);
       if (world.g(x, y) !== G.GRASS || world.isSolid(x, y)) continue;
       if (nearType(x, y, 1, G.ROAD, G.PLAZA, G.BOARD, G.SAND, G.PATH, G.STONE, G.CROSS, G.RAIL, G.PADDY, G.FIELD)) {
         if (rng() < 0.5 && !nearType(x, y, 0, G.ROAD)) flat('flowers', x, y, { color: rng.pick(['#f07ac0', '#f4d03a', '#ffffff', '#8a7af0', '#f05a4a']), pick: 'wildflower' });
@@ -499,6 +643,7 @@
       else flat('tallgrass', x, y);
     }
     flat('cap', 93, 47, { pick: 'bottlecap' });
+    highlandProps();
 
     // map edges
     for (let x = 0; x < TOWN_W; x++) { setSolid(x, 0); setSolid(x, H - 1); }
@@ -554,6 +699,7 @@
     if (g === G.PADDY) return world.locations.paddies;
     if (g === G.FIELD) return ty > 94 && tx < 62 ? world.locations.sunflowers : world.locations.field;
     if (g === G.WATER) return world.locations.river;
+    if (ty >= 126) return g === G.ROCK ? world.locations.scrub : world.lvl(tx, ty) ? { key: 'highlands', name: 'the highlands', desc: 'up on a windy plateau in the highlands, cliffs dropping away at the edges' } : world.locations.foothills;
     return { key: 'village', name: 'the village', desc: 'on a quiet, overgrown lane in the village' };
   };
 
@@ -561,7 +707,7 @@
   const N = W * H;
   const gScore = new Float32Array(N), came = new Int32Array(N), stamp = new Uint32Array(N), closed = new Uint32Array(N);
   let gen = 1;
-  world.findPath = function (sx, sy, gx, gy, maxNodes = 9000) {
+  world.findPath = function (sx, sy, gx, gy, maxNodes = 16000) {
     if (!world.walkable(gx, gy)) { const n = world.nearestWalkable(gx, gy); gx = n.tx; gy = n.ty; }
     if (sx === gx && sy === gy) return [];
     gen++;

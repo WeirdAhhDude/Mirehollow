@@ -87,7 +87,29 @@
     I('lottery', 'Lottery ticket', '🎟️', 5, 'fun', 'Scratch it. You probably won\'t win. Probably.', { use: 'lottery' }),
     I('bugspray', 'Bug spray', '🧴', 8, 'fun', 'Maggie\'s swarm leaves you alone tonight.', { use: 'bugspray' }),
     I('partykit', 'Party kit', '🎈', 35, 'fun', 'Balloons, streamers, a disco ball. More guests say yes to your next party.', { use: 'partykit' }),
+    // phones
+    I('myphone', 'Smartphone', '📱', 80, 'phone', 'Your own phone: text villagers who have one, invite them over, get texts back.', { phone: 'self' }),
+    I('sparephone', 'Spare phone', '📲', 60, 'gift', 'A cheap phone to GIVE to a villager who doesn\'t have one, so you can text them.'),
+    // weapons (equip one from your pocket; it's used in fights)
+    I('bat', 'Baseball bat', '🏏', 35, 'weapon', 'Solid aluminium. Hits hard in a fight.', { weapon: 'bat' }),
+    I('pan', 'Frying pan', '🍳', 20, 'weapon', 'Cartoon-grade bonking power.', { weapon: 'pan' }),
+    I('knuckles', 'Brass knuckles', '🥊', 45, 'weapon', 'Heavy rings for heavy hands.', { weapon: 'knuckles' }),
+    I('crowbar', 'Crowbar', '🔧', 40, 'weapon', 'Opens doors. And arguments. Dangerous.', { weapon: 'crowbar' }),
+    I('knife', 'Knife', '🔪', 50, 'weapon', 'Lethal. Fights with this get very serious, very fast.', { weapon: 'knife' }),
+    I('baton', 'Stun baton', '⚡', 80, 'weapon', 'Bzzt. Non-lethal, very persuasive.', { weapon: 'baton' }),
+    // Dr. Penelope's inventions (sold at the lab)
+    I('jetpack', 'Jetpack', '🚀', 120, 'invention', 'Fly over anything — cliffs, rivers, rooftops — for an hour. Mostly safe.', { use: 'jetpack' }),
+    I('bhsniper', 'Black Hole Sniper 3000', '🕳️', 250, 'invention', 'Win any fight instantly (3 charges). Penelope says it is "probably" not dangerous.', { use: 'bhsniper' }),
+    I('teleporter', 'Teleporter remote', '🛸', 150, 'invention', 'Zap to any place in the valley. Recharges every hour.', { use: 'teleporter' }),
+    I('cloak', 'Invisibility cloak', '🫥', 90, 'invention', 'Nobody sees what you do for an hour. One use.', { use: 'cloak' }),
+    I('healer', 'Pocket Healer 9000', '💉', 60, 'invention', 'Restores 60 HP. Tastes like batteries.', { use: 'healer' }),
+    I('rainbegone', 'Rain-B-Gone', '☂️', 40, 'invention', 'Clears the weather instantly. Nimbus will NOT like it.', { use: 'rainbegone' }),
+    I('boots', 'Gravity boots', '👢', 110, 'invention', 'You run 25% faster, forever. Slight humming.', { passive: 'boots' }),
+    I('translator', 'Translator collar', '📡', 70, 'invention', 'Understand villagers who don\'t talk (Sable, the Scarecrow…).', { passive: 'translator' }),
+    I('healthsnack', 'Energy bar', '🍫', 8, 'food', 'Chewy, nutty, restores a little health.'),
   ];
+  // what food heals (roughly by price)
+  const FOOD_HP = (it) => (it.id === 'healthsnack' ? 25 : MH.clamp(Math.round(it.price * 1.4), 6, 45));
   MH.SHOP_ITEMS = {};
   ITEMS.forEach((it) => (MH.SHOP_ITEMS[it.id] = it));
 
@@ -96,9 +118,12 @@
     mall_gift: { name: 'Gift Corner', icon: '🎁', items: ['bouquet', 'plushfrog', 'bracelet', 'charm', 'comic', 'perfume', 'watch', 'videogame', 'dumbbells', 'goggles', 'poppers', 'clownnose', 'bloodorange', 'crystalball', 'sleepmask', 'shellnecklace', 'teapot', 'goldcap'] },
     mall_fashion: { name: 'Boutique', icon: '👗', items: ITEMS.filter((i) => i.cat === 'wear').map((i) => i.id) },
     mall_home: { name: 'Home & Decor', icon: '🛋️', items: ITEMS.filter((i) => i.cat === 'home').map((i) => i.id) },
-    mall_fun: { name: 'Fun Zone', icon: '🎆', items: ['firework', 'confetti', 'bubbles', 'glowstick', 'energy', 'lottery', 'partykit'] },
+    mall_fun: { name: 'Fun & Phones', icon: '🎆', items: ['myphone', 'sparephone', 'firework', 'confetti', 'bubbles', 'glowstick', 'energy', 'lottery', 'partykit', 'healthsnack'] },
+    lab: { name: 'Dr. Penelope\'s Inventions', icon: '🧪', staff: 'lab', items: ['jetpack', 'bhsniper', 'teleporter', 'cloak', 'healer', 'rainbegone', 'boots', 'translator'] },
+    blackmarket: { name: 'Black market', icon: '🗡️', items: ['knife', 'crowbar', 'knuckles', 'baton', 'sparephone', 'healer'] },
+    clinic: { name: 'Clinic pharmacy', icon: '💊', staff: 'clinic', items: ['healer', 'healthsnack'] },
     bakery: { name: 'Golden Loaf Bakery', icon: '🥐', staff: 'bakery', items: ['croissant', 'cinnroll', 'cookies', 'cakeslice', 'melonbread', 'sourdough', 'fancycake'] },
-    store: { name: 'General Store', icon: '🏪', staff: 'store', sells: true, items: ['ramune', 'onigiri', 'cookies', 'bugspray', 'energy', 'lottery', 'duck', 'candle', 'glowstick', 'firework'] },
+    store: { name: 'General Store', icon: '🏪', staff: 'store', sells: true, items: ['ramune', 'onigiri', 'cookies', 'healthsnack', 'bugspray', 'energy', 'lottery', 'duck', 'candle', 'glowstick', 'firework', 'bat', 'pan', 'sparephone'] },
     club: { name: 'Velvet Antler bar', icon: '🍹', staff: 'club', items: ['mocktail', 'soda', 'ramune', 'glowstick', 'poppers'] },
   };
   // what Sable pays for things you found
@@ -106,7 +131,10 @@
 
   const shop = (MH.shop = {});
   const P = () => MH.state.player;
-  shop.itemByName = (name) => { const n = String(name || '').toLowerCase(); return ITEMS.find((i) => i.name.toLowerCase() === n) || null; };
+  shop.itemByName = (name) => { const n = String(name || '').toLowerCase(); return ITEMS.find((i) => i.name.toLowerCase() === n) || shop.guessInvention(n); };
+  // items villagers hand you (e.g. Penelope invents something mid-conversation) still work if the name fits
+  const GUESS = [[/jet ?pack|rocket boots|rocket pack/, 'jetpack'], [/black ?hole|sniper|blaster|ray ?gun|death ray/, 'bhsniper'], [/teleport/, 'teleporter'], [/invisib|cloak/, 'cloak'], [/heal|potion|medkit|bandage|medicine/, 'healer'], [/weather|rain/, 'rainbegone'], [/translat/, 'translator'], [/gravity|speed boots|rocket shoes/, 'boots'], [/\bbat\b/, 'bat'], [/\bknife|dagger|switchblade/, 'knife'], [/crowbar/, 'crowbar'], [/knuckle/, 'knuckles'], [/frying pan|skillet/, 'pan'], [/stun|taser|baton/, 'baton'], [/\bphone\b/, 'sparephone']];
+  shop.guessInvention = (n) => { for (const [re, id] of GUESS) if (re.test(n)) return MH.SHOP_ITEMS[id]; return null; };
 
   shop.buy = function (id, shopId) {
     const it = MH.SHOP_ITEMS[id], p = P();
@@ -114,7 +142,9 @@
     if (p.coins < it.price) { MH.ui.toast('Not enough coins.'); return false; }
     if (it.wear && (p.wardrobe || []).includes(it.wear)) { MH.ui.toast('You already own that.'); return false; }
     MH.social.addCoins(-it.price);
-    if (it.wear) { p.wardrobe = p.wardrobe || []; p.wardrobe.push(it.wear); shop.wear(it.wear, true); MH.ui.toast(`${it.icon} Bought ${it.name} — you're wearing it!`, 3); }
+    if (it.phone === 'self') { if (p.phone) { MH.ui.toast('You already have a phone.'); MH.social.addCoins(it.price); return false; } p.phone = true; MH.ui.toast('📱 You got a phone! Tap 📱 at the top to text people.', 4); MH.phone && MH.phone.updateHud(); }
+    else if (it.passive) { p[it.passive] = true; MH.ui.toast(`${it.icon} ${it.name}: active!`, 3); }
+    else if (it.wear) { p.wardrobe = p.wardrobe || []; p.wardrobe.push(it.wear); shop.wear(it.wear, true); MH.ui.toast(`${it.icon} Bought ${it.name} — you're wearing it!`, 3); }
     else if (it.decor) { p.decor = p.decor || []; p.decor.push(it.id); shop.placeDecor(); MH.ui.toast(`${it.icon} ${it.name} will be in your house.`, 3); }
     else { MH.social.giveItem(it.name, null); const last = p.inv[p.inv.length - 1]; if (last) { last.price = it.price; last.shop = it.id; last.icon = it.icon; } MH.ui.toast(`${it.icon} Bought ${it.name} (−${it.price} 🪙)`); }
     // the shopkeeper notices big spenders
@@ -198,14 +228,50 @@
   };
 
   // ---------------------------------------------------------------- using things
-  shop.usable = (inv) => { const it = inv.shop ? MH.SHOP_ITEMS[inv.shop] : shop.itemByName(inv.name); return it && (it.use || it.cat === 'food') ? it : null; };
+  shop.defOf = (inv) => (inv.shop ? MH.SHOP_ITEMS[inv.shop] : shop.itemByName(inv.name));
+  shop.usable = (inv) => { const it = shop.defOf(inv); return it && (it.use || it.cat === 'food' || it.passive) ? it : null; };
+  shop.weaponOf = (inv) => { const it = shop.defOf(inv); return it && it.weapon ? it.weapon : null; };
+  shop.equip = function (inv) {
+    const w = shop.weaponOf(inv), p = P();
+    p.weapon = p.weapon === w ? null : w;
+    MH.ui.toast(p.weapon ? `${inv.icon || ''} Equipped: ${inv.name}` : 'Unequipped — bare fists it is.', 2.5);
+  };
   shop.use = function (index) {
     const p = P(), inv = p.inv[index]; if (!inv) return;
     const it = shop.usable(inv); if (!it) return;
     const pl = MH.player, where = MH.world.placeAt(pl.x, pl.y).name, indoors = !!MH.roomOf(pl);
     const done = () => { p.inv.splice(p.inv.indexOf(inv), 1); MH.ui.closeModal(); };
-    switch (it.use || 'eat') {
-      case 'eat': done(); MH.ui.vibe(MH.pick([`You eat the ${it.name.toLowerCase()}. Delicious.`, `The ${it.name.toLowerCase()} is gone in about four seconds.`, `You enjoy the ${it.name.toLowerCase()} in peace. Mostly.`])); break;
+    switch (it.use || (it.passive ? 'passive' : 'eat')) {
+      case 'eat': done(); MH.ui.vibe(MH.pick([`You eat the ${it.name.toLowerCase()}. Delicious.`, `The ${it.name.toLowerCase()} is gone in about four seconds.`, `You enjoy the ${it.name.toLowerCase()} in peace. Mostly.`])); MH.fight && MH.fight.heal(FOOD_HP(it)); break;
+      case 'passive': done(); p[it.passive] = true; MH.ui.toast(`${it.icon} ${it.name}: active!`, 3); break;
+      case 'jetpack':
+        if (indoors) { MH.ui.toast('Not indoors!! Penelope made you promise.'); return; }
+        done(); p.flyUntil = MH.absMinutes() + 60; MH.render.burst(pl.x, pl.y, 'sparkle', 20); MH.ui.toast('🚀 WHOOSH! You can fly over anything for an hour.', 4);
+        MH.social.witness(`${p.name} flew over ${where} on a jetpack!`, pl.x, pl.y, [], { chaotic: 1, brave: 1 }, 14);
+        break;
+      case 'bhsniper': done(); p.bhCharges = (p.bhCharges || 0) + 3; MH.ui.toast('🕳️ Black Hole Sniper 3000 loaded (3 charges). It appears as a button in fights.', 4.5); break;
+      case 'teleporter': {
+        if ((p.teleT || 0) > MH.absMinutes()) { MH.ui.toast(`🛸 Recharging… (${Math.ceil(p.teleT - MH.absMinutes())} min)`); return; }
+        MH.ui.closeModal();
+        const keys = ['square', 'home', 'bakery', 'park', 'pond', 'station', 'shrine', 'swamp', 'mall', 'foothills', 'orchard', 'heights', 'onsen', 'lookout', 'falls', 'hideout', 'pines'];
+        const body = h(`<div class="form"><p>Where to? (Penelope says "probably" don't teleport into walls.)</p><div class="opts tele"></div></div>`);
+        keys.forEach((k) => { const L = MH.world.locations[k]; if (!L) return; const b = h(`<button class="chip">${MH.esc(MH.cap(L.name.replace(/^the /, '')))}</button>`); b.onclick = () => {
+          MH.ui.closeModal(); p.teleT = MH.absMinutes() + 60;
+          MH.render.burst(pl.x, pl.y - 20, 'sparkle', 24);
+          if (MH.roomOf(pl)) { const R = MH.world.rooms[MH.roomOf(pl)]; if (R.id === 'home') MH.exitHome(); else MH.exitRoom(R.id); }
+          setTimeout(() => { const sp = k === 'home' ? MH.world.doorFront('home') : MH.world.randomSpot(k); MH.player.setTile(sp.tx, sp.ty); MH.render.snap(); MH.render.burst(MH.player.x, MH.player.y - 20, 'sparkle', 24); (MH.state.companions || []).forEach((id) => { const e = MH.npcById[id]; if (e) e.setTile(sp.tx + 1, sp.ty); }); MH.sim.vibeNow(`ZAP. You materialise at ${L.name}, smelling faintly of ozone.`); }, 700);
+        }; body.querySelector('.tele').appendChild(b); });
+        MH.ui.modal('🛸 Teleporter', body);
+        return;
+      }
+      case 'cloak': done(); p.invisUntil = MH.absMinutes() + 60; MH.ui.toast('🫥 You\'re invisible for an hour. Nobody will see what you do.', 4); break;
+      case 'healer': done(); MH.fight && MH.fight.heal(60); MH.ui.vibe('The Pocket Healer 9000 beeps, buzzes and… you feel great. Tastes like batteries.'); break;
+      case 'rainbegone': {
+        done(); MH.state.weather = 'sunny'; MH.state.stormUntil = 0; MH.render.flash = 0.2;
+        MH.sim.vibeNow('Rain-B-Gone whirs. The clouds just… leave. The sun blinks in surprise.');
+        const nb = MH.npcById.nimbus; if (nb && !nb.hidden) { MH.social.changeBond('nimbus', -4); MH.social.addMemory('nimbus', `${p.name} used some gadget to chase my clouds away. RUDE.`, { imp: 3 }); }
+        break;
+      }
       case 'firework':
         if (indoors) { MH.ui.toast('Not indoors! Take it outside.'); return; }
         done(); MH.render.burst(pl.x, pl.y - 60, 'sparkle', 46); MH.render.burst(pl.x, pl.y - 70, 'heart', 10); MH.render.flash = 0.18;
@@ -281,12 +347,17 @@
     const jobs = room && MH.jobs ? MH.jobs.listAt(room) : [];
     if (it.shop && !jobs.length) { MH.ui.openShop(it.shop); return; }
     if (!it.shop && !it.door && jobs.length) { MH.ui.openJobs(room); return; }
-    const body = h(`<div class="menu">${it.shop ? `<button class="btn" data-a="shop">🛒 Buy something</button>` : ''}${jobs.length ? `<button class="btn" data-a="work">💼 Ask for work</button>` : ''}${it.door ? `<button class="btn ghost" data-a="knock">✊ Knock on the door</button>` : ''}</div>`);
+    const body = h(`<div class="menu">${it.room === 'clinic' ? `<button class="btn" data-a="heal">🩹 Get patched up (10 🪙)</button>` : ''}${it.shop ? `<button class="btn" data-a="shop">🛒 Buy something</button>` : ''}${jobs.length ? `<button class="btn" data-a="work">💼 Ask for work</button>` : ''}${it.door ? `<button class="btn ghost" data-a="knock">✊ Knock on the door</button>` : ''}</div>`);
     body.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
       if (a === 'shop') MH.ui.openShop(it.shop, () => MH.ui.openCounter(it));
       if (a === 'work') MH.ui.openJobs(room, () => MH.ui.openCounter(it));
       if (a === 'knock') { MH.ui.closeModal(); MH.sim.knock(it.door); }
+      if (a === 'heal') {
+        if (MH.fight.hp() >= MH.fight.maxHp()) { MH.ui.toast('Doctor Owl: "Hoo. You are perfectly healthy."'); return; }
+        if (P().coins < 10) { MH.ui.toast('Not enough coins.'); return; }
+        MH.social.addCoins(-10); MH.fight.heal(100); MH.ui.closeModal(); MH.ui.vibe('Doctor Owl bandages you with immaculate precision. "Hoo. Try not to get punched."');
+      }
     }));
     MH.ui.modal(it.door ? MH.esc(it.door.name) : MH.esc((MH.SHOPS[it.shop] && MH.SHOPS[it.shop].name) || 'Counter'), body);
   };

@@ -25,7 +25,11 @@
 
   const HB = 4;
   const walk = (tx, ty) => MH.world.walkable(tx, ty) && !MH.world.crossingBlocked(tx, ty);
-  function blockedAt(x, y) {
+  function blockedAt(x, y, e) {
+    if (e && e.isPlayer && MH.state && (MH.state.player.flyUntil || 0) > MH.absMinutes() && !MH.roomOf(e)) {
+      const tx = Math.floor(x / T), ty = Math.floor((y - 2) / T);
+      return tx < 1 || ty < 1 || tx >= MH.world.TOWN_W - 1 || ty >= MH.world.H - 1; // the sky is open
+    }
     const pts = [[x - HB, y - 4], [x + HB, y - 4], [x - HB, y], [x + HB, y]];
     for (const [px, py] of pts) if (!walk(Math.floor(px / T), Math.floor(py / T))) return true;
     return false;
@@ -34,10 +38,10 @@
 
   function tryMove(e, dx, dy) {
     let moved = false;
-    if (dx && !blockedAt(e.x + dx, e.y)) { e.x += dx; moved = true; }
-    else if (dx) { for (const s of [-1, 1]) if (!blockedAt(e.x + dx, e.y + s * 2)) { e.y += s * 0.6; break; } }
-    if (dy && !blockedAt(e.x, e.y + dy)) { e.y += dy; moved = true; }
-    else if (dy) { for (const s of [-1, 1]) if (!blockedAt(e.x + s * 2, e.y + dy)) { e.x += s * 0.6; break; } }
+    if (dx && !blockedAt(e.x + dx, e.y, e)) { e.x += dx; moved = true; }
+    else if (dx) { for (const s of [-1, 1]) if (!blockedAt(e.x + dx, e.y + s * 2, e)) { e.y += s * 0.6; break; } }
+    if (dy && !blockedAt(e.x, e.y + dy, e)) { e.y += dy; moved = true; }
+    else if (dy) { for (const s of [-1, 1]) if (!blockedAt(e.x + s * 2, e.y + dy, e)) { e.x += s * 0.6; break; } }
     return moved;
   }
   function animate(e, dt, moving) {

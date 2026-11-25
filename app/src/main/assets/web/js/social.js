@@ -34,7 +34,7 @@
       created: Date.now(),
       player: Object.assign({
         name: 'Newcomer', pronouns: 'they/them', look: {}, tx: 37, ty: 33, coins: 40, inv: [],
-        rep: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0, violent: 0 }, deeds: [], wardrobe: [], decor: [], violence: 0,
+        rep: { kind: 0, funny: 0, chaotic: 0, generous: 0, brave: 0, rude: 0, violent: 0 }, deeds: [], wardrobe: [], decor: [], violence: 0, hp: 100,
       }, playerOpts || {}),
       time: { day: 0, minutes: 8 * 60 },
       weather: 'sunny',
@@ -200,6 +200,7 @@
   // Everyone awake within `radius` tiles (not in the excluded list) sees `text`.
   S.witness = function (text, wx, wy, exclude, repDeltas, radius = 9) {
     if (!text) return [];
+    if ((MH.state.player.invisUntil || 0) > MH.absMinutes() && /^\S+ /.test(text) && text.startsWith(MH.state.player.name)) return []; // invisible: nobody saw a thing
     const seen = [];
     const R0 = MH.world.roomAt(Math.floor(wx / MH.TILE), Math.floor(wy / MH.TILE)), room0 = R0 ? R0.id : null;
     MH.npcs.forEach((e) => {

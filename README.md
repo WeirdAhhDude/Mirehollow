@@ -13,7 +13,8 @@ reputations evolve on their own. You're the only human in town.
 2. Open it. Android will ask you to allow installs from your browser/file manager — allow it.
 3. Install and launch **Mirehollow**.
 
-Updates install over the previous version and keep your save (all builds are signed with the same key).
+Updates install over the previous version and keep your save, character edits and uploaded portraits (all builds
+are signed with the same key) — just open the new APK, no need to uninstall.
 
 **Backups:** ⚙️ → Settings & AI → **Export backup** saves one `.json` file wherever you choose (Downloads, Drive…).
 It holds everything: your game (bonds, memories, money, items, reputation, story log, plans, parties, followers,
@@ -63,6 +64,10 @@ Settings if you want to save credit.
 | **Jobs** | Ask for work at a shop counter (bakery, gym, General Store, club, lab, town hall, clinic, barbershop) or at the Post Office / Maggie's Stilt House: bread deliveries, litter patrol, restocking shelves, kneading dough and mixing drinks (timing minigames), being Penelope's test subject, and Maggie's very questionable blood drive. Pay depends on how well you do; one job at a time, each once a day. |
 | **Shopping** | Counters at the bakery, General Store and club bar, plus **Mirehollow Mall** (south of the square, by the park) with five kiosks: food, gifts, clothes you actually wear, home decor that appears in your house, and fun stuff (fireworks, energy drinks, lottery tickets, bug spray, party kits). Sable buys what you forage. |
 | **Favours** | Villagers sometimes ask for help (in conversation, or by walking up to you). Accept or decline; bring items with 🎁, deliver packages to the right person, go where they asked. Journal → Favours. |
+| **Health & fights** | The ❤️ bar under the clock is your health. Fights are a reflex minigame: tap each circle when its shrinking ring meets it, drag the blue sliders along their track. Difficulty depends on the opponent, from *Easy* (Lily, Sunny) to *VERY HARD* (Kira, Nimbus, the Darkborn). **⚔️ Fight** in the chat bar challenges someone to a friendly spar or a real fight; villagers start fights too (bandits mug you, people fight back when attacked). Sparring is friendly and builds respect. Weapons: bat & frying pan at the General Store, knives/crowbars/brass knuckles at the bandits' black market — equip one from Journal → Pocket. Heal by eating, at the onsen (♨ 5 coins), the clinic (10 coins) or by sleeping. At 0 HP you black out and are robbed, rescued to the clinic, or (rarely) die — then the day restarts. |
+| **Phones** | Buy a smartphone at the mall (Fun & Phones), then tap 📱 at the top: text villagers who own a phone (invites and plans work by text), and get texts from them. Not everyone has one — buy a spare phone and give it to them. |
+| **Penelope's inventions** | At the lab counter: jetpack (fly over cliffs and rivers for an hour), Black Hole Sniper 3000 (wins any fight, 3 charges), teleporter remote, invisibility cloak (nobody witnesses what you do), Pocket Healer 9000, Rain-B-Gone, gravity boots, translator collar (understand the mute villagers). She can also invent things for you in conversation. |
+| **Characters** | Up to 4 save slots: ⚙️ → 👥 Switch character, or pick on the title screen. Try a saint and a menace. Backups include every slot. |
 | **Reset today** | ⚙️ → 🔁 Reset today: rewind the whole day to how it started, or only make everyone forget what happened today. |
 | **Journal** | 📖 — every villager's bond, mood, what they think of your reputation, and what they remember about you. Also favours, jobs, your reputation, pocket (wardrobe & decor) and the town map. |
 | **Log** | 💬 — full history of conversations, overheard chatter and events. |
@@ -78,6 +83,9 @@ Settings if you want to save credit.
 - **Schedules** — everyone has a routine but roams between favourite haunts, so you'll have to go looking for people. Friend groups head out together (the Party Crew at the river, the nap rotation in the park…). Visitors like Nimbus and Solaris only show up some days.
 - **Villager drama** — rivals seek each other out and argue (you can overhear it, or hear shouting from afar), friends take sides, newcomers barge into conversations, and uninvited guests can crash your parties. Conversations have no time limit — people only leave when the story makes them.
 - **Townsfolk** — ~30 animal passers-by with their own names, jobs and personalities. Talk to them; they witness things and gossip too.
+- **The highlands** — south of town: Lookout Hill (two cliff levels, with Juniper's lookout tower), Crag Heights (a village on a plateau with Thistle's Onsen and Vale Manor), the orchard (pick apples), the waterfall, the Pine Forest, the scrublands and the Hollow Crags where the bandits live. Raised plateaus have cliff faces; look for the stairs.
+- **Bandits & villains** — the Hollow Gang (Rook, Gristle, Snitch) extort and harass villagers, mug lone travellers and pick pockets; Mortimer Vale (a cruel landlord) and Vesper (a rumour-spreading manipulator) bully people more quietly. Harassment can turn into real fights between villagers — the loser limps to the clinic.
+- **Dragging** — villagers can grab you and drag you somewhere mid-conversation.
 - **Train** — a little local train runs through town; the crossing bells ring and the barriers block the road while it passes.
 - **Vibe captions** — little ambient lines ("You hear some noises near the bakery").
 - **Time & weather** — day/night with lamp lighting, rain and storms (annoy Nimbus and see what happens).
@@ -88,7 +96,9 @@ Sunny (fox baker), Vix (her cousin), Marina (shark lifeguard), Lily (frog), Kira
 Gertie (crocodile), the Scarecrow, Dr. Penelope (pig scientist), Dionne (deer, club owner), Clucky (hen),
 Bunny (rabbit coach), Box (cube-headed gym owner), Brenda (bear gamer), Patty (panda), Mayor Ringo (raccoon),
 Sable (snake shopkeeper), Zahra (genie), Chuckles (hyena clown), Nimbus (cloud titan), Solaris (the sun),
-the Darkborn (eldritch grandma), plus Mailman Mole, Barber Sheep, Doctor Owl and Carpenter Beaver.
+the Darkborn (eldritch grandma), Juniper (red panda lookout), Granny Thistle (onsen keeper), Rook, Gristle and Snitch
+(the Hollow Gang), Mortimer Vale (landlord) and Vesper (the rumour mill), plus Mailman Mole, Barber Sheep, Doctor Owl
+and Carpenter Beaver.
 
 Personalities live in [`app/src/main/assets/web/js/data_chars.js`](app/src/main/assets/web/js/data_chars.js).
 They were adapted from the original Mirehollow lore and rewritten to keep the game cozy PG-13 — all the quirks,
@@ -154,6 +164,8 @@ app/src/main/assets/web/
   js/shop.js        shops & the mall, wardrobe, home decor, usable items, selling forage
   js/jobs.js        jobs, the timing minigame, job markers
   js/quests.js      favours villagers ask for (accept/decline, completion checks)
+  js/fight.js       health, the fight minigame, weapons, knockouts, villager-vs-villager fights
+  js/phone.js       phones, contacts, texting and incoming texts
   js/main.js        boot, game loop, save/load
 ```
 

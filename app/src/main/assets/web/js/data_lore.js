@@ -60,6 +60,7 @@
     sunflower: { name: 'Sunflower', icon: '🌻', desc: 'Tall and cheerful. Sunny would love it.' },
     feather: { name: 'Crow Feather', icon: '🪶', desc: 'Left behind by one of the Scarecrow\'s crows.' },
     bottlecap: { name: 'Shiny Bottle Cap', icon: '⚙️', desc: 'The Mayor would consider this a fine offering.' },
+    apple: { name: 'Orchard Apple', icon: '🍎', desc: 'Crisp and red, from the old orchard in the foothills.' },
   };
   MH.itemIcon = (name) => {
     const n = (name || '').toLowerCase();

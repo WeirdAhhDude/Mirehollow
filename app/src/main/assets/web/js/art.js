@@ -93,10 +93,16 @@
     tilef: ['#efe8d8', '#e6ddca', '#f8f2e6', '#c8bca4'],
     rubber: ['#5a5e62', '#53575b', '#646a6e', '#3a3e42'],
     carpet: ['#3a2450', '#341f48', '#46305e', '#24143a'],
+    cliff: ['#9c8468', '#8e775c', '#ad9677', '#4e3e30'],
+    stairs: ['#c2b8a6', '#b4aa98', '#d2c8b6', '#7a7062'],
+    high: ['#a6c86a', '#98bd5c', '#b4d47a', '#6e9a48'],
+    rock: ['#a89c88', '#9a8e7a', '#b8ae9c', '#6e6454'],
+    spring: ['#7ccac8', '#6abcbc', '#9adcd8', '#effcfa'],
+    falls: ['#7cc6ea', '#6ab6de', '#a6dcf4', '#ffffff'],
   };
-  const gName = ['grass', 'woods', 'path', 'plaza', 'sand', 'water', 'swamp', 'mud', 'field', 'board', 'deep', 'road', 'rail', 'paddy', 'floor', 'tatami', 'void', 'stone', 'road', 'wall', 'tilef', 'rubber', 'carpet'];
-  const isWet = (g) => g === 5 || g === 10;
-  const isGreen = (g) => g === 0 || g === 1;
+  const gName = ['grass', 'woods', 'path', 'plaza', 'sand', 'water', 'swamp', 'mud', 'field', 'board', 'deep', 'road', 'rail', 'paddy', 'floor', 'tatami', 'void', 'stone', 'road', 'wall', 'tilef', 'rubber', 'carpet', 'cliff', 'stairs', 'high', 'rock', 'spring', 'falls'];
+  const isWet = (g) => g === 5 || g === 10 || g === 27;
+  const isGreen = (g) => g === 0 || g === 1 || g === 25;
   const isPaved = (g) => g === 11 || g === 18;
 
   const CH = 8; // tiles per chunk
@@ -150,14 +156,33 @@
     const h = (i, s = 0) => MH.hash2(tx * 7 + i, ty * 13 + s, t);
     const P = PAL[gName[t]] || PAL.grass;
     const g = G();
-    if (t === g.GRASS || t === g.WOODS) {
+    if (t === g.CLIFF) return cliffTile(x, tx, ty, P, h);
+    if (t === g.STAIRS) return stairsTile(x, tx, ty, P);
+    if (t === g.FALLS) {
+      for (let i = 0; i < 6; i++) { const sx = ox + 1 + h(i) * 14; line(x, [[sx, oy], [sx + (h(i, 1) - 0.5), oy + T]], i % 2 ? '#ffffff' : P[2], 0.9 + h(i, 2), 0.75); }
+      if (MH.world.g(tx, ty + 1) !== g.FALLS) { for (let i = 0; i < 6; i++) ell(x, ox + h(i, 4) * 16, oy + T - 2 + h(i, 5) * 3, 2 + h(i, 6) * 2, 1.4, '#ffffff', null, 0); }
+      return;
+    }
+    if (t === g.SPRING) {
+      for (let i = 0; i < 3; i++) { x.globalAlpha = 0.45; ell(x, ox + h(i) * 14 + 1, oy + h(i, 1) * 14 + 1, 2 + h(i, 2) * 2, 1.2, P[3]); }
+      x.globalAlpha = 1; return;
+    }
+    if (t === g.ROCK) {
+      for (let i = 0; i < 3; i++) { x.globalAlpha = 0.25; ell(x, ox + h(i) * 16, oy + h(i, 1) * 16, 3 + h(i, 2) * 4, 2 + h(i, 3) * 2, h(i, 4) < 0.5 ? P[2] : P[3]); }
+      x.globalAlpha = 1;
+      for (let i = 0; i < 6; i++) ell(x, ox + h(i, 5) * 16, oy + h(i, 6) * 16, 0.6 + h(i, 7) * 1.1, 0.5 + h(i, 8) * 0.6, h(i, 9) < 0.5 ? P[3] : shade(P[2], 1.06), P[3], 0.25);
+      if (h(30) < 0.2) { const sx = ox + h(31) * 10, sy = oy + h(32) * 10; line(x, [[sx, sy], [sx + 3, sy + 2], [sx + 5, sy + 1.5], [sx + 7, sy + 4]], P[3], 0.4, 0.7); }
+      if (h(33) < 0.25) for (let i = 0; i < 3; i++) line(x, [[ox + 3 + i * 3, oy + 12], [ox + 3.5 + i * 3, oy + 9]], '#8aa860', 0.5, 0.9);
+      return;
+    }
+    if (t === g.GRASS || t === g.WOODS || t === g.HIGH) {
       for (let i = 0; i < 3; i++) { x.globalAlpha = 0.22; ell(x, ox + h(i) * 16, oy + h(i, 1) * 16, 4 + h(i, 2) * 5, 3 + h(i, 3) * 3, h(i, 4) < 0.5 ? P[2] : P[3]); }
       x.globalAlpha = 1;
       for (let i = 0; i < 7; i++) {
         const bx = ox + h(i, 5) * 16, by = oy + h(i, 6) * 16, hh = 1.8 + h(i, 7) * 2.2, lean = (h(i, 8) - 0.5) * 1.6;
         line(x, [[bx, by], [bx + lean * 0.5, by - hh * 0.6], [bx + lean, by - hh]], h(i, 9) < 0.55 ? P[3] : P[2], 0.45, 0.8);
       }
-      if (t === g.GRASS && h(20) < 0.12) { ell(x, ox + h(21) * 14 + 1, oy + h(22) * 14 + 1, 0.8, 0.8, h(23) < 0.5 ? '#fff8e8' : '#f6d64a'); }
+      if ((t === g.GRASS || t === g.HIGH) && h(20) < (t === g.HIGH ? 0.2 : 0.12)) { ell(x, ox + h(21) * 14 + 1, oy + h(22) * 14 + 1, 0.8, 0.8, h(23) < 0.5 ? '#fff8e8' : '#f6d64a'); }
       if (t === g.WOODS && h(24) < 0.3) { for (let i = 0; i < 3; i++) ell(x, ox + h(25 + i) * 16, oy + h(28 + i) * 16, 1.1, 0.6, ['#8a6a3a', '#a07a40', '#6a8a3a'][i], null, 0, h(31 + i) * 3); }
     } else if (t === g.ROAD || t === g.CROSS) {
       for (let i = 0; i < 4; i++) { x.globalAlpha = 0.14; ell(x, ox + h(i) * 16, oy + h(i, 1) * 16, 3 + h(i, 2) * 4, 2 + h(i, 3) * 3, h(i, 4) < 0.5 ? '#6a6c72' : '#a8aab0'); }
@@ -233,17 +258,70 @@
     }
   }
 
+  // Rock faces: strata, cracks and moss; a grassy lip where the plateau top starts and a dark foot.
+  function cliffTile(x, tx, ty, P, h) {
+    const ox = tx * T, oy = ty * T, Gg = G(), g = MH.world.g;
+    const n = g(tx, ty - 1), s = g(tx, ty + 1), w = g(tx - 1, ty), e = g(tx + 1, ty);
+    const topSide = n !== Gg.CLIFF && n !== Gg.FALLS, foot = s !== Gg.CLIFF && s !== Gg.STAIRS && s !== Gg.FALLS;
+    const face = foot || g(tx, ty + 2) !== Gg.CLIFF && s === Gg.CLIFF; // part of a south-facing face
+    x.fillStyle = vgrad(x, oy, oy + T, topSide ? P[2] : P[1], foot ? shade(P[1], 0.78) : P[0]);
+    x.fillRect(ox - 0.2, oy - 0.2, T + 0.4, T + 0.4);
+    // strata
+    for (let k = 0; k < 3; k++) {
+      const yy = oy + 3 + k * 5 + (h(k) - 0.5) * 1.5;
+      x.beginPath(); x.moveTo(ox, yy);
+      for (let i = 1; i <= 4; i++) x.lineTo(ox + i * 4, yy + (MH.hash2(tx * 4 + i, ty * 3 + k, 7) - 0.5) * 1.6);
+      x.strokeStyle = P[3]; x.globalAlpha = 0.35; x.lineWidth = 0.6; x.stroke();
+      x.globalAlpha = 0.25; x.beginPath(); x.moveTo(ox, yy + 0.9); x.lineTo(ox + T, yy + 0.9 + (h(k, 2) - 0.5)); x.strokeStyle = '#fff4e0'; x.lineWidth = 0.4; x.stroke(); x.globalAlpha = 1;
+    }
+    // vertical cracks and blocks
+    for (let i = 0; i < 2; i++) if (h(10 + i) < 0.6) { const cx = ox + 2 + h(12 + i) * 12; line(x, [[cx, oy + h(14 + i) * 6], [cx + (h(16 + i) - 0.5) * 2, oy + 6 + h(18 + i) * 9]], P[3], 0.55, 0.55); }
+    // moss
+    for (let i = 0; i < 3; i++) if (h(20 + i) < 0.35) ell(x, ox + h(22 + i) * 16, oy + h(25 + i) * 16, 1.4 + h(28 + i), 0.8, '#6f9a4a', null, 0);
+    // side shading where the face turns a corner
+    if (w !== Gg.CLIFF && w !== Gg.STAIRS) { x.fillStyle = 'rgba(255,240,210,0.18)'; x.fillRect(ox, oy, 2, T); }
+    if (e !== Gg.CLIFF && e !== Gg.STAIRS) { x.fillStyle = 'rgba(30,20,10,0.22)'; x.fillRect(ox + T - 2.2, oy, 2.2, T); }
+    // grassy lip on top
+    if (topSide) {
+      const top = n === Gg.ROCK ? PAL.rock : n === Gg.HIGH ? PAL.high : n === Gg.WOODS ? PAL.woods : PAL.grass;
+      rr(x, ox - 0.3, oy - 0.2, T + 0.6, 2.6, 0, top[1]);
+      for (let i = 0; i < 6; i++) ell(x, ox + (i + h(40 + i)) * 2.7, oy + 2.2, 1.6, 1 + h(46 + i) * 1.6, top[h(52 + i) < 0.5 ? 0 : 3]);
+      line(x, [[ox, oy + 0.5], [ox + T, oy + 0.5]], shade(top[2], 1.1), 0.6, 0.8);
+    }
+    // the foot of the cliff: darker, with fallen pebbles
+    if (foot) {
+      x.fillStyle = vgrad(x, oy + T - 5, oy + T, 'rgba(30,20,10,0)', 'rgba(30,20,10,0.35)'); x.fillRect(ox, oy + T - 5, T, 5);
+      for (let i = 0; i < 3; i++) ell(x, ox + h(60 + i) * 16, oy + T - 1 - h(63 + i) * 2, 1 + h(66 + i), 0.8, P[2], P[3], 0.3);
+    }
+    if (!face && !topSide && !foot) { x.globalAlpha = 0.15; x.fillStyle = '#2a1e14'; x.fillRect(ox, oy, T, T); x.globalAlpha = 1; }
+  }
+  // stone steps carved into the cliff
+  function stairsTile(x, tx, ty, P) {
+    const ox = tx * T, oy = ty * T, Gg = G(), g = MH.world.g;
+    x.fillStyle = P[3]; x.fillRect(ox, oy, T, T);
+    for (let k = 0; k < 4; k++) {
+      const yy = oy + k * 4;
+      rr(x, ox + 0.5, yy + 0.4, T - 1, 3.4, 0.6, k % 2 ? P[1] : P[0], P[3], 0.35);
+      line(x, [[ox + 1, yy + 0.8], [ox + T - 1, yy + 0.8]], P[2], 0.6, 0.9);
+    }
+    if (g(tx - 1, ty) === Gg.CLIFF) { x.fillStyle = 'rgba(40,28,18,0.35)'; x.fillRect(ox, oy, 1.6, T); }
+    if (g(tx + 1, ty) === Gg.CLIFF) { x.fillStyle = 'rgba(40,28,18,0.35)'; x.fillRect(ox + T - 1.6, oy, 1.6, T); }
+  }
+
   function tileEdges(x, g, tx, ty) {
     const t = g(tx, ty), ox = tx * T, oy = ty * T, Gg = G();
     const n = g(tx, ty - 1), s = g(tx, ty + 1), w = g(tx - 1, ty), e = g(tx + 1, ty);
     const h = (i, k = 0) => MH.hash2(tx * 5 + i, ty * 11 + k, 99);
     // grass creeping over hard ground edges
-    const hard = (v) => v === Gg.ROAD || v === Gg.PATH || v === Gg.PLAZA || v === Gg.SAND || v === Gg.STONE || v === Gg.FIELD || v === Gg.CROSS || v === Gg.RAIL || v === Gg.PADDY;
+    const hard = (v) => v === Gg.ROAD || v === Gg.PATH || v === Gg.PLAZA || v === Gg.SAND || v === Gg.STONE || v === Gg.FIELD || v === Gg.CROSS || v === Gg.RAIL || v === Gg.PADDY || v === Gg.ROCK;
+    // long shadow at the foot of a cliff
+    if (t !== Gg.CLIFF && t !== Gg.STAIRS && n === Gg.CLIFF) { x.fillStyle = vgrad(x, oy, oy + 7, 'rgba(30,24,18,0.38)', 'rgba(30,24,18,0)'); x.fillRect(ox, oy, T, 7); }
+    if (t === Gg.CLIFF || t === Gg.STAIRS) return;
     if (hard(t)) {
       const sides = [[n, 'n'], [s, 's'], [w, 'w'], [e, 'e']];
       for (const [v, d] of sides) {
         if (!isGreen(v)) continue;
-        const P = v === Gg.WOODS ? PAL.woods : PAL.grass;
+        const P = v === Gg.WOODS ? PAL.woods : v === Gg.HIGH ? PAL.high : PAL.grass;
         // soft shadow band on the hard side
         x.globalAlpha = 0.18; x.fillStyle = '#2a3a1a';
         if (d === 'n') x.fillRect(ox, oy, T, 1.6); if (d === 's') x.fillRect(ox, oy + T - 1, T, 1); if (d === 'w') x.fillRect(ox, oy, 1.4, T); if (d === 'e') x.fillRect(ox + T - 1.4, oy, 1.4, T);
@@ -270,7 +348,7 @@
     }
     if (isWet(t)) {
       const P = PAL[gName[t]];
-      const landN = !isWet(n) && n !== Gg.SWAMP && n !== Gg.BOARD, landS = !isWet(s) && s !== Gg.SWAMP && s !== Gg.BOARD, landW = !isWet(w) && w !== Gg.SWAMP && w !== Gg.BOARD, landE = !isWet(e) && e !== Gg.SWAMP && e !== Gg.BOARD;
+      const landN = !isWet(n) && n !== Gg.SWAMP && n !== Gg.BOARD && n !== Gg.FALLS, landS = !isWet(s) && s !== Gg.SWAMP && s !== Gg.BOARD, landW = !isWet(w) && w !== Gg.SWAMP && w !== Gg.BOARD, landE = !isWet(e) && e !== Gg.SWAMP && e !== Gg.BOARD;
       if (landN) { x.fillStyle = vgrad(x, oy, oy + 5, 'rgba(30,50,60,0.45)', 'rgba(30,50,60,0)'); x.fillRect(ox, oy, T, 5); line(x, [[ox, oy + 0.6], [ox + T, oy + 0.6]], t === Gg.SWAMP ? '#3a4a2a' : '#6a5a3a', 1.2, 0.8); }
       const foam = t === Gg.SWAMP ? '#9ab07a' : P[3];
       x.globalAlpha = 0.75;
@@ -330,7 +408,8 @@
     const v = p.v % 6, big = p.big ? 1.25 : 1;
     const pal = p.dark ? DARK_PAL : TREE_PALS[v % 3];
     const w = 64 * big, h = 80 * big;
-    return sprite('tree' + v + (p.dark ? 'd' : '') + (p.big ? 'b' : ''), w, h, w / 2, h - 4, (x) => {
+    const fruit = p.fruit && p.pick && !MH.isPicked(p);
+    return sprite('tree' + v + (p.dark ? 'd' : '') + (p.big ? 'b' : '') + (fruit ? 'f' : ''), w, h, w / 2, h - 4, (x) => {
       softShadow(x, w / 2 + 6, h - 6, 24 * big, 7 * big, 0.3);
       // trunk
       const tx = w / 2;
@@ -338,6 +417,34 @@
       line(x, [[tx - 1, h - 6], [tx - 0.5, h - 22 * big]], '#9a7450', 0.8, 0.8);
       line(x, [[tx + 1.5, h - 20 * big], [tx + 7, h - 30 * big]], '#6a4a2e', 2, 1);
       canopy(x, tx, h - 44 * big, 24 * big, pal, 30 + v);
+      if (fruit) { const R = rnd(90 + v); for (let i = 0; i < 9; i++) { const a = R() * 6.28, r = R() * 18; ell(x, tx + Math.cos(a) * r, h - 44 * big + Math.sin(a) * r * 0.7, 2, 2, '#e0402e', '#8a2018', 0.5); ell(x, tx + Math.cos(a) * r - 0.6, h - 44 * big + Math.sin(a) * r * 0.7 - 0.7, 0.6, 0.5, '#ffb0a0'); } }
+    });
+  }
+  // the wooden lookout tower on Lookout Hill
+  function drawLookout() {
+    const w = 46, h = 96;
+    return sprite('lookout', w, h, 15, h - 3, (x) => {
+      softShadow(x, 23, h - 4, 22, 6, 0.3);
+      const wood = '#8a6440', dk = ink(wood);
+      [[6, h - 3], [40, h - 3]].forEach(([lx, ly]) => poly(x, [[lx - 1.5, ly], [lx + 1.5, ly], [lx + (lx < 23 ? 6 : -6) + 1.2, 34], [lx + (lx < 23 ? 6 : -6) - 1.2, 34]], wood, dk, 0.7));
+      for (let k = 0; k < 4; k++) { const yy = 44 + k * 12; line(x, [[9 + k * 0.8, yy], [37 - k * 0.8, yy + 8]], dk, 0.9); line(x, [[37 - k * 0.8, yy], [9 + k * 0.8, yy + 8]], dk, 0.9); }
+      // ladder
+      rr(x, 20, 36, 6, h - 40, 0.5, null, '#6a4a2e', 0.8); for (let yy = 40; yy < h - 4; yy += 5) line(x, [[20, yy], [26, yy]], '#6a4a2e', 0.8);
+      // platform, railing, roof
+      rr(x, 4, 30, 38, 5, 1, '#a07a50', dk, 0.8);
+      for (let i = 0; i < 6; i++) line(x, [[7 + i * 6.4, 30], [7 + i * 6.4, 20]], dk, 0.9);
+      line(x, [[5, 21], [41, 21]], dk, 1.2);
+      poly(x, [[0, 14], [23, 2], [46, 14], [40, 16], [6, 16]], '#b0503a', ink('#b0503a'), 0.8);
+      line(x, [[23, 2], [23, 16]], ink('#b0503a'), 0.5, 0.6);
+      ell(x, 30, 26, 2.2, 1.4, '#3a3a44'); // binoculars on the rail
+    });
+  }
+  function drawSteam(p) {
+    const v = p.v % 3;
+    return sprite('steam' + v, 30, 30, 15, 28, (x) => {
+      const R = rnd(140 + v);
+      for (let i = 0; i < 6; i++) { x.globalAlpha = 0.16 + R() * 0.12; ell(x, 8 + R() * 14, 6 + R() * 18, 4 + R() * 4, 3 + R() * 3, '#ffffff'); }
+      x.globalAlpha = 1;
     });
   }
   function drawSakura(p) {
@@ -749,6 +856,8 @@
       case 'torii': return drawTorii();
       case 'stonelantern': return drawStoneLantern();
       case 'tower': return drawTower();
+      case 'lookout': return drawLookout();
+      case 'steam': return drawSteam(p);
       case 'reeds': return drawReeds(p);
       case 'sunflower': return drawSunflower(p);
       case 'corn': return drawCorn(p);

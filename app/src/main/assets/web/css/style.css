@@ -398,3 +398,80 @@ body.chatting #jobArrow { display: none !important; }
 .questcard p { margin: 4px 0; font-size: 14px; }
 .questcard .qr { font-size: 13px; color: #6a5a3a; margin-bottom: 8px; }
 .questcard .row { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ---------- v0.6: health */
+.pill.hp { padding: 3px 10px; gap: 6px; font-size: 12px; }
+.pill.hp .bar { width: 64px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.18); overflow: hidden; }
+.pill.hp .bar i { display: block; height: 100%; width: 100%; background: #6ad06a; transition: width 0.4s, background 0.4s; }
+.pill.hp b { min-width: 22px; text-align: right; }
+.pill.hp.low { animation: hplow 1s infinite; }
+@keyframes hplow { 50% { border-color: #e0524a; box-shadow: 0 0 10px rgba(224,82,74,0.6); } }
+
+/* phone button */
+#btnPhone { position: relative; }
+#btnPhone.hidden { display: none; }
+#btnPhone .badge { position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px; border-radius: 8px; background: #e0524a; color: #fff; font-size: 10px; font-weight: 800; line-height: 16px; display: none; }
+#btnPhone.unread .badge { display: block; }
+.phoneui .msg, .phoneui .contact { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; background: #fff; border: 1px solid #e4d2b4; border-radius: 12px; padding: 8px 10px; margin-bottom: 7px; color: var(--ink); font-size: 13.5px; }
+.phoneui .msg.new { border-color: var(--accent); background: #fff4e4; }
+.phoneui img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; object-position: top; background: #f4e4cc; flex: 0 0 auto; }
+.phoneui .contact span { flex: 1; }
+.phoneui .contact.nophone { opacity: 0.6; }
+.phoneui i { color: var(--ink2); font-size: 11px; }
+/* texting: a phone badge over the conversation */
+#chat.phone::before { content: "📱 Texting"; position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 8; background: var(--dark2); color: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 800; font-size: 13px; }
+#chat.phone #cast { filter: saturate(0.85); }
+#chat.phone #btnFight, #chat.phone #btnGive { display: none; }
+
+/* ---------- fights */
+.fightui { position: absolute; inset: 0; z-index: 40; background: rgba(16,10,20,0.62); display: flex; flex-direction: column; padding: max(10px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom)); touch-action: none; user-select: none; }
+.fightui.spar { background: rgba(16,24,30,0.55); }
+.fightui.shake { animation: fshake 0.28s; }
+@keyframes fshake { 25% { transform: translateX(-7px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
+.fbars { display: flex; align-items: center; gap: 8px; color: #fff; }
+.fb { flex: 1; min-width: 0; }
+.fb span { font-size: 12px; font-weight: 800; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb .bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,0.2); overflow: hidden; border: 1px solid rgba(255,255,255,0.35); }
+.fb .bar i { display: block; height: 100%; width: 100%; transition: width 0.25s; }
+.fb.me .bar i { background: linear-gradient(90deg, #4ac06a, #8ae07a); }
+.fb.them { text-align: right; }
+.fb.them .bar i { background: linear-gradient(90deg, #f07a4a, #e0403a); margin-left: auto; }
+.fvs { font-weight: 900; font-size: 18px; text-align: center; color: #ffd640; line-height: 1; }
+.fvs small { display: block; font-size: 10px; color: #fff; font-weight: 700; margin-top: 3px; }
+.fplay { position: relative; flex: 1; margin: 10px 0; border-radius: 18px; background: radial-gradient(ellipse at center, rgba(255,255,255,0.06), rgba(0,0,0,0.15)); overflow: hidden; }
+.fmsg { text-align: center; color: #fff; font-weight: 800; min-height: 22px; font-size: 15px; }
+.fmsg.ok { color: #8ae07a; } .fmsg.bad { color: #ff8a7a; }
+.fbtns { display: flex; justify-content: center; gap: 10px; margin-top: 8px; }
+.note { position: absolute; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffe38a, #f08a3a 70%); border: 3px solid #fff; box-shadow: 0 0 14px rgba(255,180,80,0.7); display: grid; place-items: center; color: #3b2a22; font-weight: 900; font-size: 18px; animation: npop 0.18s ease-out; touch-action: none; }
+.note.slider { background: radial-gradient(circle at 35% 30%, #a8e8ff, #3a9ad8 70%); box-shadow: 0 0 14px rgba(90,180,255,0.7); }
+.note.held { transform: scale(1.12); }
+.note .ring { position: absolute; inset: -3px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.9); pointer-events: none; }
+.note.hit { animation: nhit 0.26s forwards; } .note.miss { animation: nmiss 0.26s forwards; }
+@keyframes npop { from { transform: scale(0.5); opacity: 0; } }
+@keyframes nhit { to { transform: scale(1.5); opacity: 0; filter: brightness(1.6); } }
+@keyframes nmiss { to { transform: scale(0.7); opacity: 0; filter: grayscale(1); } }
+.track { position: absolute; transform-origin: 0 50%; background: rgba(120,200,255,0.22); border: 2px dashed rgba(160,220,255,0.7); pointer-events: none; }
+.sliderend { position: absolute; border-radius: 50%; border: 3px solid #a8e8ff; background: rgba(120,200,255,0.25); pointer-events: none; }
+.bhole { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px; border-radius: 50%; background: radial-gradient(circle, #000 40%, #6a3ac8 70%, rgba(106,58,200,0)); animation: bhole 1.3s ease-in forwards; }
+@keyframes bhole { 50% { transform: scale(14) rotate(180deg); } to { transform: scale(0); } }
+body.fighting #btnA, body.fighting #joyZone { display: none; }
+.fightcard { border-color: #c8402a; }
+
+/* blacking out */
+.kocard { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 60; width: min(420px, 90vw); background: var(--cream); color: var(--ink); border-radius: 20px; padding: 18px 18px 16px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+.kocard h2 { margin: 0 0 10px; font-size: 20px; }
+.kocard p { font-size: 15px; line-height: 1.45; margin: 0 0 14px; }
+
+/* character slots on the title screen */
+.slotsh { margin: 16px 0 6px; color: #fff; text-align: center; }
+.slots { display: flex; flex-direction: column; gap: 7px; max-width: 420px; margin: 0 auto; }
+.slot { display: flex; align-items: center; gap: 6px; background: rgba(255,246,230,0.95); color: var(--ink); border-radius: 14px; padding: 8px 10px; }
+.slot.cur { box-shadow: 0 0 0 2px var(--accent); }
+.slot .sinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.slot .sinfo small { color: var(--ink2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opts.tele { display: flex; flex-wrap: wrap; gap: 6px; }
+.slots { width: 100%; }
+.slot { flex-wrap: wrap; text-align: left; }
+.slot .sinfo { flex: 1 1 100%; }
+.slot .btn { flex: 1 1 0; }
+.slot .btn.danger { flex: 0 0 auto; }

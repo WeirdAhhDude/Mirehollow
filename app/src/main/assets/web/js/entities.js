@@ -107,7 +107,7 @@
     if (MH.world.crossingBlocked(n.tx, n.ty)) { animate(e, dt, false); return false; } // wait for the train
     const gx = n.tx * T + T / 2, gy = n.ty * T + T - 3;
     const dx = gx - e.x, dy = gy - e.y, d = Math.hypot(dx, dy);
-    const sp = e.speed * (e.hurry ? 1.6 : 1) * dt;
+    const sp = Math.max(e.speed, e.chase ? 48 : 0) * (e.hurry ? (e.chase ? 2.2 : 1.6) : 1) * dt; // chasers sprint
     if (d <= sp + 0.5) {
       e.x = gx; e.y = gy; e.path.shift();
       if (!e.path.length) { animate(e, dt, false); return true; }

@@ -173,6 +173,7 @@
       '- Villagers sometimes ask the player for a favour that fits their life (rarely — at most one open request per villager, never when they dislike or fear the player): put it in "quest"; the game shows the player Accept/Decline and they may refuse. If the player completes one of the OPEN QUESTS listed in the scene (brought the thing, did the deed, delivered the message), put its id in "quest_done".',
       '- Villagers know where they are (see SCENE) and roughly where other people tend to be (see WHEREABOUTS); use it naturally ("Sunny\'s at the bakery, where else?").',
       '- FIGHTS: when a fight really breaks out with the player — a villager attacks them, fights back after being attacked, a bandit mugs them, or someone agrees to (or proposes) a friendly sparring match — set "fight":{"with":"<id>","kind":"spar|brawl|mugging"} and stop the scene there; the game plays the fight and tells you the result next turn. Sparring is friendly (Kira, Bunny, Box, Gertie and Marina may enjoy it; it builds respect). A quick slap or shove at the player that is not a full fight goes in "hurt_player" (HP damage 3-20).',
+      '- CHASES: a villager can start chasing the player when it fits — the player stole something and bolted, insulted them and ran, a bandit going after a target, or a playful game of tag: set "chase":{"who":"<id>","kind":"brawl|mugging|playful"}. The scene ends and they run after the player; if they catch them, the scene picks up again (often as a fight).',
       '- DRAGGING: a villager may grab the player and drag them somewhere (to the bakery to taste something, home, away from danger, into the bandits\' cave…) — set "drag":{"by":"<id>","to":"<place key or home>"}; the player ends up there with them.',
       '- The Hollow Gang (Rook, Gristle, Snitch) are bandits: they extort, steal, threaten and may mug a player who looks weak or alone. Mortimer Vale and Vesper are genuinely malevolent (bullying, manipulation, cruel rumours) but subtle. Play them as real villains, not cartoons who back down at once.',
       '- Dr. Penelope invents working gadgets (jetpacks, a Black Hole Sniper 3000, teleporters, invisibility cloaks, gravity boots, translator collars, healing gizmos…). If she gives or builds one for the player, put it in "give_player" with a clear name.',
@@ -187,7 +188,7 @@
       ' "coins":0, "relations":[{"a":"<id>","b":"<id>","delta":0}], "label":{},',
       ' "follow":{"<id>":"start|stop"}, "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}],',
       ' "quest":{"from":"<id>","title":"<short>","task":"<what the player must do, one sentence>","type":"fetch|deliver|visit|talk|other","item":"<item to bring or deliver>","target":"<villager id or place key>","reward":0}, "quest_done":["<quest id>"],',
-      ' "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "drag":{"by":"<id>","to":"<place key or home>"}, "hurt_player":0, "end":false}',
+      ' "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "chase":{"who":"<id>","kind":"brawl|mugging|playful"}, "drag":{"by":"<id>","to":"<place key or home>"}, "hurt_player":0, "end":false}',
       'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0; violent = physical aggression). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
       'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). quest: only when a villager actually asks the player for a favour this turn; reward = coins they will pay (5-60, fitting their means); fetch needs "item", deliver needs "item" and "target" (villager id), visit needs "target" (a place key), talk needs "target" (villager id). quest_done: only ids from OPEN QUESTS. end = true only if the whole conversation is over. Omit empty fields.',
     ].filter((x) => x !== '').join('\n');
@@ -414,6 +415,11 @@
       if (by && by !== 'narrator' && present.has(by) && to) out.drag = { by, to };
     }
     out.hurt = convo && convo.phone ? 0 : MH.clamp(Math.round(Number(raw.hurt_player) || 0), 0, 30);
+    out.chase = null;
+    if (raw.chase && typeof raw.chase === 'object' && !(convo && convo.phone)) {
+      const w = AI.resolveId(raw.chase.who || raw.chase.by);
+      if (w && w !== 'narrator' && present.has(w)) out.chase = { who: w, kind: /play|tag|fun/i.test(raw.chase.kind) ? 'playful' : /mug|rob|money/i.test(raw.chase.kind) ? 'mugging' : 'brawl', why: String(raw.chase.why || raw.chase.reason || '').slice(0, 80) };
+    }
     if (convo && convo.phone) { out.give = []; out.take = []; out.follow = {}; out.join = []; }
     out.end = !!raw.end;
     return out;

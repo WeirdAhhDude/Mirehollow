@@ -140,6 +140,7 @@
       if (e.walkToChat) { if (MH.npcWalk(e, dt)) e.walkToChat = null; }
       return;
     }
+    if (e.chase) return chaseTick(e, dt);
     if (sim.approaching === e) return updateApproach(e, dt);
     if (e.following) return companionTick(e, dt);
     if (fearTick(e, dt)) return;
@@ -267,8 +268,8 @@
     sim.flee(e);
     return true;
   }
-  sim.flee = function (e) {
-    const pl = MH.player, t = e.tile();
+  sim.flee = function (e, from) {
+    const pl = from || MH.player, t = e.tile();
     const dx = e.x - pl.x, dy = e.y - pl.y, L = Math.hypot(dx, dy) || 1;
     let tx = Math.round(t.tx + (dx / L) * 7), ty = Math.round(t.ty + (dy / L) * 7);
     const R = MH.world.roomAt(t.tx, t.ty);
@@ -278,6 +279,75 @@
     e.showEmote(Math.random() < 0.5 ? 'sweat' : '!', 1.8);
     if (Math.random() < 0.35 && !e.ch.mute && !(MH.chat.active)) MH.chat.showBubble(e, MH.pick(['Eek!', 'S-stay back!', '*hurries away*', 'Don\'t hurt me!', 'Nope. Nope nope nope.', '*flinches*']), { dur: 2.2 });
   };
+
+  // ------------------------------------------------------------ chases: someone runs after the player
+  // kind: 'brawl' (wants a fight), 'mugging' (wants your money), 'playful' (a game of tag)
+  const SHOUT = { brawl: ['GET BACK HERE!', 'You can\'t run forever!', 'Oi! We\'re not done!', 'Come here, coward!'], mugging: ['Your wallet, pigeon!', 'Toll\'s not paid yet!', 'Run, run… I like a chase.'], playful: ['Tag, you\'re it! Wait— no, I\'M it!', 'Hehe, come back!', 'Can\'t catch me— I mean, I\'ll catch YOU!'] };
+  sim.startChase = function (e, opts) {
+    if (!e || e.hidden || e.chase || e.following || e.id === 'scarecrow' || (e.ch.visitor && e.plan && e.plan.mode === 'away') || (MH.fight && MH.fight.isHurt(e))) return false;
+    const kind = opts.kind || 'brawl';
+    // someone right next to you needs a moment to wind up — that's your head start
+    e.chase = Object.assign({ t: 0, max: kind === 'playful' ? 30 : 45, lost: 0, kind, delay: MH.distTiles(e, MH.player) < 4 ? 1.8 : 0.4 }, opts);
+    e.busy = null; e.asleep = false; e.path = null; e.seek = null; e.inRoom = null; e.staffSpot = null; e.guest = false; e.fleeT = 0;
+    if (sim.approaching === e) sim.approaching = null;
+    e.showEmote(kind === 'playful' ? 'note' : 'anger', 2.5);
+    if (!e.ch.mute) MH.chat.showBubble(e, opts.shout || MH.pick(SHOUT[kind]), { dur: 2.5 });
+    MH.ui.toast(kind === 'playful' ? `🏃 ${e.ch.name} is chasing you (playfully)!` : `🏃 ${e.ch.name} is chasing you! Run!`, 3);
+    MH.social.log({ kind: 'sys', text: `🏃 ${e.ch.name} ${opts.ally ? 'joined the chase' : 'started chasing you'}${opts.reason ? ' (' + opts.reason + ')' : ''}.` });
+    if (kind !== 'playful' && !opts.ally) {
+      // friends of the chaser join in…
+      MH.npcs.filter((o) => o !== e && !o.hidden && !o.busy && !o.chase && !o.following && !o.asleep && MH.distTiles(o, e) < 14 && MH.roomOf(o) === MH.roomOf(e)
+        && ((MH.social.npc(o.id).rel[e.id] || 0) >= 40 || (MH.BANDITS.includes(o.id) && MH.BANDITS.includes(e.id)))
+        && MH.fight.power(o.id) >= 2 && !MH.social.isAfraid(o.id) && MH.social.attitude(o.id) < 30)
+        .slice(0, 2).forEach((o) => setTimeout(() => sim.startChase(o, { kind, ally: e.id, reason: 'helping ' + e.ch.name }), 600 + Math.random() * 900));
+      // …and timid bystanders scatter
+      MH.npcs.forEach((o) => { if (o !== e && !o.hidden && !o.busy && !o.chase && !o.following && MH.distTiles(o, e) < 8 && MH.roomOf(o) === MH.roomOf(e) && !MH.social.isTough(o.id) && MH.fight.power(o.id) <= 2 && Math.random() < 0.6) sim.flee(o, e); });
+    }
+    return true;
+  };
+  function chaseTick(e, dt) {
+    const c = e.chase, pl = MH.player, P = MH.state.player, now = MH.absMinutes();
+    c.t += dt;
+    if (MH.fight && (MH.fight.active || MH.fight._ko)) { MH.animate(e, dt, false); return; }
+    const d = MH.distTiles(e, pl), same = MH.roomOf(e) === MH.roomOf(pl);
+    const flying = (P.flyUntil || 0) > now, invis = (P.invisUntil || 0) > now;
+    if (!same || invis || flying || d > 26) c.lost += dt; else c.lost = Math.max(0, c.lost - dt * 0.5);
+    if (c.t > c.max || c.lost > 6) return chaseOver(e, false);
+    if (c.t < c.delay) { e.face(pl.x, pl.y); MH.animate(e, dt, false); return; }
+    if (d < 2.1 && same && !flying) return chaseOver(e, true);
+    e.repath = (e.repath || 0) - dt;
+    if (e.repath <= 0 || !e.path || !e.path.length) { e.repath = 0.4; const t = pl.tile(); MH.npcGoTo(e, t.tx, t.ty); if (e.path && e.path.length) e.path.pop(); }
+    e.hurry = true;
+    MH.npcWalk(e, dt);
+    if (!e.ch.mute && Math.random() < dt * 0.12 && !MH.chat.active) MH.chat.showBubble(e, MH.pick(SHOUT[c.kind]), { dur: 2 });
+  }
+  function chaseOver(e, caught) {
+    const c = e.chase; e.chase = null; e.hurry = false; e.path = null;
+    const P = MH.state.player;
+    if (!caught) {
+      e.planKey = null; e.planDelay = 0;
+      if (!e.ch.mute) MH.chat.showBubble(e, c.kind === 'playful' ? '*pants* Okay okay, you win!' : MH.pick(['*panting* …Next time.', 'This isn\'t over!', 'Tch. Got away.']), { dur: 3 });
+      if (!c.ally) { MH.ui.toast(`${e.ch.name} gave up chasing you.`, 2.5); MH.social.addMemory(e.id, c.kind === 'playful' ? `Chased ${P.name} for fun; they got away.` : `Chased ${P.name} but they got away. Next time.`, { imp: 2 }); }
+      return;
+    }
+    // caught: the scene continues (usually as a fight); allies who are close arrive too
+    const crew = MH.npcs.filter((o) => o.chase && o.chase.ally === e.id && MH.distTiles(o, MH.player) < 6);
+    crew.forEach((o) => { o.chase = null; o.hurry = false; o.path = null; });
+    const ids = [e.id].concat(crew.map((o) => o.id));
+    const fightKind = c.kind === 'mugging' ? 'mugging' : 'brawl';
+    if (MH.chat.active) {
+      if (MH.chat.convo.phone) { MH.chat.end(); }
+      else { ids.forEach((id) => MH.chat.addMember(id, 'catches up with you, out of breath')); if (c.kind !== 'playful') MH.fight.offer(MH.chat.convo, { with: e.id, kind: fightKind }); return; }
+    }
+    if (sim.approaching) sim.approaching = null;
+    MH.player.face(e.x, e.y); e.face(MH.player.x, MH.player.y);
+    const reason = c.kind === 'playful'
+      ? `${e.ch.name} was chasing ${P.name} for fun and just caught them (tag!). Playful, breathless.`
+      : `${e.ch.name}${crew.length ? ' (with ' + crew.map((o) => o.ch.name).join(' and ') + ')' : ''} chased ${P.name} down and caught them${c.reason ? ' — ' + c.reason : ''}. Out of breath and ready to ${c.kind === 'mugging' ? 'take their money' : 'fight'}.`;
+    MH.chat.start(ids, 'opener', reason);
+    if (c.kind !== 'playful' && MH.chat.convo) MH.chat.convo.pendingFight = { with: e.id, kind: fightKind };
+  }
+  sim.chasers = () => MH.npcs.filter((e) => e.chase);
 
   // ------------------------------------------------------------ companions (villagers following the player)
   function nearPlayerSpot() {
@@ -448,7 +518,7 @@
     const { e, fresh, n, att, favour, mug } = best;
     const P = MH.state.player;
     let reason;
-    if (mug) reason = `${e.ch.name} corners the player to mug them, demanding coins (a "road toll"). If the player refuses, stalls or fights back, set "fight" with kind "mugging".`;
+    if (mug) { n.lastApproach = now; MH.state.lastApproach = now; sim.startChase(e, { kind: 'mugging', reason: 'a "road toll"' }); return; }
     else if (favour && (!fresh.length || Math.random() < 0.5)) reason = `${e.ch.name} came over because they need a favour from ${P.name}: they ask the player to help with something specific to their life (offer it as a "quest" — the player may refuse).`;
     else if (fresh.length) { const m = fresh[fresh.length - 1]; m.discussed = true; reason = `${e.ch.name} walked up to ${P.name} on purpose because of this: "${m.text}". They want to bring it up.`; }
     else if (att >= 55) reason = `${e.ch.name} spotted ${P.name}, whom they really like, and came over to chat.`;

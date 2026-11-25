@@ -475,3 +475,4 @@ body.fighting #btnA, body.fighting #joyZone { display: none; }
 .slot .sinfo { flex: 1 1 100%; }
 .slot .btn { flex: 1 1 0; }
 .slot .btn.danger { flex: 0 0 auto; }
+.fsides { color: #ffe9a8; font-size: 12px; font-weight: 700; text-align: center; margin-top: 6px; }

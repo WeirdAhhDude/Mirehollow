@@ -65,7 +65,14 @@
     if (!chat.active) return;
     const names = chat.convo.members.map((id) => MH.CHAR[id].name);
     const ok = await MH.ui.confirm(`Leave the conversation with ${names.length > 2 ? names.slice(0, 2).join(', ') + ' and the others' : names.join(' and ')}?`, 'Leave', 'Stay');
-    if (ok) chat.end();
+    if (!ok) return;
+    const c = chat.convo, chasers = c.phone ? [] : c.members.filter((id) => {
+      if (MH.social.isAfraid(id) || MH.fight.power(id) < 2 || MH.fight.isHurt(MH.npcById[id])) return false;
+      const attacked = (c.attacked || []).includes(id), mugger = c.mugging === id, anger = (c.anger || {})[id] || 0;
+      return Math.random() < (mugger ? 0.8 : attacked ? 0.7 : anger <= -8 ? 0.4 : 0);
+    });
+    chat.end();
+    chasers.forEach((id, i) => setTimeout(() => MH.sim.startChase(MH.npcById[id], { kind: c.mugging === id ? 'mugging' : 'brawl', reason: (c.attacked || []).includes(id) ? 'you hit them and walked off' : c.mugging === id ? 'you walked away without paying' : 'you made them furious and left', ally: i ? chasers[0] : null }), 900 + i * 500));
   };
 
   // who the player is talking to in a group (tap a portrait)
@@ -470,6 +477,7 @@
     res.memory[v.victim] = res.memory[v.victim] ? (res.memory[v.victim] + ' ' + mem).slice(0, 220) : mem;
     if (!res.witness) res.witness = `${P.name} attacked ${vn}${P.violence > 1 ? ' — again' : ''}.`;
     res.violent = true;
+    c.attacked = (c.attacked || []).concat([v.victim]);
   }
 
   // send a line as the player (used by quest Accept/Decline); keeps whatever they were typing
@@ -578,6 +586,7 @@
     for (const id in res.bond) {
       if (!c.members.includes(id) && !res.leave.includes(id)) continue;
       const d = res.bond[id];
+      if (d < 0) { c.anger = c.anger || {}; c.anger[id] = (c.anger[id] || 0) + d; }
       S.changeBond(id, d); floatDelta(id, d);
       const e = MH.npcById[id];
       if (d >= 3) MH.render.burst(e.x, e.y - 22, 'heart', 5);
@@ -599,7 +608,13 @@
     res.give.forEach((g) => { S.giveItem(g.item, g.from); MH.ui.toast(`${MH.itemIcon(g.item)} Got ${g.item}${g.from && MH.CHAR[g.from] ? ' from ' + MH.CHAR[g.from].name : ''}`); });
     res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) { MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); if (MH.quests) MH.quests.onGive(it, g.to, c.members); if (/\bphone\b/i.test(it.name) && MH.phone) MH.phone.give(g.to || c.members[0]); } });
     if (res.hurt) { MH.fight.damage(res.hurt, { by: c.members[0] }); MH.ui.toast(`💥 −${res.hurt} HP`, 2); MH.render.flash = 0.12; }
-    if (res.fight && MH.fight && c.members.includes(res.fight.with)) {
+    if (!res.fight && c.pendingFight && c.members.includes(c.pendingFight.with)) res.fight = c.pendingFight; // they chased you down for this
+    c.pendingFight = null;
+    if (res.fight && res.fight.kind === 'mugging') c.mugging = res.fight.with;
+    if (res.chase && MH.npcById[res.chase.who] && !c.phone) {
+      const ch = res.chase;
+      setTimeout(() => { if (chat.convo === c) chat.end(); MH.sim.startChase(MH.npcById[ch.who], { kind: ch.kind, reason: ch.why || '' }); }, 1200);
+    } else if (res.fight && MH.fight && c.members.includes(res.fight.with)) {
       const f = res.fight;
       if (f.auto) setTimeout(() => chat.convo === c && MH.fight.inChat(c, f), 500);
       else MH.fight.offer(c, f);

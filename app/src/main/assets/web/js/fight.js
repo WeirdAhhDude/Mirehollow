@@ -121,15 +121,39 @@
   };
 
   // ---------------------------------------------------------------- the fight minigame
+  // Who takes sides when a fight breaks out near the player: the opponent's friends may jump in against you,
+  // your friends may jump in for you, timid bystanders run off, the rest watch.
+  F.sides = function (opp) {
+    const out = { foes: [], friends: [], fled: [] };
+    const pl = MH.player, room = MH.roomOf(pl), convo = MH.chat.convo ? MH.chat.convo.members : [];
+    const S = MH.social;
+    MH.npcs.forEach((o) => {
+      if (o.id === opp || o.hidden || o.asleep || o.chase || F.isHurt(o) || o.ch.visitor || o.id === 'scarecrow') return;
+      if (MH.roomOf(o) !== room || MH.distTiles(o, pl) > 10) return;
+      if (o.busy && !convo.includes(o.id)) return;
+      const toOpp = S.npc(o.id).rel[opp] || 0, att = S.attitude(o.id), pw = F.power(o.id);
+      const gang = MH.BANDITS.includes(o.id) && MH.BANDITS.includes(opp);
+      if ((toOpp >= 40 || gang) && att < 25 && pw >= 2 && !S.isAfraid(o.id) && out.foes.length < 2) out.foes.push(o.id);
+      else if ((att >= 40 || (o.following && att >= 15)) && toOpp <= 20 && pw >= 2 && !S.isAfraid(o.id) && out.friends.length < 2) out.friends.push(o.id);
+      else if (!S.isTough(o.id) && pw <= 2 && Math.random() < 0.6) out.fled.push(o.id);
+    });
+    return out;
+  };
+
   // opts: { opp, kind: 'spar'|'brawl'|'mugging', starter: 'player'|'npc', why, onEnd(result) }
   F.start = function (opts) {
     if (F.active || !MH.CHAR[opts.opp]) return;
     const opp = opts.opp, ch = MH.CHAR[opp], pow = MH.clamp(F.power(opp), 1, 5);
     const spar = opts.kind === 'spar';
     const pw = F.weaponOf('player'), ow = F.weaponOf(opp);
+    const sides = spar ? { foes: [], friends: [], fled: [] } : F.sides(opp);
+    // bystanders react before the first blow
+    sides.fled.forEach((id) => { const o = MH.npcById[id]; if (MH.chat.active && MH.chat.convo.members.includes(id)) MH.chat.removeMember(id, 'runs off, terrified'); MH.sim.flee(o, MH.player); });
+    sides.foes.concat(sides.friends).forEach((id) => { const o = MH.npcById[id]; o.busy = 'talking'; o.path = null; o.face(MH.player.x, MH.player.y); o.showEmote('anger', 3); });
     const st = {
       opts, opp, pow, spar, pw, ow,
-      oppMax: 60 + pow * 25, oppHp: 60 + pow * 25,
+      sides, foeMult: 1 + 0.35 * sides.foes.length, helpMult: 1 + 0.4 * sides.friends.length, guard: Math.max(0.5, 1 - 0.25 * sides.friends.length),
+      oppMax: (60 + pow * 25) * (1 + 0.5 * sides.foes.length), oppHp: (60 + pow * 25) * (1 + 0.5 * sides.foes.length),
       notes: 10 + pow * 3, spawned: 0, hits: 0, perfect: 0, misses: 0, over: false,
       appr: 1450 - pow * 180, rad: 44 - pow * 3.5, gap: 880 - pow * 105, sliderP: 0.12 + pow * 0.07,
     };
@@ -138,6 +162,7 @@
         <div class="fb me"><span>You${pw !== 'fists' ? ' · ' + MH.esc(MH.WEAPONS[pw].name) : ''}</span><div class="bar"><i></i></div></div>
         <div class="fvs">${spar ? '🤝 SPAR' : '⚔️'}<small>${F.DIFF[pow]}</small></div>
         <div class="fb them"><span>${MH.esc(ch.name)}${ow !== 'fists' ? ' · ' + MH.esc(MH.WEAPONS[ow].name) : ''}</span><div class="bar"><i></i></div></div></div>
+      ${sides.foes.length || sides.friends.length || sides.fled.length ? `<div class="fsides">${sides.friends.length ? '🛡️ With you: ' + sides.friends.map((id) => MH.esc(nm(id))).join(', ') + ' ' : ''}${sides.foes.length ? '⚔️ With ' + MH.esc(ch.name) + ': ' + sides.foes.map((id) => MH.esc(nm(id))).join(', ') + ' ' : ''}${sides.fled.length ? '🏃 Fled: ' + sides.fled.map((id) => MH.esc(nm(id))).join(', ') : ''}</div>` : ''}
       <div class="fplay"></div><div class="fmsg">Get ready…</div>
       <div class="fbtns">${(P().bhCharges || 0) > 0 && !spar ? '<button class="btn small fbh">🕳️ Black Hole Sniper 3000</button>' : ''}<button class="btn small ghost frun">${spar ? 'Give up' : 'Run away'}</button></div></div>`);
     document.getElementById('game').appendChild(ui);
@@ -164,9 +189,9 @@
     };
     const say = (t, cls) => { st.msg.textContent = t; st.msg.className = 'fmsg ' + (cls || ''); };
     st.say = say;
-    const dmgTo = (mult) => { st.oppHp -= 10 * MH.WEAPONS[pw].dmg * mult; bars(); if (st.oppHp <= 0) end('win'); };
+    const dmgTo = (mult) => { st.oppHp -= 10 * MH.WEAPONS[pw].dmg * mult * st.helpMult; bars(); if (st.oppHp <= 0) end('win'); };
     const hurt = (mult) => {
-      let d = (4 + pow * 3) * MH.WEAPONS[ow].dmg * mult * (spar ? 0.5 : 1);
+      let d = (4 + pow * 3) * MH.WEAPONS[ow].dmg * mult * (spar ? 0.5 : 1) * st.foeMult * st.guard;
       if (spar && F.hp() - d < 15) d = Math.max(0, F.hp() - 15);
       F.damage(d, { inFight: true, by: opp });
       bars(); st.ui.classList.remove('shake'); void st.ui.offsetWidth; st.ui.classList.add('shake');
@@ -236,7 +261,8 @@
     function end(res) {
       if (st.over) return; st.over = true;
       const ko = res === 'lose' && !spar && F.hp() <= 0; // decided now (no regen sneaking in before the card)
-      const result = { res, win: res === 'win', opp, kind: opts.kind, spar, perfect: st.perfect, hits: st.hits, misses: st.misses, blackhole: !!st.blackhole, weapon: pw };
+      const result = { res, win: res === 'win', opp, kind: opts.kind, spar, perfect: st.perfect, hits: st.hits, misses: st.misses, blackhole: !!st.blackhole, weapon: pw, sides: st.sides };
+      st.sides.foes.concat(st.sides.friends).forEach((id) => { const o = MH.npcById[id]; if (o && o.busy === 'talking' && !(MH.chat.convo && MH.chat.convo.members.includes(id))) o.busy = null; });
       say(res === 'win' ? (spar ? `You win the spar!` : `${ch.name} goes down!`) : res === 'lose' ? (spar ? `${ch.name} wins the spar.` : `You're beaten…`) : res === 'fled' ? 'You got away!' : 'You give up.', res === 'win' || res === 'fled' ? 'ok' : 'bad');
       setTimeout(() => {
         ui.remove(); document.body.classList.remove('fighting');
@@ -261,6 +287,11 @@
       S.grapevine(`${p.name} had a sparring match with ${ch.name} near ${where} (${r.win ? p.name : ch.name} won).`, [opp]);
       return;
     }
+    // the ones who jumped in remember it
+    const sd = r.sides || { foes: [], friends: [] };
+    sd.friends.forEach((id) => { S.addMemory(id, `Jumped into a fight to help ${p.name} against ${ch.name}.`, { imp: 3 }); S.changeBond(id, 3); S.changeRel(id, opp, -10); });
+    sd.foes.forEach((id) => { S.addMemory(id, `Helped ${ch.name} fight ${p.name}.`, { imp: 3 }); S.changeBond(id, -4); S.changeRel(id, opp, 5); if (r.win) { const o = MH.npcById[id]; if (o) o.hurtUntil = MH.absMinutes() + 180; } });
+    (sd.fled || []).forEach((id) => S.addMemory(id, `Saw ${p.name} get into a fight with ${ch.name} and ran for it.`, { imp: 2, kind: 'witness' }));
     if (r.res === 'fled') { S.addMemory(opp, `${p.name} ran away from a fight with me.`, { imp: 2 }); S.applyRep({ brave: -2 }, [opp]); return; }
     const bandit = ch.bandit || ch.villain;
     if (r.win) {
@@ -282,7 +313,11 @@
   // ---------------------------------------------------------------- villagers fighting each other (simulated)
   F.npcFight = async function (a, b, why) {
     if (a.busy || b.busy) return;
-    const pa = F.power(a.id) + Math.random() * 2.2, pb = F.power(b.id) + Math.random() * 2.2;
+    let pa = F.power(a.id) + Math.random() * 2.2, pb = F.power(b.id) + Math.random() * 2.2;
+    const helper = (x, y) => MH.npcs.find((o) => o !== a && o !== b && !o.hidden && !o.busy && !o.asleep && !o.chase && !F.isHurt(o) && MH.distTiles(o, x) < 9 && MH.roomOf(o) === MH.roomOf(x) && (MH.social.npc(o.id).rel[x.id] || 0) >= 50 && (MH.social.npc(o.id).rel[y.id] || 0) < 10 && F.power(o.id) >= 2);
+    const ha = helper(a, b), hb = helper(b, a);
+    if (ha) pa += F.power(ha.id) * 0.6; if (hb) pb += F.power(hb.id) * 0.6;
+    MH.npcs.forEach((o) => { if (o !== a && o !== b && o !== ha && o !== hb && !o.hidden && !o.busy && !o.chase && MH.distTiles(o, a) < 8 && MH.roomOf(o) === MH.roomOf(a) && !MH.social.isTough(o.id) && F.power(o.id) <= 2 && Math.random() < 0.6) MH.sim.flee(o, a); });
     const [win, lose] = pa >= pb ? [a, b] : [b, a];
     const where = MH.world.placeAt(a.x, a.y).name;
     const pl = MH.player;
@@ -290,7 +325,7 @@
     a.busy = b.busy = 'smalltalk'; a.face(b.x, b.y); b.face(a.x, a.y);
     if (visible) {
       a.showEmote('anger', 3); b.showEmote('anger', 3);
-      MH.sim.vibeNow(`${a.ch.name} and ${b.ch.name} are FIGHTING near ${where}!`);
+      MH.sim.vibeNow(`${a.ch.name} and ${b.ch.name} are FIGHTING near ${where}!${ha ? ' ' + ha.ch.name + ' jumps in for ' + a.ch.name + '!' : ''}${hb ? ' ' + hb.ch.name + ' jumps in for ' + b.ch.name + '!' : ''}`);
       for (let i = 0; i < 5; i++) { MH.render.burst((a.x + b.x) / 2 + MH.rand(-8, 8), (a.y + b.y) / 2 - 20, 'sparkle', 4); await new Promise((r) => setTimeout(r, 380)); }
       MH.chat.showBubble(win, win.ch.mute ? '*stands over them*' : MH.pick(['And STAY down.', 'That\'s what I thought.', 'Hmph.']), { dur: 3 });
       MH.chat.showBubble(lose, lose.ch.mute ? '*limps away*' : MH.pick(['Ow… OW…', 'This isn\'t over!', '*groans*']), { dur: 3 });
@@ -300,7 +335,8 @@
     MH.social.addMemory(win.id, `Got into a fight with ${lose.ch.name} near ${where}${why ? ' (' + why + ')' : ''}. I won.`, { imp: 3, about: 'town' });
     MH.social.addMemory(lose.id, `${win.ch.name} beat me up near ${where}${why ? ' (' + why + ')' : ''}.`, { imp: 3, about: 'town' });
     MH.npcs.forEach((o) => { if (o !== a && o !== b && !o.hidden && MH.distTiles(o, a) < 10 && MH.roomOf(o) === MH.roomOf(a)) MH.social.addMemory(o.id, `Saw ${a.ch.name} and ${b.ch.name} get into a real fight near ${where}. ${win.ch.name} won.`, { imp: 2, kind: 'witness', about: 'town' }); });
-    MH.social.grapevine(`${a.ch.name} and ${b.ch.name} had a fight near ${where} — ${win.ch.name} won.`, [a.id, b.id]);
+    [ha, hb].forEach((hx) => { if (hx) MH.social.addMemory(hx.id, `Jumped into ${a.ch.name} and ${b.ch.name}'s fight near ${where} to help ${hx === ha ? a.ch.name : b.ch.name}.`, { imp: 3, about: 'town' }); });
+    MH.social.grapevine(`${a.ch.name} and ${b.ch.name} had a fight near ${where}${ha || hb ? ' (' + [ha, hb].filter(Boolean).map((x) => x.ch.name).join(' and ') + ' jumped in)' : ''} — ${win.ch.name} won.`, [a.id, b.id]);
     if (visible) MH.social.log({ kind: 'sys', text: `⚔️ ${a.ch.name} vs ${b.ch.name} near ${where} — ${win.ch.name} won.` });
     a.busy = b.busy = null; lose.planKey = null; lose.planDelay = 0;
   };
@@ -328,6 +364,15 @@
     F.lastStarter = f.starter || 'npc';
     F.start({ opp: f.with, kind: f.kind, starter: f.starter, onEnd: (r) => {
       if (!MH.chat.active || MH.chat.convo !== c) return;
+      if (r.res === 'fled') {
+        MH.chat.end();
+        const e = MH.npcById[f.with];
+        // you break free and bolt a few steps away
+        if (e) { const pl = MH.player, dx = pl.x - e.x, dy = pl.y - e.y, L = Math.hypot(dx, dy) || 1, t = pl.tile(); const s2 = MH.world.nearestWalkable(Math.round(t.tx + dx / L * 4), Math.round(t.ty + dy / L * 4)); if (!MH.roomOf(pl) || MH.world.roomAt(s2.tx, s2.ty)) pl.setTile(s2.tx, s2.ty); }
+        if (e && !MH.social.isAfraid(f.with) && F.power(f.with) >= 2 && Math.random() < 0.75) setTimeout(() => MH.sim.startChase(e, { kind: f.kind === 'mugging' ? 'mugging' : 'brawl', reason: 'you ran away from the fight' }), 1200);
+        else MH.ui.toast('You got away!', 2.5);
+        return;
+      }
       const P2 = P().name, n2 = nm(f.with);
       const txt = r.spar ? `SPARRING RESULT: ${r.win ? P2 + ' won the friendly spar against ' + n2 : n2 + ' won the friendly spar'}${r.res === 'gaveup' ? ' (the player gave up)' : ''}. It was friendly — react in kind.`
         : r.res === 'fled' ? `FIGHT RESULT: ${P2} ran away from the fight with ${n2}.`

@@ -463,6 +463,35 @@
       offline: ['*purrs* Oh, sweetie, you didn\'t hear what they said about you? Never mind. Forget I said anything.', 'I\'m only telling you because I CARE, darling.', 'Secrets are like cream. *licks lips*'],
       power: 2, villain: true,
     },
+    // ---- v0.9: the fighters
+    {
+      id: 'roxy', name: 'Roxy', title: 'The Champ', species: 'kangaroo',
+      home: 'gym',
+      bio: 'Roxanne "Roxy" Hookes: a tall, broad-shouldered kangaroo and three-time Valley Boxing Champion who retired after one controversial loss she still talks about ("the judges were BLIND"). Coaches boxing at the Burrow Gym and lives in the little flat above it. Loud, cocky and competitive, but big-hearted: she trash-talks everyone, then buys them a drink. Jogs around town at dawn, shadowboxing lamp posts, and wears her old gold championship belt everywhere, even to brunch. Treats Box like a brother. Has a long-running rivalry with Sensei Jade over whether boxing beats "all that fancy kicking"; they have never actually fought, and both secretly dread finding out.',
+      voice: 'Brash and punchy: sports slang, calls people "kid", "champ" or "slugger", boxing metaphors ("you\'re on the ropes!"), loud laugh, cheerful trash talk.',
+      quirks: ['shadowboxes mid-conversation', 'polishes her championship belt', 'challenges people to arm-wrestle', 'counts everything in "rounds"'],
+      values: { kind: 0.5, funny: 1, chaotic: 0.5, generous: 1, brave: 2, rude: -0.5, violent: -0.5 },
+      start: { bond: 6, mood: 'pumped' },
+      relations: { box: [60, 'like a brother; runs the gym with him'], bunny: [50, 'her star pupil; WAY too much energy'], jade: [10, 'the mantis with the "fancy kicks" — her rival; respects her more than she admits'], kira: [15, 'keeps asking her for a sparring match'], gristle: [-40, 'knocked him flat when he tried to rob the gym'], sunny: [35, 'makes her protein muffins'] },
+      haunts: ['park', 'river', 'station', 'square', 'dojo'],
+      look: { fur: '#c8865a', fur2: '#f2dcc0', hair: '#4a2418', hairStyle: 'pony', ears: 'roo', earIn: '#e8b8a0', tail: 'roo', eyes: '#3a2414', top: '#f4f2ec', bottom: '#c8282a', acc: ['gloves', 'champbelt'], gloves: '#d8282a', tall: 3, wide: 1, lashes: true },
+      offline: ['*shadowboxes* Hey, slugger! You look like you could use a few rounds.', 'Three-time champ. Ask me how. Actually, don\'t — I\'ll tell you anyway.', 'Fancy kicks are for show, kid. A good jab is for KEEPS.'],
+      power: 4,
+    },
+    {
+      id: 'jade', name: 'Sensei Jade', title: 'The Grandmaster', species: 'praying mantis',
+      home: 'dojo',
+      bio: 'A tall, slender green praying mantis, grandmaster of the Jade Dojo at the south-west edge of town, past the bamboo. She has mastered nearly every martial art there is — karate, kendo, judo, aikido, kung fu (mantis style, naturally), taekwondo, muay thai — and is, quietly and without question, the strongest fighter in the valley: even Kira won\'t spar with her. Calm, precise, dry-humoured and endlessly patient, until someone disrespects the dojo. Teaches a handful of students (Rin the crane, her best; Tobi the hamster; Bo the capybara; and Bunny when she can sit still). Meditates at the shrine and under the waterfall, and catches flies with chopsticks, then eats them. Believes a true master never starts a fight, but always finishes it.',
+      voice: 'Calm and measured, very few words; short lessons and koan-like sayings, calls people "student" or "young one", bone-dry deadpan humour, never raises her voice.',
+      quirks: ['catches things mid-air without looking', 'slowly rotates her head to look at people', 'turns everything into a lesson', 'bows before and after every conversation'],
+      values: { kind: 1, funny: 0.5, chaotic: -1.5, generous: 1, brave: 2, rude: -2, violent: -1 },
+      start: { bond: 4, mood: 'serene' },
+      relations: { roxy: [15, 'the loud kangaroo; a worthy rival, though she would never say so'], kira: [40, 'respects her raw power; wishes she would stop napping through morning class'], bunny: [55, 'eager student, too much energy, will be great one day'], thistle: [50, 'shares tea and old legends with her'], rook: [-30, 'disarmed him once; he has avoided the dojo ever since'], box: [30, 'mutual, silent respect'] },
+      haunts: ['shrine', 'falls', 'woods', 'park', 'pines'],
+      look: { fur: '#7cc464', fur2: '#c8ec9c', hair: '#7cc464', hairStyle: 'none', ears: 'none', tail: 'none', eyes: '#2e7a2e', top: '#f6f4ee', bottom: '#f6f4ee', acc: ['gi', 'belt', 'antennae', 'mantiseyes', 'scythes', 'leafwings'], belt: '#1a1a1e', head: 'mantis', tall: 4, lashes: true },
+      offline: ['*bows* Welcome, young one.', 'The fly does not see the chopsticks. Be the chopsticks.', 'Strength is easy. Restraint is the lesson.'],
+      power: 5,
+    },
   ];
 
 
@@ -495,6 +524,8 @@
     sheep: { haunts: ['square', 'club'], s: [[9, 18, 'barber'], [18, 20, 'roam'], [20, 9, 'inside:barber']] },
     owl: { haunts: ['clinic'], s: [[0, 6, 'clinic'], [6, 14, 'inside:clinic'], [14, 24, 'clinic']] },
     beaver: { haunts: ['station', 'northlane', 'crossing'], s: [[7, 12, 'workshop'], [12, 14, 'roam'], [14, 17, 'workshop'], [17, 19, 'roam'], [19, 7, 'inside:workshop']] },
+    roxy: { haunts: ['park', 'river', 'station', 'square', 'dojo', 'busstop'], s: [[5, 7, 'roam'], [7, 12, 'gym'], [12, 14, 'roam'], [14, 19, 'gym'], [19, 22, 'roam'], [22, 5, 'inside:gym']] },
+    jade: { haunts: ['shrine', 'falls', 'woods', 'park', 'pines'], s: [[5, 12, 'dojo'], [12, 14, 'roam'], [14, 20, 'dojo'], [20, 22, 'roam'], [22, 5, 'inside:dojo']] },
   };
   MH.CHARS.forEach((c) => {
     const d = SCHED[c.id]; if (!d) return;
@@ -503,9 +534,17 @@
     if (d.friday) c.friday = d.friday;
   });
   // how much each villager enjoys parties (used for RSVPs), -1..1
-  const PARTY = { juniper: 0.6, thistle: 0.2, rook: 0.3, gristle: 0.1, snitch: 0.5, mortimer: -0.6, vesper: 0.7, dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
+  const PARTY = { roxy: 0.7, jade: -0.3, juniper: 0.6, thistle: 0.2, rook: 0.3, gristle: 0.1, snitch: 0.5, mortimer: -0.6, vesper: 0.7, dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
   MH.CHARS.forEach((c) => (c.partyLove = PARTY[c.id] != null ? PARTY[c.id] : 0.2));
 
+  // how the others feel about the two fighters (new games; older saves start these at 0)
+  const REV = {
+    box: { roxy: [55, 'Roxy coaches boxing at his gym; like a sister to him'], jade: [30, 'mutual, silent respect'] },
+    bunny: { roxy: [45, 'her boxing coach; they race every morning'], jade: [50, 'her sensei; she tries SO hard to sit still'] },
+    kira: { jade: [25, 'maybe the only one who could beat her, so she never spars her'], roxy: [-5, 'keeps asking her for a fight; annoying'] },
+    gristle: { roxy: [-45, 'the kangaroo who decked him'] }, rook: { jade: [-35, 'the mantis who disarmed him'] }, thistle: { jade: [50, 'tea and old legends'] },
+  };
+  for (const id in REV) { const c = MH.CHARS.find((x) => x.id === id); if (c) c.relations = Object.assign(c.relations || {}, REV[id]); }
   MH.CHAR = {};
   MH.CHARS.forEach((c) => (MH.CHAR[c.id] = c));
 
@@ -515,16 +554,16 @@
   const VIOLENT = { kira: -0.5, maggie: -0.5, darkborn: 0.5, chuckles: -1, gertie: -1, box: -1, nimbus: -1.5, solaris: -1.5, zahra: -1 };
   MH.CHARS.forEach((c) => { if (c.values && c.values.violent == null) c.values.violent = VIOLENT[c.id] != null ? VIOLENT[c.id] : -2; });
   // villagers who don't scare easily (they get angry instead of afraid)
-  MH.TOUGH = ['kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable', 'thistle', 'rook', 'gristle', 'mortimer'];
+  MH.TOUGH = ['roxy', 'jade', 'kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable', 'thistle', 'rook', 'gristle', 'mortimer'];
   // fight difficulty 1 (easy) .. 5 (VERY HARD)
   const POWER = { kira: 5, nimbus: 5, solaris: 5, darkborn: 5, box: 4, marina: 4, gertie: 4, zahra: 4, scarecrow: 4, bunny: 3, maggie: 3, clucky: 3, sable: 3, brenda: 3, dionne: 2, vix: 2, chuckles: 2, mayor: 1, sunny: 1, lily: 1, patty: 2, penelope: 2, mole: 1, sheep: 1, owl: 1, beaver: 2 };
   MH.CHARS.forEach((c) => { if (c.power == null) c.power = POWER[c.id] || 2; });
   MH.BANDITS = MH.CHARS.filter((c) => c.bandit).map((c) => c.id);
   MH.VILLAINS = MH.CHARS.filter((c) => c.bandit || c.villain).map((c) => c.id);
   // who already owns a phone (you can buy the others one)
-  MH.PHONE_OWNERS = ['dionne', 'brenda', 'penelope', 'mayor', 'vix', 'chuckles', 'bunny', 'juniper', 'rook', 'vesper', 'mortimer', 'box'];
+  MH.PHONE_OWNERS = ['roxy', 'dionne', 'brenda', 'penelope', 'mayor', 'vix', 'chuckles', 'bunny', 'juniper', 'rook', 'vesper', 'mortimer', 'box'];
   // the new highland places get some visitors from town too
-  const EXTRA_HAUNTS = { kira: ['falls'], marina: ['falls'], lily: ['falls', 'orchard'], bunny: ['lookout', 'foothills'], patty: ['onsen'], darkborn: ['onsen'], sunny: ['orchard'], clucky: ['orchard'], chuckles: ['heights'], dionne: ['onsen'], gertie: ['falls'], penelope: ['scrub'] };
+  const EXTRA_HAUNTS = { kira: ['falls', 'dojo'], box: ['dojo'], juniper: ['dojo'], marina: ['falls'], lily: ['falls', 'orchard'], bunny: ['lookout', 'foothills', 'dojo'], patty: ['onsen'], darkborn: ['onsen'], sunny: ['orchard'], clucky: ['orchard'], chuckles: ['heights', 'dojo'], dionne: ['onsen'], gertie: ['falls'], penelope: ['scrub'] };
   MH.CHARS.forEach((c) => { (EXTRA_HAUNTS[c.id] || []).forEach((h) => c.haunts && !c.haunts.includes(h) && c.haunts.push(h)); });
 
   MH.bondTier = (b) =>

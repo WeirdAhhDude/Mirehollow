@@ -42,6 +42,7 @@
     townhall: { x0: 188, y0: 18, x1: 201, y1: 27, floor: G.FLOOR, wall: '#e4dccb', building: 'townhall', open: [8, 18], name: 'inside Town Hall', desc: 'inside the crooked Town Hall: the Mayor\'s cluttered desk, rows of meeting chairs, flags and overflowing notice boards' },
     clinic: { x0: 204, y0: 18, x1: 215, y1: 26, floor: G.TILEF, wall: '#eef2f0', building: 'clinic', open: [0, 24], name: 'inside the clinic', desc: 'inside Doctor Owl\'s clinic: two patient beds, a cabinet of remedies, a desk with immaculate notes' },
     mall: { x0: 154, y0: 43, x1: 175, y1: 55, floor: G.TILEF, wall: '#f0e6dc', building: 'mall', open: [9, 21], name: 'inside Mirehollow Mall', desc: 'inside Mirehollow Mall: a bright little shopping arcade with striped kiosks (food court, gift corner, fashion boutique, home & decor, fun zone), café tables and soft muzak' },
+    dojo: { x0: 178, y0: 32, x1: 193, y1: 42, floor: G.TATAMI, wall: '#efe6d0', building: 'dojo', open: [6, 21], name: 'inside the Jade Dojo', desc: 'inside the Jade Dojo: tatami mats, a rack of practice weapons (bokken, bo staffs, kendo shinai), hanging calligraphy scrolls, a wooden training dummy and a little shrine shelf' },
     barber: { x0: 154, y0: 32, x1: 163, y1: 39, floor: G.TILEF, wall: '#f2e8f2', building: 'barber', open: [9, 18], name: 'inside the barbershop', desc: 'inside the barbershop: three barber chairs, mirrors, a waiting sofa and a lot of questionable hair on the floor' },
   };
   for (const id in ROOMS) { const R = ROOMS[id]; R.id = id; R.doorX = Math.floor((R.x0 + R.x1) / 2); }
@@ -82,6 +83,7 @@
     B('cabin', 'Juniper\'s Cabin', 25, 144, 5, 4, { roof: '#7a5a34', wall: '#c8a070', kind: 'house' }),
     B('hideout', 'The Hollow (bandit hideout)', 60, 170, 7, 4, { kind: 'cave' }),
     B('crowsnest', 'Crow\'s Nest Cottage', 84, 141, 6, 5, { roof: '#4a4a5a', wall: '#d8d0c4', kind: 'house' }),
+    B('dojo', 'The Jade Dojo', 16, 88, 10, 5, { roof: '#3a3a46', wall: '#f0e6d0', kind: 'shop', sign: 'DOJO 道場' }),
   ];
   // Generic houses for the townsfolk.
   const HOUSES = [
@@ -146,6 +148,7 @@
     falls: { name: 'the waterfall', r: [110, 155, 122, 160], desc: 'at the pool below the waterfall that spills off Crag Heights, mist in the air' },
     hideout: { name: 'the Hollow Crags', r: [54, 174, 74, 184], desc: 'up on the Hollow Crags, a barren rocky plateau around the bandits\' cave — not a nice place to be alone' },
     scrub: { name: 'the scrublands', r: [90, 162, 146, 192], desc: 'in the dry rocky scrublands at the southern edge of the valley' },
+    dojo: { name: 'the Jade Dojo', r: [14, 94, 29, 100], desc: 'in the sandy training yard of the Jade Dojo, students shouting "HAI!" in unison' },
     pines: { name: 'the Pine Forest', r: [2, 156, 48, 197], desc: 'in the dark, quiet Pine Forest at the south-west of the valley' },
   };
   // Public places townsfolk wander between.
@@ -368,6 +371,8 @@
     paintPath([[4, 68], [42, 68]], 2);                  // gym lane
     paintPath([[4, 81], [42, 81]], 2);                  // south lane
     paintPath([[44, 93], [126, 93]], 2);                // farm road
+    rect(13, 93, 30, 101, (x, y) => setG(x, y, G.SAND)); // the dojo's training yard
+    paintPath([[30, 97], [41, 97]], 2, G.PATH);         // and the path to it from the west road
     paintPath([[117, 60], [131, 60]], 2);               // east lane to the swamp
     paintPath([[82, 23], [82, 33]], 2, G.STONE);        // station approach
     paintPath([[30, 22], [30, 15]], 1, G.PATH);         // trail to Kira's den
@@ -488,6 +493,10 @@
     // clinic
     fur('clinicbed', 205, 21, 1, 2); fur('clinicbed', 213, 21, 1, 2); fur('desk', 208, 21, 2); fur('cabinet', 211, 20); fur('plant', 214, 25); deco('chair', 207, 24); deco('chair', 208, 24);
     ROOMS.clinic.staff = [[208, 20], [209, 20]];
+    // the Jade Dojo
+    fur('punchbag', 180, 35); fur('punchbag', 191, 35); fur('weaponrack', 186, 34); fur('weaponrack', 187, 34);
+    deco('scroll', 181, 33); deco('scroll', 184, 33); deco('scroll', 189, 33); deco('mat', 185, 37); deco('mat', 186, 39); fur('plant', 179, 41); fur('plant', 192, 41);
+    ROOMS.dojo.staff = [[185, 36], [186, 36]];
     // barbershop
     fur('barberchair', 156, 35); fur('barberchair', 158, 35); fur('barberchair', 160, 35); deco('mirror', 156, 33); deco('mirror', 158, 33); deco('mirror', 160, 33);
     prop('sofa', 161, 37, { solid: true, w: 2, interior: true }); setSolid(162, 37); fur('plant', 155, 38);
@@ -512,6 +521,7 @@
     counter('townhall', [[194, 22], [195, 22]]);
     counter('clinic', [[208, 22], [209, 22]], 'clinic');
     counter('barber', [[156, 37], [157, 37]]);
+    fur('desk', 182, 40, 2); counter('dojo', [[182, 41], [183, 41]]);
     // where each room's inside counts as a location
     for (const id in ROOMS) { const R = ROOMS[id]; LOCS['in_' + id] = { name: R.name, r: [R.x0 + 1, R.y0 + 2, R.x1 - 1, R.y1 - 1], desc: R.desc, room: id }; }
 
@@ -533,6 +543,11 @@
     // park: sakura, benches, little pavilion
     [[48, 78], [52, 77], [57, 79], [49, 88], [55, 89], [60, 86], [47, 83]].forEach(([x, y]) => prop('sakura', x, y));
     [[51, 82], [56, 82], [53, 86]].forEach(([x, y]) => prop('bench', x, y));
+    // the Jade Dojo: a bamboo grove behind it, stone lanterns at the yard, wooden training dummies
+    for (let x = 11; x <= 31; x++) for (const y of [85, 86, 87]) if (MH.hash2(x, y, 77) < (y === 87 ? 0.35 : 0.7) && freeTile(x, y) && world.g(x, y) === G.GRASS) prop('bamboo', x, y);
+    for (let y = 88; y <= 92; y++) for (const x of [12, 13, 28, 29]) if (MH.hash2(x, y, 78) < 0.6 && freeTile(x, y) && world.g(x, y) === G.GRASS) prop('bamboo', x, y);
+    [[14, 100], [29, 100]].forEach(([x, y]) => prop('stonelantern', x, y));
+    [[16, 97], [19, 99], [25, 99], [27, 96]].forEach(([x, y]) => prop('post', x, y));
     // shrine
     prop('torii', 74, 17, { w: 2, solid: false }); setSolid(73, 17); setSolid(76, 17);
     [[72, 12], [77, 12], [72, 9], [77, 9]].forEach(([x, y]) => prop('stonelantern', x, y));

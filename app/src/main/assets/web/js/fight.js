@@ -194,7 +194,7 @@
       setTimeout(() => MH.chat.convo === c && c.members.includes(tgt.id) && MH.chat.removeMember(tgt.id, 'vanishes into a tiny black hole'), 1100);
       F.renderBar(c); return;
     }
-    const chance = HIT[p] + (pw !== 'fists' ? 0.06 : 0) + (cb.allies.length ? 0.05 : 0);
+    const chance = HIT[p] + (pw !== 'fists' ? 0.06 : 0) + (cb.allies.length ? 0.05 : 0) + Math.min(5, MH.state.player.training || 0) * 0.03; // dojo lessons help
     const hit = Math.random() < chance, crit = hit && Math.random() < 0.12;
     let dmg = 0;
     if (hit) { dmg = Math.round(26 * W.dmg * MH.rand(0.85, 1.15) * (crit ? 1.6 : 1) * (cb.spar ? 0.75 : 1)); tgt.hp = Math.max(0, tgt.hp - dmg); }
@@ -308,11 +308,11 @@
   };
 
   // ---------------------------------------------------------------- the dodge box (your ❤️ vs their attacks)
-  const STYLE = { kira: ['bars', 'aimed', 'slam'], rook: ['aimed', 'aimed', 'side'], gristle: ['slam', 'rain'], snitch: ['pebbles'], mortimer: ['bars', 'aimed'], vesper: ['homing'], box: ['bouncers', 'slam'], bunny: ['side', 'side', 'aimed'], marina: ['waves', 'side'], gertie: ['slam', 'bouncers'], nimbus: ['storm', 'rain'], darkborn: ['ring', 'homing', 'bars'], solaris: ['ring', 'rain'], zahra: ['ring', 'homing'], thistle: ['slam', 'aimed'], maggie: ['swarm', 'homing'], clucky: ['aimed', 'rain'], sable: ['homing', 'bars'], scarecrow: ['ring', 'homing'], dionne: ['waves', 'rain'], chuckles: ['bouncers', 'rain'], brenda: ['slam', 'bouncers'] };
+  const STYLE = { jade: ['storm', 'aimed', 'bars', 'slam'], roxy: ['side', 'aimed', 'side', 'slam'], f_rin: ['aimed', 'side'], kira: ['bars', 'aimed', 'slam'], rook: ['aimed', 'aimed', 'side'], gristle: ['slam', 'rain'], snitch: ['pebbles'], mortimer: ['bars', 'aimed'], vesper: ['homing'], box: ['bouncers', 'slam'], bunny: ['side', 'side', 'aimed'], marina: ['waves', 'side'], gertie: ['slam', 'bouncers'], nimbus: ['storm', 'rain'], darkborn: ['ring', 'homing', 'bars'], solaris: ['ring', 'rain'], zahra: ['ring', 'homing'], thistle: ['slam', 'aimed'], maggie: ['swarm', 'homing'], clucky: ['aimed', 'rain'], sable: ['homing', 'bars'], scarecrow: ['ring', 'homing'], dionne: ['waves', 'rain'], chuckles: ['bouncers', 'rain'], brenda: ['slam', 'bouncers'] };
   F.dodge = function (o, done) {
-    const pows = o.enemies.map(pw5), maxP = Math.max(...pows);
+    const pows = o.enemies.map((id) => o.power || pw5(id)), maxP = Math.max(...pows);
     const dur = 3 + maxP * 0.95 + (o.enemies.length - 1) * 1.3;
-    const ui = h(`<div class="dodge"><div class="dcap">${MH.esc(o.caption)}</div><canvas></canvas><div class="dinfo"><span>❤️ <b class="dhp">${Math.round(F.hp())}</b></span><span class="dtime"><i></i></span></div><div class="dhint">Drag anywhere to move your ❤️ · dodge everything</div></div>`);
+    const ui = h(`<div class="dodge"><div class="dcap">${MH.esc(o.caption)}</div><canvas></canvas><div class="dinfo"><span>${o.training ? '' : '❤️ '}<b class="dhp">${o.training ? '✋ 0' : Math.round(F.hp())}</b></span><span class="dtime"><i></i></span></div><div class="dhint">Drag anywhere to move your ❤️ · dodge everything</div></div>`);
     document.getElementById('game').appendChild(ui);
     document.body.classList.add('fighting');
     const cv = ui.querySelector('canvas'), dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -358,6 +358,7 @@
     const kd = (e) => { keys[e.key] = e.type === 'keydown'; }; window.addEventListener('keydown', kd); window.addEventListener('keyup', kd);
     const hitHeart = (id) => {
       if (inv > 0) return;
+      if (o.training) { taken += 1; inv = 0.85; ui.classList.remove('hurt'); void ui.offsetWidth; ui.classList.add('hurt'); ui.querySelector('.dhp').textContent = '✋ ' + taken; return; }
       const floor = o.spar ? 15 : 0;
       let d = dmgOf(id); if (F.hp() - d < floor) d = Math.max(0, F.hp() - floor);
       F.damage(d, { inFight: true, by: id }); taken += d; inv = 0.85;

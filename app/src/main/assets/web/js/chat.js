@@ -9,7 +9,7 @@
 
   // map bubbles fade after a while (short lines quicker); conversation bubbles stay until that character speaks again
   const holdFor = (text) => MH.clamp(1.4 + String(text).length * 0.045, 2, 10);
-  const cps = () => ({ slow: 17, normal: 70, fast: 140, instant: 1e6 }[MH.settings.textSpeed] || 70);
+  const cps = () => ({ slow: 24, normal: 70, fast: 140, instant: 1e6 }[MH.settings.textSpeed] || 70);
 
   chat.init = function () {
     el = {
@@ -41,6 +41,7 @@
       if (card && chat.convo && chat.convo.members.length > 1 && e.target.closest('img')) chat.setTarget(chat.to === card.dataset.id ? null : card.dataset.id);
     });
     el.says.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.nexta')) { e.stopPropagation(); e.preventDefault(); clearArrows(); chat.skipFlag = true; return; }
       const s = e.target.closest('.say'); if (!s) return;
       e.stopPropagation();
       const entry = !s.classList.contains('ghost') && s.dataset.id ? says.get(s.dataset.id) : null;
@@ -184,7 +185,9 @@
     if (!s.full || !s.d.classList.contains('on')) return;
     const g = s.d.cloneNode(true);
     g.classList.remove('latest', 'thinking', 'expand', 'on'); g.classList.add('ghost');
-    g.dataset.full = s.full;
+    g.dataset.full = s.full; g.style.fontSize = '';
+    g.querySelectorAll('.nexta').forEach((a) => a.remove());
+    const gt = g.querySelector('.txt'); if (gt) { gt.classList.remove('clip'); gt.style.maxHeight = ''; }
     showTail(g, s.full, true);
     g.style.transform = s.d.style.transform; g.style.zIndex = '1';
     el.says.appendChild(g);
@@ -193,6 +196,7 @@
     while (s.ghosts.length > 2) s.ghosts.pop().d.remove();
   }
   function cardSay(id, text) {
+    clearArrows();
     const s = sayFor(id);
     ghostOf(s);
     s.full = text; s.shown = 0; s.born = MH.now; s.thinking = false; s.rendered = null;
@@ -209,11 +213,15 @@
     });
   }
   const cardTyped = (id) => { const s = says.get(id); return !s || s.shown >= s.full.length; };
-  function typingHint(id) {
+  // "there's more": a glowing arrow after the last word of the line you're reading; tap it to hear the next one now
+  function clearArrows() { el.says && el.says.querySelectorAll('.nexta').forEach((a) => a.remove()); }
+  function nextArrow(id) {
     const s = says.get(id);
-    if (s && s.full && s.d.classList.contains('on') && !s.thinking) { if (!s.txt.querySelector('.typing')) s.txt.insertAdjacentHTML('beforeend', '<span class="typing"><i></i><i></i><i></i></span>'); }
-    else cardThinking([id], true);
+    if (!s || !s.full || s.thinking || !s.d.classList.contains('on')) return;
+    if (!s.txt.querySelector('.nexta')) s.txt.insertAdjacentHTML('beforeend', '<span class="nexta" title="Next">➤</span>');
+    if (s.txt.classList.contains('clip')) s.txt.scrollTop = s.txt.scrollHeight;
   }
+  chat.clearArrows = clearArrows;
   function updateSays(dt) {
     for (const [id, s] of says) {
       if (s.thinking || !s.full) continue;
@@ -237,9 +245,11 @@
     lift(chat.to); lift(chat.front);
     return order;
   }
+  // One shared stack inside the chat (see style.css "v0.9 layers"):
+  //   other portraits 10-19 < fading older lines 20 < other bubbles 21-29 < FRONT portrait 30 < shelf/tags 31-32 < FRONT bubble 36
   function applyLayers() {
     const order = layerOrder();
-    el.cast.querySelectorAll('.card').forEach((card) => { const i = order.indexOf(card.dataset.id); card.style.zIndex = i < 0 ? 0 : 40 - i; });
+    el.cast.querySelectorAll('.card').forEach((card) => { const i = order.indexOf(card.dataset.id); card.style.zIndex = i === 0 ? 30 : i < 0 ? 10 : Math.max(10, 19 - i); });
   }
   chat.applyLayers = applyLayers;
   // Each bubble sits right above its speaker's head. The top layer keeps its spot; the others are fitted
@@ -251,10 +261,12 @@
       if (!card) return;
       const r = card.getBoundingClientRect(), w = t.offsetWidth;
       t.style.transform = `translateX(${Math.round(MH.clamp(r.left - rootR.left + r.width / 2 - w / 2, 4, Math.max(4, W - w - 4)))}px)`;
-      t.style.zIndex = 40 - Math.max(0, order.indexOf(t.dataset.id));
+      t.style.zIndex = 20 - Math.max(0, order.indexOf(t.dataset.id));
     });
   }
+  let lastLayout = 0;
   function layoutLoop() {
+    const tNow = performance.now(), dtL = Math.min(0.1, lastLayout ? (tNow - lastLayout) / 1000 : 0.016); lastLayout = tNow;
     if (chat.active) layoutTags();
     if (chat.active && says.size) {
       const W = window.innerWidth;
@@ -273,20 +285,23 @@
       const newest = items.reduce((m, it) => (it.s.born > (m ? m.s.born : -1) ? it : m), null);
       items.sort((a, b) => order.indexOf(a.s.d.dataset.id) - order.indexOf(b.s.d.dataset.id));
       const placed = [];
+      const topMin = el.root.classList.contains('combat') ? 112 : 46;
       items.forEach((it, i) => {
         const d = it.s.d;
+        const front = d.dataset.id === order[0];
         d.classList.toggle('old', i >= 2 && it !== newest && !it.s.thinking);
         // an older bubble shows the END of what they said (tap it for the whole thing)
         const wantTail = d.classList.contains('old') && !d.classList.contains('expand') && it.s.shown >= it.s.full.length && it.s.full.length > TAIL;
         if (wantTail !== !!d.dataset.tail && it.s.shown >= it.s.full.length) showTail(d, it.s.full, wantTail);
         d.classList.toggle('latest', it === newest && n > 1);
         d.classList.toggle('named', n > 1);
-        d.style.zIndex = 50 - i;
+        d.style.zIndex = front ? 36 : Math.max(21, 29 - i);
+        if (!it.s.thinking) fitBubble(it.s, it.head - 10 - topMin, dtL);
         const w = d.offsetWidth, h = d.offsetHeight;
         const x = MH.clamp(it.cx - w / 2, 8, Math.max(8, W - w - 8));
         let y = it.head - h - 10;
         for (let k = 0; k < 10; k++) { const hit = placed.find((q) => x < q.x + q.w + 4 && x + w + 4 > q.x && y < q.y + q.h + 4 && y + h + 4 > q.y); if (!hit) break; y = hit.y - h - 6; }
-        y = Math.max(el.root.classList.contains('combat') ? 112 : 46, y); // keep clear of the fight strip
+        y = Math.max(topMin, y); // keep clear of the fight strip
         placed.push({ x, y, w, h });
         d.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
         d.style.setProperty('--tx', Math.round(MH.clamp(it.cx - x, 16, w - 16)) + 'px');
@@ -302,11 +317,28 @@
           const gx = MH.clamp(x + w / 2 - gw / 2, 8, Math.max(8, W - gw - 8));
           g.d.style.transform = `translate(${Math.round(gx)}px, ${Math.round(Math.max(40, gy))}px) scale(0.94)`;
           g.d.style.opacity = op.toFixed(3);
-          g.d.style.zIndex = String(Math.max(1, 50 - i - 20));
+          g.d.style.zIndex = '20'; // older lines fade UNDER everyone's current line
         });
       });
     }
     requestAnimationFrame(layoutLoop);
+  }
+  // A long line shrinks smoothly (smaller text, a bit wider) so it stays above the portraits' heads;
+  // if it still doesn't fit, only its newest words stay visible (tap the bubble for all of it).
+  function fitBubble(s, room, dt) {
+    const d = s.d, txt = s.txt; if (!txt) return;
+    const base = d.classList.contains('old') ? 13.5 : 15, min = 11;
+    room = Math.max(64, room);
+    const chrome = d.offsetHeight - txt.clientHeight;
+    const fs = s.fs || base;
+    const natural = (chrome + txt.scrollHeight) * (base / fs) * (base / fs); // ≈ its height at full size
+    const want = MH.clamp(base * Math.sqrt(room / Math.max(1, natural)), min, base);
+    const nfs = fs + (want - fs) * Math.min(1, dt * 6);
+    if (Math.abs(nfs - (s.fsShown || 0)) > 0.04) { d.style.fontSize = nfs.toFixed(2) + 'px'; s.fsShown = nfs; }
+    s.fs = nfs;
+    const tooTall = chrome + txt.scrollHeight > room + 2 && nfs <= min + 0.3 && !d.classList.contains('expand');
+    if (tooTall) { txt.classList.add('clip'); txt.style.maxHeight = Math.max(36, room - chrome) + 'px'; txt.scrollTop = txt.scrollHeight; }
+    else if (txt.classList.contains('clip')) { txt.classList.remove('clip'); txt.style.maxHeight = ''; }
   }
   function dropGhosts(s) { (s.ghosts || []).forEach((g) => g.d.remove()); s.ghosts = []; }
   function clearSays() { for (const [, s] of says) { s.d.remove(); dropGhosts(s); } says.clear(); el.says && el.says.querySelectorAll('.ghost').forEach((g) => g.remove()); }
@@ -354,10 +386,25 @@
     MH.social.log({ kind: 'sys', text: '— Conversation with ' + members.map((id) => MH.CHAR[id].name).join(', ') + ' · ' + MH.world.placeAt(c.x, c.y).name + ' —', convo: c.id });
     el.input.value = ''; chat.pendingInvite = null;
     const P = MH.state.player;
+    // came straight back to someone you were just talking to?
+    const n0 = MH.social.npc(members[0]), lc = MH.state.lastConvo;
+    const gap = n0.lastEnd != null ? MH.absMinutes() - n0.lastEnd : 1e9;
+    c.since = gap;
+    if (lc && lc.ids.includes(members[0]) && MH.absMinutes() - lc.at <= 180 && mode !== 'opener') {
+      lc.lines.forEach((l) => c.lines.push(Object.assign({}, l)));
+      c.lines.push({ who: 'system', text: `${P.name} walked away and came back ${chat.gapStr(gap)} later` });
+    }
+    if (gap <= 20 && mode !== 'opener' && !(mode === 'quiet' && payload && payload.asleep)) { mode = 'quiet'; payload = { recent: gap }; }
     if (mode === 'quiet') {
       // you walked up behind them, or they're asleep: nothing happens until YOU say or do something
       const q = payload || {}, e0 = MH.npcById[members[0]];
-      c.quiet = { id: members[0], asleep: !!q.asleep, behind: !!q.behind };
+      c.quiet = { id: members[0], asleep: !!q.asleep, behind: !!q.behind, recent: q.recent != null ? q.recent : null };
+      if (q.recent != null) {
+        // you just talked: nobody re-greets you — they glance over and wait for you to speak
+        el.input.placeholder = `You were just talking with ${e0.ch.name}… say something`;
+        MH.ui.narrate(MH.pick([`${e0.ch.name} looks back at you.`, `${e0.ch.name} glances over. "…Yeah?" seems to hang in the air.`, `${e0.ch.name} raises an eyebrow at you.`, `${e0.ch.name} turns back toward you.`]));
+        return;
+      }
       if (q.asleep) { e0.asleep = true; const card = el.cast.querySelector(`.card[data-id="${e0.id}"]`); if (card) card.classList.add('asleep'); }
       el.input.placeholder = q.asleep ? `${e0.ch.name} is fast asleep… *poke* them, whisper, or let them be` : `${e0.ch.name} hasn't noticed you yet…`;
       MH.ui.narrate(q.asleep ? `${e0.ch.name} is fast asleep.` : `${e0.ch.name} has their back to you and hasn't noticed you.`);
@@ -366,10 +413,13 @@
     if (mode === 'opener') chat.runTurn('opener', payload);
     else {
       const e = MH.npcById[members[0]], n = MH.social.npc(e.id);
-      const why = n.met ? `${P.name} walks up to ${e.ch.name} to talk.` : `${P.name}, the newcomer, walks up to ${e.ch.name} for the first time.`;
+      const back = gap <= 180 ? ` They last talked only ${chat.gapStr(gap)} ago (see the earlier lines) — don't greet them like it's been a long time; pick up naturally.` : '';
+      const why = (n.met ? `${P.name} walks up to ${e.ch.name} to talk.` : `${P.name}, the newcomer, walks up to ${e.ch.name} for the first time.`) + back;
       chat.runTurn('opener', why + (members.length > 1 ? ' (' + members.slice(1).map((m) => MH.CHAR[m].name).join(', ') + ' were already chatting with them.)' : ''));
     }
   };
+
+  chat.gapStr = (g) => (g < 2 ? 'a moment' : g < 60 ? Math.round(g) + ' minutes' : Math.round(g / 60) === 1 ? 'an hour' : Math.round(g / 60) + ' hours');
 
   // texting: the villager stays wherever they are
   function startPhone(id, incoming) {
@@ -437,6 +487,12 @@
       if (e) { e.busy = null; e.walkToChat = null; e.planKey = e.guest || e.inRoom ? e.planKey : null; e.idleT = MH.rand(2, 5); }
       const n = MH.social.npc(id); n.met = true; n.lastTalk = MH.absMinutes(); n.mustGo = null;
     });
+    // remember how (and when) this chat ended, so walking straight back picks up where it left off
+    if (!c.phone && c.lines.length) {
+      const was = Object.keys(c.joinedTurn || {}).concat(c.members).filter((id, i, a) => a.indexOf(id) === i && MH.CHAR[id]);
+      was.forEach((id) => { MH.social.npc(id).lastEnd = MH.absMinutes(); });
+      MH.state.lastConvo = { ids: was, at: MH.absMinutes(), lines: c.lines.filter((l) => l.who !== 'system' || !/walked away and came back/.test(l.text)).slice(-8).map((l) => ({ who: l.who, text: String(l.text).slice(0, 400), to: l.to })) };
+    }
     chat.active = false; chat.convo = null; chat.waiting = false; chat.pendingInvite = null; chat.queued = false; chat.to = null;
     el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone');
     MH.fight && MH.fight.hideOffer();
@@ -521,6 +577,8 @@
     const P = MH.state.player, S = MH.social;
     P.violence = (P.violence || 0) + 1;
     const vn = MH.CHAR[v.victim].name, tough = S.isTough(v.victim);
+    // custom content rules: trust the AI's own reaction (it was told to follow the player's rules about violence)
+    if (MH.ai.customRules()) { if (!res.witness && (res.reputation.violent || 0) > 0) res.witness = `${P.name} attacked ${vn}.`; c.attacked = (c.attacked || []).concat([v.victim]); res.violent = (res.reputation.violent || 0) > 0; return; }
     const R = res.reputation;
     R.violent = Math.max(R.violent || 0, 3); R.kind = Math.min(R.kind || 0, -2); R.rude = Math.max(R.rude || 0, 1);
     if (R.funny > 0) R.funny = 0; if (R.brave > 0) R.brave = 0;
@@ -574,7 +632,7 @@
     c.turn++;
     updateMustGo(c);
     setWaiting(true);
-    const thinkers = to ? [to] : c.members.slice(0, 3);
+    const thinkers = [to && c.members.includes(to) ? to : chat.front && c.members.includes(chat.front) ? chat.front : c.members[0]];
     const thinkTimer = setTimeout(() => chat.convo === c && cardThinking(thinkers, true), 200);
     let res;
     try { res = await MH.ai.turn(c, mode, payload, to); }
@@ -609,13 +667,14 @@
       cardSay(l.who, l.say);
       reactEmote(e, l.say);
       while (!cardTyped(l.who) && chat.convo === c) await waitFor(0.04);
-      // someone has more to say: show "…" where their next line will appear
-      const nx = res.lines[res.lines.indexOf(l) + 1];
-      if (nx && nx.who !== 'narrator' && c.members.includes(nx.who)) typingHint(nx.who);
+      // more is coming: a glowing arrow after this line (tap it to skip the pause)
+      const nx = res.lines.slice(res.lines.indexOf(l) + 1).find((x) => x.who === 'narrator' || c.members.includes(x.who));
+      if (nx) nextArrow(l.who);
       // a beat before the next line lands (the previous one stays readable, floating above)
       await waitFor(MH.clamp(0.8 + l.say.length * 0.018, 1.0, 3.2));
       chat.skipFlag = false;
     }
+    clearArrows();
     if (chat.convo !== c) return;
     const v0 = c.violence, ch0 = c.challenge; c.challenge = null;
     enforceViolence(c, res); c.violence = null;

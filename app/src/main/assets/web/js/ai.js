@@ -143,10 +143,12 @@
   AI.customRules = () => (AI.contentMode() === 'custom' ? String(MH.settings.customRules || '').trim() : '');
   // repeated at the end of each request so custom rules actually stick
   AI.rulesReminder = () => { const t = AI.customRules(); return t ? `REMEMBER — the player's content rules override any default tone: ${t.slice(0, 900)}` : ''; };
+  // how the game describes itself to the model: no "cozy" framing when the player wrote their own rules
+  AI.flavor = () => (AI.customRules() ? 'a village life-sim' : 'a cozy-chaotic village life-sim');
   function placeKeys() { return Object.keys(MH.world.locations).filter((k) => k !== 'sky' && k !== 'myroom').join(', '); }
   function sysPrompt() {
     return [
-      'You are the storyteller engine of MIREHOLLOW, a village life-sim role-play game (think a cosy villager game crossed with a group chat). You voice the villagers in the current scene and react to the player.',
+      'You are the storyteller engine of MIREHOLLOW, a village life-sim role-play game (think ' + (AI.customRules() ? 'a villager game' : 'a cosy villager game') + ' crossed with a group chat). You voice the villagers in the current scene and react to the player.',
       AI.customRules() ? 'PLAYER\'S CONTENT RULES — HIGHEST PRIORITY. They override any other instruction about tone, content or style below (only the hard rule about minors still applies): ' + AI.customRules() : '',
       '',
       'WORLD: ' + (MH.LORE.brief || MH.LORE.town),
@@ -156,7 +158,8 @@
       'HOW TO WRITE',
       '- Write only villagers (and rare narration). NEVER write the player\'s words, actions, thoughts or feelings.',
       '- Lines are short and chat-like: 1-3 sentences each. Put physical actions in *asterisks*, e.g. "*wipes flour on her apron* Oh! Hi, sweetie!".',
-      '- 1-4 lines per turn in total. Not everyone has to speak: quiet villagers may just act or stay silent. Villagers may talk to each other, interrupt, tease, and gossip about absent villagers.',
+      '- 1-4 lines per turn in total. In a group, NOT everyone speaks: usually only the one the player addressed (or the one it concerns most) answers, plus at most one or two others who have a real reason to (they were named, they care strongly, they have a reaction that matters). Everyone else stays silent this turn — that is normal and good. Never go around the circle giving each villager a line. A silent villager may at most do a tiny *action*. Villagers may talk to each other, interrupt, tease, and gossip about absent villagers.',
+      '- NEVER mix villagers up. Each villager\'s species, looks, personality, voice and history come ONLY from their own card below. Don\'t give one villager another\'s traits, species or catchphrases, and when a villager mentions someone else, describe them as that person\'s own card says (see WHO IS WHO). If any other text disagrees with a villager\'s own card, their card wins.',
       '- Keep every villager\'s unique voice. MUTE villagers only ever write *actions*.',
       '- React to the player\'s *actions* physically and emotionally. Villagers may perform their own actions toward the player (offer a handshake, a hug, hand over a pastry) which the player can answer next turn.',
       '- Feelings follow the bond/attitude numbers given. Hostile villagers are curt, suspicious or rude; it takes consistent good behaviour to win them over, but a disliked player can be grudgingly tolerated if they play their cards right. Friends are warm. Attitudes shift gradually, not in one message.',
@@ -169,7 +172,7 @@
       '- Narration lines ({"who":"narrator"}) are allowed sparingly for ambience (a crow lands, hissing from a bush, a train rattles past).',
       '- Shopping, wishes, pranks, experiments, favours, gifts, invitations and plans all happen through dialogue + the effect fields below. Keep it ' + (AI.customRules() ? '' : 'playful and ') + 'consistent with the world.',
       '- Consequences are real and lopsided: cruelty, rudeness, theft and violence damage bonds and reputation far more than kindness builds them. One nice act doesn\'t make the player a saint; one cruel act stains them. Trust is earned slowly.',
-      '- Physical violence (punching, kicking, slapping, shoving, attacking) is NEVER played as a joke unless it is obviously playful and welcome: it hurts. The victim reacts with real pain, shock, fear or fury (timid villagers panic, cry, flee or beg; tough ones fight back or threaten); witnesses gasp, back away, scold, or run for help. A player who keeps hurting people becomes feared.',
+      '- ' + (AI.customRules() ? 'By default (the player\'s content rules above can change this), physical' : 'Physical') + ' violence (punching, kicking, slapping, shoving, attacking) is NEVER played as a joke unless it is obviously playful and welcome: it hurts. The victim reacts with real pain, shock, fear or fury (timid villagers panic, cry, flee or beg; tough ones fight back or threaten); witnesses gasp, back away, scold, or run for help. A player who keeps hurting people becomes feared.',
       '- Villagers sometimes ask the player for a favour that fits their life (rarely — at most one open request per villager, never when they dislike or fear the player): put it in "quest"; the game shows the player Accept/Decline and they may refuse. If the player completes one of the OPEN QUESTS listed in the scene (brought the thing, did the deed, delivered the message), put its id in "quest_done".',
       '- Villagers know where they are (see SCENE) and roughly where other people tend to be (see WHEREABOUTS); use it naturally ("Sunny\'s at the bakery, where else?").',
       '- FIGHTS: when a fight really breaks out with the player — a villager attacks them, fights back after being attacked, a bandit mugs them, or someone agrees to (or proposes) a friendly sparring match — set "fight":{"with":"<id>","kind":"spar|brawl|mugging"} and stop the scene there; the game plays the fight and tells you the result next turn. Sparring is friendly (Kira, Bunny, Box, Gertie and Marina may enjoy it; it builds respect). A quick slap or shove at the player that is not a full fight goes in "hurt_player" (HP damage 3-20).',
@@ -230,6 +233,7 @@
     const gn = MH.games ? MH.games.charNote(id) : ''; if (gn) lines.push(gn);
     const st = stateText(e);
     lines.push(`Right now: ${st ? st + '; ' : ''}mood: ${n.mood}.`);
+    if (n.lastEnd != null && n.met) { const g = MH.absMinutes() - n.lastEnd; if (g >= 0 && g < 1440 * 3) lines.push(`Last talked with the player before this conversation: ${g < 1440 ? MH.chat.gapStr(g) + ' ago' : Math.round(g / 1440) === 1 ? 'yesterday' : Math.round(g / 1440) + ' days ago'}.`); }
     if (n.mustGo && !(e && e.following)) lines.push(`Has somewhere to be: ${n.mustGo} (they may mention it, or leave if it suits them — or stay).`);
     lines.push(`Toward ${P.name}: bond ${n.bond} (${MH.bondTier(n.bond)})${n.label ? ', relationship: ' + n.label : ''}${n.met ? '' : ', has NOT met them before (first meeting)'}. Reputation they have heard: ${perceivedText(id)} (${MH.social.opinionWords(id)}). Overall attitude ${att} on a -100..100 scale.`);
     const rel = (others || []).filter((o) => o !== id && MH.CHAR[o]).map((o) => {
@@ -273,6 +277,7 @@
       MH.jobs && MH.jobs.sceneText() ? MH.jobs.sceneText() : '',
       `Player health: ${Math.round(MH.fight ? MH.fight.hp() : 100)}/100${(MH.fight && MH.fight.hp() < 40) ? ' (visibly hurt, bruised)' : ''}.` + (P.weapon && MH.WEAPONS[P.weapon] ? ` They carry a ${MH.WEAPONS[P.weapon].name.toLowerCase()}${MH.WEAPONS[P.weapon].lethal ? ' (a real weapon — people notice)' : ''}.` : ''),
       (P.flyUntil || 0) > MH.absMinutes() ? 'The player is wearing a roaring jetpack (Penelope made it).' : '',
+      P.training ? `The player has been training at the Jade Dojo (level ${P.training}/5).` : '',
       P.translator ? 'The player wears Penelope\'s translator collar: MUTE villagers\' actions come with their translated thoughts in [square brackets].' : '',
     ].filter(Boolean).join('\n');
   }
@@ -303,7 +308,11 @@
   AI.buildTurnMessages = function (convo, mode, payload, to) {
     const present = convo.members.slice();
     const loc = MH.world.placeAt(convo.x, convo.y);
-    const parts = [sceneHeader(loc.desc), '', 'PRESENT VILLAGERS (they can speak):'];
+    const parts = [sceneHeader(loc.desc), ''];
+    const roster = present.concat((convo.nearby || []).filter((id) => !present.includes(id))).filter((id) => MH.CHAR[id]);
+    if (roster.length > 1) parts.push('WHO IS WHO (never mix these up): ' + roster.map((id) => `${MH.CHAR[id].name} = ${MH.CHAR[id].species}, "${MH.CHAR[id].title}"`).join('; ') + '.', '');
+    if (present.length > 2 && !convo.phone) parts.push(`(${present.length} villagers are here. Only those with a reason speak this turn; the rest stay quiet.)`, '');
+    parts.push('PRESENT VILLAGERS (they can speak):');
     if (convo.phone) {
       const e = MH.npcById[present[0]];
       const where = e ? (e.hidden ? 'at home / indoors at ' + ((MH.world.locations[e.insideLoc] || {}).name || 'their place') : MH.world.placeAt(e.x, e.y).name) : 'somewhere';
@@ -340,7 +349,8 @@
     if (convo.invite) parts.push(`INVITATION: with this message the player is asking ${convo.invite.to.map((id) => MH.CHAR[id].name).join(' and ')} ${convo.invite.desc}. Every invitee must answer in character and you MUST fill "invite_reply" for each of them (yes/no/maybe).`);
     if (mode === 'player' && convo.wake) {
       const wn = MH.CHAR[convo.wake.id] ? MH.CHAR[convo.wake.id].name : 'They';
-      parts.push(convo.wake.asleep ? `NOTE: ${wn} was ASLEEP when the player walked up — this is the first thing that happens; it wakes them (gently or not, depending on what the player does). React to being woken in character (Kira HATES being woken).` : `NOTE: ${wn} had their back turned and didn't notice the player walk up — the player's first words/action catch them by surprise.`);
+      if (convo.wake.recent != null) parts.push(`NOTE: ${wn} was talking with the player only ${MH.chat.gapStr(convo.wake.recent)} ago (the lines above); the player walked off and came straight back. Carry on from there: NO fresh greeting and no big "look who's back" — a short "Yeah?", "Forget something?", or simply continuing the topic is right (unless it's in character to tease).`);
+      else parts.push(convo.wake.asleep ? `NOTE: ${wn} was ASLEEP when the player walked up — this is the first thing that happens; it wakes them (gently or not, depending on what the player does). React to being woken in character (Kira HATES being woken).` : `NOTE: ${wn} had their back turned and didn't notice the player walk up — the player's first words/action catch them by surprise.`);
       convo.wake = null;
     }
     if (mode === 'player' && to && MH.CHAR[to]) parts.push(`NOW: ${P.name} (the player) turns to ${MH.CHAR[to].name} and says/does: "${payload}"`, `${MH.CHAR[to].name} answers first. Others may react briefly or stay quiet.`);
@@ -352,7 +362,7 @@
     if (v && mode === 'player') {
       const vn = MH.CHAR[v.victim] ? MH.CHAR[v.victim].name : 'someone';
       if (v.playful) parts.push(`(The player's action toward ${vn} looks like rough-housing — react to how it actually lands: it may still hurt or annoy.)`);
-      else parts.push(`⚠ VIOLENCE: the player just physically attacked ${vn} ("${v.act}"). This is real and it hurts — NOT a joke. ${vn} reacts with genuine pain, shock, fear or fury (${MH.social.isTough(v.victim) ? 'they are tough: they may fight back, threaten, or coldly warn the player' : 'they are not a fighter: they may cry out, back away, beg, flee (put them in "leave"), or call for help'}). Everyone present reacts for real (gasp, back off, scold, someone may run for help). Nobody laughs it off. Required: reputation violent +3 and kind -3; bond for ${vn} -8 to -10 and -3 to -6 for onlookers; a scared or furious mood; a memory for everyone present; a "witness" sentence. If ${vn} fights back (or someone steps in), set "fight":{"with":"<their id>","kind":"brawl"}.${(MH.state.player.violence || 0) >= 2 ? ` The player has attacked people ${MH.state.player.violence} times already — the town is getting scared of them.` : ''}`);
+      else parts.push(`⚠ VIOLENCE: the player just physically attacked ${vn} ("${v.act}"). ${AI.customRules() ? '(Default handling below — if the player\'s content rules say violence works differently, follow their rules instead.) ' : ''}This is real and it hurts — NOT a joke. ${vn} reacts with genuine pain, shock, fear or fury (${MH.social.isTough(v.victim) ? 'they are tough: they may fight back, threaten, or coldly warn the player' : 'they are not a fighter: they may cry out, back away, beg, flee (put them in "leave"), or call for help'}). Those present react for real (gasp, back off, scold, someone may run for help) — not all of them need a line. Nobody laughs it off. Required: reputation violent +3 and kind -3; bond for ${vn} -8 to -10 and -3 to -6 for onlookers; a scared or furious mood; a memory for everyone present; a "witness" sentence. If ${vn} fights back (or someone steps in), set "fight":{"with":"<their id>","kind":"brawl"}.${(MH.state.player.violence || 0) >= 2 ? ` The player has attacked people ${MH.state.player.violence} times already — the town is getting scared of them.` : ''}`);
     }
     parts.push('', 'Reply with the JSON object only.');
     const rem = AI.rulesReminder(); if (rem) parts.push(rem);
@@ -462,7 +472,7 @@
     const P = MH.state.player;
     const list = ids.map((id) => `- ${MH.CHAR[id].name} (id: ${id}; voice: ${MH.CHAR[id].voice}) — answer: ${party.rsvp[id] === 'yes' ? 'COMING' : 'NOT coming'}`).join('\n');
     const user = `${P.name} is throwing a ${party.theme ? '"' + party.theme + '" ' : ''}party ${party.loc === 'home' ? 'at their house' : 'at ' + MH.world.locations[party.loc].name} on day ${Math.floor(party.at / 1440) + 1} at ${MH.clockStr(party.at % 1440)}. Write each invitee's short RSVP note (1-2 sentences, in their own voice; mute villagers write a wordless note like a doodle description).\n${list}\nReply with ONLY JSON: {"<id>":"<note>", ...}`;
-    const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character RSVP notes for villagers of MIREHOLLOW, a cozy-chaotic village life-sim.' }, { role: 'user', content: user }], { maxTokens: 500 });
+    const r = await AI.request([{ role: 'system', content: 'You write short, ' + (AI.customRules() ? '' : 'funny, ') + 'in-character RSVP notes for villagers of MIREHOLLOW, ' + AI.flavor() + '.\n' + AI.contentRules() }, { role: 'user', content: user + (AI.rulesReminder() ? '\n' + AI.rulesReminder() : '') }], { maxTokens: 500 });
     if (r.error) return null;
     const raw = AI.parseJSON(r.text);
     if (!raw) return null;
@@ -481,7 +491,8 @@
     const others = MH.CHARS.filter((c) => c.id !== id).map((c) => `${c.name} (${c.title}, ${c.species})`).join('; ');
     const sys = [
       'You write character sheets for villagers in MIREHOLLOW, a village life-sim role-play game where an AI voices every villager. ' + (MH.LORE.brief || MH.LORE.town),
-      'The player describes the character they want. Their description is the source of truth: follow it faithfully and keep EVERY detail they gave (personality, looks, backstory, job, relationships, quirks, tone, how they talk). Do not soften, sanitise, rename or "fix" what they asked for. Expand only where they left gaps, with specific, vivid details that fit them and the town.',
+      'The player describes the character they want. Their description is the source of truth: follow it faithfully and keep EVERY detail they gave (personality, looks, backstory, job, relationships, quirks, tone, how they talk). Do not soften, sanitise, rename or "fix" what they asked for. Expand only where they left gaps, with a few specific details that fit them and the town.',
+      'Keep the sheet COMPACT: the storyteller reads every sheet in a scene at once, so a dense, focused sheet works better than a long one. Write about THIS character only: never invent new facts, looks, species or personality for the other villagers (only say how this character feels about them).',
       AI.contentRules(),
     ].join('\n');
     const user = [
@@ -489,7 +500,7 @@
       `Other villagers in town (relationships may only mention these, by name): ${others}.`,
       keepName ? `Keep the name exactly "${cur.name}".` : 'Choose the name from the description (or invent a fitting one if none is given).',
       '', 'PLAYER\'S DESCRIPTION:', desc, '',
-      'Write the sheet. bio: 5-9 sentences covering personality, looks, backstory, what they do in town, what they want. voice: how they talk (1-3 sentences, with a couple of example phrases). quirks: 3-6 short quirks. relationships: 2-6 entries about existing villagers (how this character feels about them). notes: secrets, goals or running jokes for the storyteller (1-3 sentences, may be empty).',
+      'Write the sheet. bio: 4-6 sentences covering personality, looks, backstory, what they do in town, what they want (keep everything the player gave). voice: how they talk (1-2 sentences, with one or two example phrases). quirks: 3-5 short quirks. relationships: 2-4 entries about existing villagers, one short sentence each about how THIS character feels about them. notes: secrets, goals or running jokes for the storyteller (0-2 sentences, may be empty).',
       'Reply with ONLY JSON: {"name":"","title":"<short epithet like \'The Sweet Baker\'>","species":"","bio":"","voice":"","quirks":[""],"relationships":[{"name":"<villager name>","feeling":""}],"notes":""}',
       AI.rulesReminder(),
     ].filter((x) => x !== null && x !== undefined).join('\n');
@@ -504,9 +515,9 @@
       return rid && rid !== 'narrator' && rid !== id && MH.CHAR[rid] && feel ? `${MH.CHAR[rid].name}: ${feel}` : null;
     }).filter(Boolean);
     return { fields: {
-      name: s(raw.name, 40), title: s(raw.title, 60), species: s(raw.species, 80), bio: s(raw.bio, 3000), voice: s(raw.voice, 800),
+      name: s(raw.name, 40), title: s(raw.title, 60), species: s(raw.species, 80), bio: s(raw.bio, 1600), voice: s(raw.voice, 500),
       quirks: (Array.isArray(raw.quirks) ? raw.quirks : String(raw.quirks || '').split(',')).map((q) => s(q, 80)).filter(Boolean).join(', '),
-      rel: rels.join('\n'), notes: s(raw.notes, 1200),
+      rel: rels.slice(0, 5).join('\n'), notes: s(raw.notes, 700),
     } };
   };
 
@@ -553,7 +564,7 @@
       'Reply with ONLY JSON: {"lines":[{"who":"<id>","say":"..."}],"shared_gossip":true|false,"relation_delta":<-5..5>,"summary":"<one sentence of what happened, for the town grapevine>"}',
       AI.rulesReminder(),
     ].filter(Boolean).join('\n');
-    const r = await AI.request([{ role: 'system', content: 'You write short, funny, in-character exchanges between villagers of MIREHOLLOW, a cozy-chaotic village life-sim. ' + (MH.LORE.brief || MH.LORE.town) + '\n' + AI.contentRules() }, { role: 'user', content: user }], { maxTokens: 500 });
+    const r = await AI.request([{ role: 'system', content: 'You write short, ' + (AI.customRules() ? '' : 'funny, ') + 'in-character exchanges between villagers of MIREHOLLOW, ' + AI.flavor() + '. ' + (MH.LORE.brief || MH.LORE.town) + '\n' + AI.contentRules() }, { role: 'user', content: user }], { maxTokens: 500 });
     if (r.error) return AI.offlineSmallTalk(a, b, gossipMem);
     const raw = AI.parseJSON(r.text);
     if (!raw) return AI.offlineSmallTalk(a, b, gossipMem);
@@ -584,7 +595,7 @@
     const P = MH.state.player;
     const blocks = batch.map(({ id, mems }) => `### ${MH.CHAR[id].name} (id: ${id})\n` + mems.map((m) => `- [${MH.agoStr(m.t)}] ${m.text}`).join('\n')).join('\n\n');
     const user = `These are OLD memories of villagers in Mirehollow (the player is ${P.name}). For each villager, fuse their list into 2-4 short first-person summary sentences that keep the important facts (what the player did, feelings, grudges, promises, gossip worth keeping). Drop trivia and repeats.\n\n${blocks}\n\nReply with ONLY JSON: {"<id>":["summary sentence", "..."], ...}`;
-    const r = await AI.request([{ role: 'system', content: 'You condense villagers\' memories for a village life-sim. Keep each villager\'s own voice and point of view.' }, { role: 'user', content: user }], { maxTokens: 900, temperature: 0.4 });
+    const r = await AI.request([{ role: 'system', content: 'You condense villagers\' memories for a village life-sim. Keep each villager\'s own voice and point of view. Keep what happened as it happened: do not soften, censor or tone down events, only shorten them.\n' + AI.contentRules() }, { role: 'user', content: user + (AI.rulesReminder() ? '\n' + AI.rulesReminder() : '') }], { maxTokens: 900, temperature: 0.4 });
     if (r.error) return null;
     const raw = AI.parseJSON(r.text);
     if (!raw) return null;

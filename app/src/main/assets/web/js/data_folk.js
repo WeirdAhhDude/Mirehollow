@@ -100,5 +100,37 @@
     MH.FOLK.push(ch);
     MH.CHAR[ch.id] = ch;
   }
+  // ---- v0.9: Sensei Jade's dojo students (they train in the yard and inside the dojo)
+  const STUDENTS = [
+    { id: 'f_rin', name: 'Rin', sp: 'crane', job: 'Sensei Jade\'s top student (brown belt)', home: 'h15', belt: '#6a4024',
+      bio: 'Rin is a tall, graceful crane and the best student at the Jade Dojo (a brown belt, one step from black). Serious, disciplined and a little proud; quietly hopes Sensei Jade will name her successor. Practises kata on one leg at the pond at dawn.',
+      voice: 'Formal and precise, a bit competitive, calls Jade "Sensei", corrects people\'s posture.',
+      look: { fur: '#f8f8f4', fur2: '#ffffff', hair: '#d8302a', hairStyle: 'short', ears: 'none', tail: 'none', eyes: '#2a2a3a', acc: ['beak', 'gi', 'belt'], tall: 3 },
+      lines: ['*bows precisely* Your stance is wrong.', 'Sensei says patience is a blade. I am sharpening.', 'Brown belt. One more test.'] },
+    { id: 'f_tobi', name: 'Tobi', sp: 'hamster', job: 'white-belt dojo student', home: 'h16', belt: '#f4f4f0',
+      bio: 'Tobi is a round, tiny hamster who just started at the Jade Dojo and is still on white belt. Wildly enthusiastic, shouts "HAI!" at everything, trips over his own gi, and is absolutely convinced he will be a grandmaster by next spring.',
+      voice: 'Over-excited, shouty, lots of "HAI!" and karate noises, mispronounces the move names.',
+      look: { fur: '#e8b878', fur2: '#f4e8d8', hair: '#c88a4a', hairStyle: 'messy', ears: 'round', earIn: '#f4c8b8', tail: 'none', eyes: '#2a1a14', acc: ['gi', 'belt', 'headband'], band: '#d8282a', wide: 1 },
+      lines: ['HAI!! *chops the air* ...did you see that?!', 'I\'m gonna be a black belt by spring! Probably!', '*trips over his gi* That was a technique.'] },
+    { id: 'f_bo', name: 'Bo', sp: 'capybara', job: 'blue-belt dojo student', home: 'h17', belt: '#3a6ad8',
+      bio: 'Bo is a huge, unflappable capybara with a blue belt at the Jade Dojo. Has never once looked worried in his life; blocks punches by simply not moving. Mostly there for the meditation, and the snacks afterwards.',
+      voice: 'Slow, mellow and unbothered, few words, "it\'s all good", calm as a pond.',
+      look: { fur: '#a07850', fur2: '#c89a70', hair: '#7a5838', hairStyle: 'none', ears: 'round', earIn: '#7a5838', tail: 'none', eyes: '#2a1a14', acc: ['gi', 'belt'], wide: 2, tall: 1, sleepy: true },
+      lines: ['*doesn\'t flinch* ...it\'s all good.', 'Meditation is just napping with good posture.', 'Sensei is the best. Snacks after class are second best.'] },
+  ];
+  STUDENTS.forEach((st) => {
+    const ch = {
+      id: st.id, name: st.name, title: 'the ' + st.job, species: st.sp, folk: true, minor: true, home: st.home, bio: st.bio, voice: st.voice, quirks: ['dojo student'],
+      values: { kind: 1, funny: 0.5, chaotic: -0.5, generous: 0.5, brave: 1.5, rude: -1.5, violent: -1 },
+      start: { bond: 3, mood: 'focused' },
+      relations: { jade: [70, 'their sensei'] },
+      haunts: ['dojo', 'park', 'pond', 'shrine'],
+      schedule: [[6, 8, 'roam'], [8, 12, 'dojo'], [12, 14, 'roam'], [14, 18, 'dojo'], [18, 22, 'roam'], [22, 6, 'inside:' + st.home]],
+      look: Object.assign({ top: '#f6f4ee', bottom: '#f6f4ee', belt: st.belt, lashes: false }, st.look),
+      offline: st.lines, partyLove: 0.3, power: st.id === 'f_rin' ? 3 : 2,
+    };
+    MH.FOLK.push(ch);
+    MH.CHAR[ch.id] = ch;
+  });
   MH.ALL = MH.CHARS.concat(MH.FOLK);
 })(window.MH);

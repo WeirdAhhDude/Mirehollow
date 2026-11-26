@@ -17,7 +17,8 @@
   MH.absMinutes = () => MH.state.time.day * 1440 + MH.state.time.minutes;
   MH.agoStr = (abs) => {
     const d = MH.absMinutes() - abs;
-    if (d < 60) return 'just now';
+    if (d < 3) return 'just now';
+    if (d < 60) return Math.round(d) + ' min ago';
     if (d < 1440) return Math.round(d / 60) + 'h ago';
     const days = Math.round(d / 1440);
     return days === 1 ? 'yesterday' : days + ' days ago';

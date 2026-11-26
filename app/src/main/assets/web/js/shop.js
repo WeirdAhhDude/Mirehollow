@@ -346,13 +346,29 @@
     draw();
     MH.ui.modal('Sell to Sable', body, { onClose: back || null });
   };
+  // a lesson at the Jade Dojo: dodge Sensei Jade's strikes (no damage). Passing makes you a slightly better fighter.
+  shop.lesson = function () {
+    const j = MH.npcById.jade, p = P();
+    if (!j || j.hidden || MH.roomOf(j) !== 'dojo') { MH.ui.toast('Sensei Jade isn\'t in the dojo right now.'); return; }
+    if (p.lessonDay === MH.state.time.day) { MH.ui.toast('Sensei Jade: "One lesson a day. Let it settle."'); return; }
+    if ((p.training || 0) >= 5) { MH.ui.toast('Sensei Jade: "I have nothing left to teach you. Teach someone else."'); return; }
+    if (p.coins < 15) { MH.ui.toast('A lesson costs 15 coins.'); return; }
+    MH.social.addCoins(-15); p.lessonDay = MH.state.time.day; MH.ui.closeModal();
+    const lvl = p.training || 0;
+    MH.fight.dodge({ enemies: ['jade'], training: true, spar: true, guard: 1, power: 2 + Math.min(3, lvl), caption: MH.pick(['Sensei Jade: "Dodge. Do not think. Dodge."', 'Sensei Jade: "The blade does not wait for you."', 'Sensei Jade: "Be the fly that is never caught."']) }, (hits) => {
+      const pass = hits <= 2;
+      if (pass) { p.training = lvl + 1; MH.social.changeBond('jade', 2); MH.social.addMemory('jade', `${p.name} passed a lesson at my dojo (level ${p.training}). Promising.`, { imp: 2 }); }
+      else { MH.social.changeBond('jade', 1); MH.social.addMemory('jade', `${p.name} took a lesson and got tagged ${hits} times. They will learn.`, { imp: 1 }); }
+      MH.ui.vibe(pass ? `Sensei Jade bows. "Good." (Training level ${p.training}/5 — your hits land more often.)` : `You got tagged ${hits} times. Sensei Jade: "Again. Tomorrow." (Pass with 2 hits or fewer.)`);
+    });
+  };
   // a counter / desk: buy things and/or ask for work
   MH.ui.openCounter = function (it) {
     const room = it.room || null;
     const jobs = room && MH.jobs ? MH.jobs.listAt(room) : [];
     // extra things to do at some counters: talk books, town trivia, the arcade
     const read = it.room === 'lab' && MH.games ? MH.games.booksBought().filter((k) => (P().booksRead || {})[k]) : [];
-    const extra = (read.length ? `<button class="btn" data-a="book">📚 Talk about a book you read</button>` : '') + (it.room === 'townhall' ? `<button class="btn" data-a="trivia">🧠 Mayor's town trivia</button>` : '') + (it.shop === 'mall_fun' ? `<button class="btn" data-a="arcade">🕹️ Arcade</button>` : '');
+    const extra = (read.length ? `<button class="btn" data-a="book">📚 Talk about a book you read</button>` : '') + (it.room === 'townhall' ? `<button class="btn" data-a="trivia">🧠 Mayor's town trivia</button>` : '') + (it.shop === 'mall_fun' ? `<button class="btn" data-a="arcade">🕹️ Arcade</button>` : '') + (it.room === 'dojo' ? `<button class="btn" data-a="lesson">🥋 Lesson with Sensei Jade (15 🪙)${P().training ? ' · level ' + P().training + '/5' : ''}</button>` : '');
     if (it.shop && !jobs.length && !extra) { MH.ui.openShop(it.shop); return; }
     if (!it.shop && !it.door && jobs.length && !extra) { MH.ui.openJobs(room); return; }
     const body = h(`<div class="menu">${extra}${it.room === 'clinic' ? `<button class="btn" data-a="heal">🩹 Get patched up (10 🪙)</button>` : ''}${it.shop ? `<button class="btn" data-a="shop">🛒 Buy something</button>` : ''}${jobs.length ? `<button class="btn" data-a="work">💼 Ask for work</button>` : ''}${it.door ? `<button class="btn ghost" data-a="knock">✊ Knock on the door</button>` : ''}</div>`);
@@ -363,6 +379,7 @@
       if (a === 'knock') { MH.ui.closeModal(); MH.sim.knock(it.door); }
       if (a === 'arcade') MH.games.arcade();
       if (a === 'trivia') MH.games.trivia();
+      if (a === 'lesson') shop.lesson();
       if (a === 'book') {
         const pen = MH.npcById.penelope;
         if (!pen || pen.hidden || MH.roomOf(pen) !== 'lab') { MH.ui.toast('Dr. Penelope isn\'t behind the counter right now.'); return; }

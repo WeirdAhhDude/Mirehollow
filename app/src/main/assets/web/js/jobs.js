@@ -22,6 +22,8 @@
     { id: 'post_sort', at: 'postoffice', boss: 'mole', icon: '📮', title: 'Sort the mail', desc: 'Mailman Mole can\'t see the labels. Match up the letters and parcels before they get lost (again).', pay: 24, mins: 30, hours: [8, 19], make: () => [game('memory', 0, { theme: 'mail', limit: 20 })] },
     { id: 'townhall_forms', at: 'townhall', boss: 'mayor', icon: '📊', title: 'Check the town budget', desc: 'The Mayor\'s budget "may contain arithmetic". Check 8 sums before the council meeting.', pay: 28, mins: 30, make: () => [game('math', 8, { flavour: 'forms', level: 3, title: '📊 Town budget' })] },
     { id: 'maggie_blood', at: 'stilthouse', boss: 'maggie', icon: '🩸', title: 'The Blood Drive', desc: 'Maggie wants "samples". Sneak up on 3 villagers and take a tiny sip with her special straw. Sleeping or distracted ones are easiest; getting caught is… awkward.', pay: 45, mins: 180, hours: [16, 3], shady: true, make: () => sneak(3) },
+    { id: 'gym_mitts', at: 'gym', boss: 'roxy', icon: '🥊', title: 'Hold the mitts for Roxy', desc: 'Roxy needs a sparring partner who won\'t cry. Raise the mitts right when she swings.', pay: 26, mins: 30, make: () => [game('mitts', 7)] },
+    { id: 'dojo_sweep', at: 'dojo', boss: 'jade', icon: '🧹', title: 'Sweep the tatami', desc: 'Sensei Jade hands you a broom. "Sweeping is also training." Sweep 4 spots.', pay: 18, mins: 30, make: () => spots('dojo', 4, 'Sweep here') },
   ];
   const JOB = {}; MH.JOBS.forEach((j) => (JOB[j.id] = j));
   const placeName = (at) => (MH.world.rooms[at] ? MH.world.rooms[at].name.replace(/^inside /, '') : (MH.world.buildingById[at] || {}).name || at);
@@ -267,6 +269,7 @@
     knead: { title: '🫓 Knead the dough', tip: 'Tap when the dough is in the golden zone!', hit: ['Perfect knead!', 'Nice and fluffy!', 'Sunny would be proud!'], miss: ['Too lumpy…', 'Flour everywhere!', 'Oops, overworked.'] },
     spot: { title: '🏋️ Spot the lifter', tip: 'Push the bar up when it reaches the green!', hit: ['LIFT! 💪', 'Great spot!', 'Gains!'], miss: ['Wobbly!', 'Bunny strains…', 'Too late!'] },
     mix: { title: '🍹 Mix the drinks', tip: 'Pour when the shaker is in the zone!', hit: ['Cheers! 🍸', 'Perfect pour!', 'The crowd goes wild!'], miss: ['Spilled!', 'Too much ice…', 'That\'s… a new colour.'] },
+    mitts: { title: '🥊 Hold the mitts', tip: 'Raise the mitts right when Roxy swings — tap in the zone!', hit: ['POW! 🥊', '"Nice catch, slugger!"', 'Thwack!'], miss: ['Ow — right in the ribs.', '"Too slow, kid!"', 'Whiff!'] },
     still: { title: '🧪 Hold still…', tip: 'Tap exactly when the needle is in the safe zone!', hit: ['Readings stable.', 'Fascinating!', '"Hold that face."'], miss: ['*zap*', 'Something sparked.', '"Interesting. Don\'t move."'] },
   };
   jobs.playGame = function (step) {

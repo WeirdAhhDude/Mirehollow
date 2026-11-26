@@ -132,7 +132,7 @@
   // ------------------------------------------------------------ entity drawing
   const FOOT = () => MH.art.CHIBI_FOOT;
   function tallOf(e) { return (e.ch && e.ch.look && e.ch.look.tall) || 0; }
-  R.headTop = function (e) { const sc = MH.art.chibiScale(e.ch || e); return e.y - (33 + tallOf(e) * 1.5) * sc; };
+  R.headTop = function (e) { const sc = MH.art.chibiScale(e.ch || e); return e.y - (36 + tallOf(e) * 1.9) * sc; };
 
   function drawEntity(e) {
     const ch = e.ch || e.chr;

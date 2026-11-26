@@ -41,8 +41,10 @@
     });
     el.says.addEventListener('pointerdown', (e) => {
       const s = e.target.closest('.say'); if (!s) return;
+      e.stopPropagation();
+      const entry = !s.classList.contains('ghost') && s.dataset.id ? says.get(s.dataset.id) : null;
+      if (entry && entry.full && entry.shown < entry.full.length) { entry.shown = entry.full.length; s.classList.add('expand'); return; }
       s.classList.toggle('expand');
-      if (chat.convo && chat.convo.members.length > 1 && s.dataset.id) chat.setTarget(s.dataset.id);
     });
     requestAnimationFrame(layoutLoop);
   };
@@ -61,8 +63,26 @@
     else { insertText('**'); i.setSelectionRange(a + 1, a + 1); }
   }
 
+  chat.lockedBy = function () {
+    const c = chat.convo; if (!c || !c.lock) return null;
+    const L = c.lock;
+    const downed = c.combat && c.combat.enemies.some((x) => x.id === L.by && x.out);
+    if (L.turns <= 0 || downed || (L.by && !c.members.includes(L.by)) || (L.by && MH.fight.isHurt(MH.npcById[L.by]))) { c.lock = null; return null; }
+    return L;
+  };
   chat.askLeave = async function () {
     if (!chat.active) return;
+    const L = chat.lockedBy();
+    if (L) {
+      MH.ui.narrate(`You try to leave — but ${L.why}.`);
+      if (!chat.waiting) chat.sendText('*tries to leave*');
+      return;
+    }
+    if (MH.fight && MH.fight.inCombat(chat.convo)) {
+      if (chat.waiting) return;
+      if (await MH.ui.confirm('Try to run from the fight? If it fails, they get a free attack.', 'Run!', 'Stay and fight')) MH.fight.tryFlee(chat.convo);
+      return;
+    }
     const names = chat.convo.members.map((id) => MH.CHAR[id].name);
     const ok = await MH.ui.confirm(`Leave the conversation with ${names.length > 2 ? names.slice(0, 2).join(', ') + ' and the others' : names.join(' and ')}?`, 'Leave', 'Stay');
     if (!ok) return;
@@ -250,7 +270,7 @@
         const x = MH.clamp(it.cx - w / 2, 8, Math.max(8, W - w - 8));
         let y = it.head - h - 10;
         for (let k = 0; k < 10; k++) { const hit = placed.find((q) => x < q.x + q.w + 4 && x + w + 4 > q.x && y < q.y + q.h + 4 && y + h + 4 > q.y); if (!hit) break; y = hit.y - h - 6; }
-        y = Math.max(46, y);
+        y = Math.max(el.root.classList.contains('combat') ? 112 : 46, y); // keep clear of the fight strip
         placed.push({ x, y, w, h });
         d.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
         d.style.setProperty('--tx', Math.round(MH.clamp(it.cx - x, 16, w - 16)) + 'px');
@@ -395,6 +415,8 @@
     chat.active = false; chat.convo = null; chat.waiting = false; chat.pendingInvite = null; chat.queued = false; chat.to = null;
     el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone');
     MH.fight && MH.fight.hideOffer();
+    if (MH.fight && c.combat && !c.combat.over) MH.fight.end(c, 'left');
+    MH.fight && MH.fight.renderBar(null);
     document.body.classList.remove('chatting');
     el.input.blur(); el.me.classList.remove('on'); chat.meB = null; el.send.classList.remove('queued');
     clearSays();
@@ -419,9 +441,18 @@
     el.me.innerHTML = ''; el.me.classList.add('on');
     if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
     c.violence = c.phone ? null : chat.detectViolence(text, c, to);
+    if (c.lock) c.lock.turns--;
     // ⚔️ "fight for real" from the chat bar counts as starting a fight
     if (c.challenge && !/squares up|sparring/i.test(text)) c.challenge = null;
     if (c.challenge && c.challenge.kind === 'brawl' && !c.violence) c.violence = { victim: c.challenge.with, playful: false, act: 'squares up to fight them for real' };
+    // fights: an attack outside a fight starts one (you strike first); inside a fight it's your move
+    if (!c.phone && MH.fight) {
+      const was = MH.fight.inCombat(c);
+      if (c.violence && (c.mugging === c.violence.victim || (c.combat && c.combat.over === false))) c.violence.selfDefense = true;
+      if (!was && c.violence && !c.violence.playful && c.members.includes(c.violence.victim)) MH.fight.begin(c, { with: c.violence.victim, kind: 'brawl', starter: 'player' });
+      if (was) c.violence = null; // hitting back inside a fight isn't a fresh assault
+      if (MH.fight.inCombat(c)) MH.fight.playerMove(c, text, to);
+    }
     chat.pendingInvite = null;
     chat.runTurn('player', text, to);
   };
@@ -449,6 +480,7 @@
   // *punches Vix* and friends: physical attacks in the player's *actions*
   const VIOLENCE = /\b(punch\w*|hit|hits|hitting|slap\w*|kick\w*|stab\w*|shov\w*|smack\w*|headbutt\w*|attack\w*|assault\w*|beat\w* (?:up|on)|tackl\w*|bites?|biting|chok\w*|strangl\w*|elbows?|uppercut\w*|socks?|decks?|clobber\w*|wallop\w*|pummel\w*|shoots?|shot|throws? (?:a |the |my )?\w+ at|swings? at|bonks?|whacks?|body ?slam\w*|suplex\w*|karate.?chop\w*|spits? (?:on|at)|trips?|scratch\w*|claws?|kneecap\w*|knees? (?:him|her|them)|stomps? on|pushes|punts?)\b/i;
   const PLAYFUL = /\b(playful\w*|gentl\w*|lightly|light|pretend\w*|fake\w*|mock\w*|softly|teasing\w*|boops?|pillow|high.?five|fist.?bump|nudges?|pokes?)\b/i;
+  chat.isAttack = (acts) => VIOLENCE.test(acts) || /\b(attack|strike|fight|tackle|lunge|swing|grab|pin|throw)\w*\b/i.test(acts);
   chat.detectViolence = function (text, c, to) {
     const acts = (String(text).match(/\*([^*]+)\*/g) || []).join(' ');
     if (!acts || !VIOLENCE.test(acts)) return null;
@@ -458,7 +490,7 @@
   };
   // make sure an attack actually lands in the numbers, whatever the AI wrote
   function enforceViolence(c, res) {
-    const v = c.violence; if (!v || v.playful || !MH.CHAR[v.victim]) return;
+    const v = c.violence; if (!v || v.playful || v.selfDefense || !MH.CHAR[v.victim]) return;
     const P = MH.state.player, S = MH.social;
     P.violence = (P.violence || 0) + 1;
     const vn = MH.CHAR[v.victim].name, tough = S.isTough(v.victim);
@@ -482,6 +514,12 @@
 
   // send a line as the player (used by quest Accept/Decline); keeps whatever they were typing
   chat.sendText = function (text) { if (!chat.active) return; el.input.value = (text + ' ' + el.input.value).trim(); chat.submit(); };
+  chat.setBusy = (w) => setWaiting(w);
+  chat.combatMode = function (on) {
+    el.root.classList.toggle('combat', !!on);
+    el.input.placeholder = on ? 'Your move: type an *attack*, talk, or try to leave…' : (chat.convo && chat.convo.members.length > 1 ? 'Talk to everyone… (tap a portrait to pick one)' : 'Say something… *actions* in asterisks');
+  };
+  chat.yourMove = function () { MH.ui.narrate('Your move.'); if (!document.querySelector('.dodge')) el.input.focus({ preventScroll: true }); };
   chat.letThemTalk = function () { if (!chat.waiting && chat.active) chat.runTurn('continue'); };
   chat.setPendingInvite = function (inv, text) { chat.pendingInvite = inv; el.input.value = ''; insertText(text + ' '); };
 
@@ -550,14 +588,11 @@
     if (chat.convo !== c) return;
     const v0 = c.violence, ch0 = c.challenge; c.challenge = null;
     enforceViolence(c, res); c.violence = null;
-    if (ch0 && !res.fight && c.members.includes(ch0.with) && !res.leave.includes(ch0.with)) {
-      if (ch0.kind === 'brawl') res.fight = { with: ch0.with, kind: 'brawl', starter: 'player', auto: true };
-      else if (res.offline && MH.fight.power(ch0.with) >= 2 && MH.social.attitude(ch0.with) > -20) res.fight = { with: ch0.with, kind: 'spar', starter: 'player' };
-    }
-    if (v0 && !v0.playful && !res.fight && c.members.includes(v0.victim) && !res.leave.includes(v0.victim) && MH.fight && (MH.social.isTough(v0.victim) || MH.fight.power(v0.victim) >= 2)) res.fight = { with: v0.victim, kind: 'brawl', starter: 'player', auto: true };
-    else if (v0 && res.fight) { res.fight.starter = 'player'; if (res.fight.kind === 'brawl') res.fight.auto = true; }
+    if (ch0 && ch0.kind === 'spar' && !res.fight && res.offline && c.members.includes(ch0.with) && MH.fight.power(ch0.with) >= 2 && MH.social.attitude(ch0.with) > -20) res.fight = { with: ch0.with, kind: 'spar', starter: 'player' };
+    if (v0 && res.fight) res.fight.starter = 'player';
     applyEffects(c, res);
     renderCast();
+    if (MH.fight && MH.fight.inCombat(c)) { MH.fight.afterTurn(c, res); return; }
     if (res.end) { setTimeout(() => chat.convo === c && chat.end(), 2600); return; }
     codeLeaves(c);
     if (!c.phone && !res.fight && !res.drag) codeJoins(c);
@@ -609,17 +644,20 @@
     res.take.forEach((g) => { const it = S.takeItem(g.item); if (it) { MH.ui.toast(`Gave ${it.name}${g.to && MH.CHAR[g.to] ? ' to ' + MH.CHAR[g.to].name : ''}`); if (MH.quests) MH.quests.onGive(it, g.to, c.members); if (/\bphone\b/i.test(it.name) && MH.phone) MH.phone.give(g.to || c.members[0]); } });
     if (res.hurt) { MH.fight.damage(res.hurt, { by: c.members[0] }); MH.ui.toast(`💥 −${res.hurt} HP`, 2); MH.render.flash = 0.12; }
     if (!res.fight && c.pendingFight && c.members.includes(c.pendingFight.with)) res.fight = c.pendingFight; // they chased you down for this
+    if (res.noLeave === false) c.lock = null;
+    else if (res.noLeave && c.members.includes(res.noLeave.by)) { c.lock = { by: res.noLeave.by, why: res.noLeave.why || MH.CHAR[res.noLeave.by].name + ' won\'t let you go', turns: 3 }; }
     c.pendingFight = null;
     if (res.fight && res.fight.kind === 'mugging') c.mugging = res.fight.with;
     if (res.chase && MH.npcById[res.chase.who] && !c.phone) {
       const ch = res.chase;
       setTimeout(() => { if (chat.convo === c) chat.end(); MH.sim.startChase(MH.npcById[ch.who], { kind: ch.kind, reason: ch.why || '' }); }, 1200);
-    } else if (res.fight && MH.fight && c.members.includes(res.fight.with)) {
+    } else if (res.fight && MH.fight && c.members.includes(res.fight.with) && !c.phone) {
       const f = res.fight;
-      if (f.auto) setTimeout(() => chat.convo === c && MH.fight.inChat(c, f), 500);
-      else MH.fight.offer(c, f);
+      if (MH.fight.inCombat(c)) { if (f.kind !== 'spar' && !c.combat.enemies.some((x) => x.id === f.with)) MH.fight.begin(c, f); } // someone joins in
+      else if (f.kind === 'spar' || f.kind === 'mugging') MH.fight.offer(c, f);
+      else MH.fight.begin(c, f); // they attack: their turn comes right after these lines
     }
-    if (res.drag && !res.fight) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to), 700);
+    if (res.drag && (!res.fight || MH.fight.inCombat(c))) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to), 700);
     if (MH.quests) {
       (res.questDone || []).forEach((qid) => MH.quests.complete(qid, c.members));
       MH.quests.onTalk(c);

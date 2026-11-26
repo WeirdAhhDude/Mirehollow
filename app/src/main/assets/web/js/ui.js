@@ -235,6 +235,7 @@
   // ------------------------------------------------------------ challenge someone (from the chat bar)
   ui.openFightPicker = function () {
     const c = MH.chat.convo; if (!c || c.phone) { ui.toast('You can\'t fight over the phone.'); return; }
+    if (MH.fight.inCombat(c)) { const t = MH.chat.to && MH.fight.alive(c).some((x) => x.id === MH.chat.to) ? MH.chat.to : (MH.fight.alive(c)[0] || {}).id; if (t) MH.chat.insertText(`*attacks ${MH.CHAR[t].name}* `); return; }
     ui.closeGivePicker();
     const box = h(`<div id="givePicker" class="picker"><div class="ph">Fight…</div><div class="who"></div><div class="row"><button class="btn small ghost" id="fpSpar">🤝 Friendly spar</button><button class="btn small danger" id="fpReal">⚔️ Fight for real</button></div><p class="muted small">Sparring is friendly (some villagers love it). A real fight is violence: people will remember. Equip a weapon from your Pocket first if you have one.</p></div>`);
     let target = chat_to_or_first();
@@ -344,7 +345,7 @@
       <div class="pstat"><span>Feels:</span> <b style="color:${MH.bondColor(n.bond)}">${MH.bondTier(n.bond)}</b> (${n.bond})${n.label ? ' · <i>' + MH.esc(n.label) + '</i>' : ''}</div>
       <div class="pstat"><span>Reputation:</span> ${MH.esc(MH.cap(MH.social.opinionWords(id)))} (${MH.social.repOpinion(id) >= 0 ? '+' : ''}${MH.social.repOpinion(id)})</div>
       <div class="pstat"><span>Overall:</span> <span class="bar inline"><i style="width:${Math.round((att + 100) / 2)}%;background:${MH.bondColor(att)}"></i></span> ${att}</div>
-      <div class="pstat"><span>Mood:</span> ${MH.esc(n.mood)} · <span>Where:</span> ${MH.esc(where)}</div></div></div>
+      <div class="pstat"><span>Mood:</span> ${MH.esc(n.mood)}</div></div></div>
       ${n.met ? `<p class="pbio">${MH.esc(ch.bio.split('. ').slice(0, 3).join('. '))}.</p>` : `<p class="pbio muted">You haven't met ${MH.esc(ch.name)} yet. Maybe say hi?</p>`}
       <h4>What ${MH.esc(ch.name)} remembers about you</h4>
       <ul class="mems">${mems.length ? mems.map((m) => `<li><i>${MH.esc(MH.agoStr(m.t))}</i> ${MH.esc(m.text)}</li>`).join('') : '<li class="muted">Nothing yet.</li>'}</ul>
@@ -682,7 +683,11 @@
       <label>Time speed (game minutes per real second)</label>
       <select id="sTime"><option value="0.5">0.5 (relaxed)</option><option value="1">1 (default — a day lasts 24 min)</option><option value="2">2 (fast)</option></select>
       <h4>Save data</h4>
-      <div class="row wrap"><button class="btn small ghost" id="sExport">Export backup</button><button class="btn small ghost" id="sImport">Import backup</button><button class="btn small danger" id="sReset">Delete save</button></div>
+      <h4>💾 Backups</h4>
+      <div class="autob">${MH.isNative() ? `<p class="small">Auto-backup file: <b id="abName">—</b> <span class="muted" id="abLast"></span></p>
+        <div class="row wrap"><button class="btn small" id="abPick">Choose auto-backup file…</button><button class="btn small ghost" id="abNow">Back up now</button><button class="btn small ghost" id="abLoad">Load from it</button><button class="btn small ghost" id="abOff">Turn off</button></div>
+        <p class="muted small">The game rewrites this one file every few minutes of play, when you sleep and when you leave the app. In the file picker, choose <b>Google Drive</b> (or another cloud app) for a cloud save.</p>` : '<p class="muted small">Auto-backup files need the Android app; restore points below still work.</p>'}
+        <div class="row wrap"><button class="btn small ghost" id="sPoints">⏪ Restore points</button><button class="btn small ghost" id="sExport">Export backup</button><button class="btn small ghost" id="sImport">Import backup</button><button class="btn small danger" id="sReset">Delete save</button></div></div>
       <p class="muted small">The backup holds everything: your game (bonds, memories, money, items, reputation, story log, plans, parties, followers), all character edits, uploaded portraits and settings — but not your API key.</p>
       <p class="muted small">AI calls this session: <span id="sCalls">${MH.ai.stats.calls}</span> · tokens: ${MH.ai.stats.tokens}</p>
       <div class="row"><button class="btn" id="sDone">Save settings</button></div></div>`);
@@ -744,6 +749,21 @@
       box.querySelector('#mSearch').oninput = (e) => render(e.target.value);
       render('');
     };
+    const abRefresh = () => {
+      const n = body.querySelector('#abName'); if (!n) return;
+      const name = MH.backup.autoName(), last = MH.store.get('lastAutoBackup', null);
+      n.textContent = name || 'not set';
+      body.querySelector('#abLast').textContent = name && last ? (last.ok ? '· last saved ' + new Date(last.t).toLocaleString() : '· last attempt failed') : '';
+      ['#abNow', '#abLoad', '#abOff'].forEach((q) => (body.querySelector(q).disabled = !name));
+    };
+    if (body.querySelector('#abPick')) {
+      abRefresh(); MH.on('autobackup', abRefresh);
+      body.querySelector('#abPick').onclick = () => MH.backup.chooseAuto();
+      body.querySelector('#abNow').onclick = () => { MH.backup._lastAuto = 0; MH.backup.autoSave(true); ui.toast('💾 Backing up…', 2); };
+      body.querySelector('#abOff').onclick = async () => { if (await ui.confirm('Stop auto-backups? (The file stays where it is.)', 'Stop', 'Keep')) { window.AndroidBridge.clearAutoBackup(); abRefresh(); } };
+      body.querySelector('#abLoad').onclick = async () => { try { const text = await MH.backup.readAuto(); importText(text); } catch (e) { ui.toast('Could not read the auto-backup file.'); } };
+    }
+    body.querySelector('#sPoints').onclick = () => ui.openRestorePoints(fromTitle);
     body.querySelector('#sExport').onclick = async () => {
       apply();
       const n = await MH.backup.export();
@@ -754,26 +774,48 @@
         <label class="btn" id="impFileL">📂 Choose backup file<input type="file" id="impFile" accept=".json,application/json,text/plain,*/*" hidden></label>
         <p class="muted small">Older exports (text you copied) can still be pasted here:</p><textarea class="dump" id="impTa"></textarea><div class="row"><button class="btn small ghost" id="impGo">Import pasted text</button></div></div>`);
       ui.modal('Import backup', f, { keep: true, onClose: () => ui.openSettings(fromTitle) });
-      const go = async (text) => {
-        if (!text || !text.trim()) return;
-        const ok = await ui.confirm('Replace your current game with this backup?', 'Import', 'Cancel');
-        if (!ok) return;
-        try {
-          const hadGame = await MH.backup.import(text);
-          if (hadGame) { ui.lockModal = false; ui.closeModal(); ui.renderParty && ui.renderParty(); }
-          else fromTitle ? ui.showTitle() : ui.closeModal();
-          ui.toast(hadGame ? 'Backup imported!' : 'Character edits & settings imported', 3);
-        } catch (e) { console.error(e); ui.toast('That does not look like a Mirehollow backup.'); }
-      };
+      const go = (text) => importText(text);
       f.querySelector('#impFile').onchange = (e) => { const file = e.target.files && e.target.files[0]; if (!file) return; const r = new FileReader(); r.onload = () => go(String(r.result)); r.readAsText(file); };
       f.querySelector('#impGo').onclick = () => go(f.querySelector('#impTa').value);
     };
+    // every import first saves a restore point of what you have, and warns if the file is older
+    async function importText(text) {
+      if (!text || !text.trim()) return;
+      const warn = MH.backup.compare(text);
+      const ok = await ui.confirm((warn ? warn + '\n\n' : '') + 'Replace your current game with this backup? (Your current game is saved as a restore point first.)', 'Import', 'Cancel');
+      if (!ok) return;
+      try {
+        await MH.backup.snapshot('before import');
+        const hadGame = await MH.backup.import(text);
+        if (hadGame) { ui.lockModal = false; ui.closeModal(); ui.renderParty && ui.renderParty(); }
+        else fromTitle ? ui.showTitle() : ui.closeModal();
+        ui.toast(hadGame ? 'Backup imported! (Undo: Settings → ⏪ Restore points)' : 'Character edits & settings imported', 4);
+      } catch (e) { console.error(e); ui.toast('That does not look like a Mirehollow backup.'); }
+    }
     body.querySelector('#sReset').onclick = () => {
       if (!confirm(`Delete this character's save (slot ${MH.slot})? This cannot be undone.`)) return;
       MH.store.del(MH.slotKey('save')); MH.store.del(MH.slotKey('dayStart')); location.reload();
     };
     body.querySelector('#sDone').onclick = () => { apply(); ui.toast('Settings saved' + (MH.ai.hasKey() ? ' — AI on' : ' — offline mode')); fromTitle ? ui.showTitle() : ui.closeModal(); ui.updateHud(); };
     ui.modal('Settings & AI', body, { keep: true, onClose: () => { apply(); fromTitle ? ui.showTitle() : ui.closeModal(); } });
+  };
+
+  // ------------------------------------------------------------ restore points
+  ui.openRestorePoints = function (fromTitle) {
+    const pts = MH.backup.points();
+    const body = h(`<div class="form"><p class="muted small">Automatic snapshots of ALL your characters, edits and portraits: every ~15 minutes of play, each new day, and right before any import. The last 8 are kept.</p><div class="rplist"></div></div>`);
+    const L = body.querySelector('.rplist');
+    if (!pts.length) L.appendChild(h('<p class="muted small">None yet — the first one is made after a few minutes of play.</p>'));
+    pts.forEach((pt) => {
+      const row = h(`<div class="srow"><span class="sicon">⏪</span><div class="sinfo"><b>${MH.esc(new Date(pt.t).toLocaleString())}</b><small>${MH.esc(pt.reason)} · ${MH.esc(pt.who)}, day ${pt.day}${pt.slots > 1 ? ' · ' + pt.slots + ' characters' : ''}</small></div><button class="btn small">Restore</button></div>`);
+      row.querySelector('button').onclick = async () => {
+        if (!(await ui.confirm(`Go back to this restore point (${new Date(pt.t).toLocaleString()})? Your current game is snapshotted first, so you can undo this too.`, 'Restore', 'Cancel'))) return;
+        try { await MH.backup.snapshot('before restoring'); const had = await MH.backup.restore(pt.key); ui.lockModal = false; ui.closeModal(); if (!had) fromTitle && ui.showTitle(); ui.renderParty && ui.renderParty(); ui.toast('⏪ Restored.', 3); }
+        catch (e) { console.error(e); ui.toast('That restore point could not be loaded.'); }
+      };
+      L.appendChild(row);
+    });
+    ui.modal('⏪ Restore points', body, { onClose: () => ui.openSettings(fromTitle) });
   };
 
   // ------------------------------------------------------------ title & creator
@@ -794,8 +836,8 @@
       card.querySelectorAll('[data-a]').forEach((b) => (b.onclick = async () => {
         const a = b.dataset.a;
         if (a === 'play') { MH.setSlot(n); ui.lockModal = false; ui.closeModal(); MH.startGame(MH.store.get(MH.slotKey('save'))); }
-        if (a === 'new') { if (st && !(await ui.confirm(`Start a new character in slot ${n}? ${st.player.name}'s game will be overwritten.`, 'Start over', 'Cancel'))) return; MH.setSlot(n); ui.openCreator(false); }
-        if (a === 'del') { if (!(await ui.confirm(`Delete ${st.player.name} (slot ${n})? This cannot be undone.`, 'Delete', 'Cancel'))) return; MH.store.del(MH.slotKey('save', n)); MH.store.del(MH.slotKey('dayStart', n)); ui.showTitle(); }
+        if (a === 'new') { if (st && !(await ui.confirm(`Start a new character in slot ${n}? ${st.player.name}'s game will be overwritten. (A restore point is saved first.)`, 'Start over', 'Cancel'))) return; if (st) await MH.backup.snapshot('before overwriting ' + st.player.name); MH.setSlot(n); ui.openCreator(false); }
+        if (a === 'del') { if (!(await ui.confirm(`Delete ${st.player.name} (slot ${n})? (A restore point is saved first.)`, 'Delete', 'Cancel'))) return; await MH.backup.snapshot('before deleting ' + st.player.name); MH.store.del(MH.slotKey('save', n)); MH.store.del(MH.slotKey('dayStart', n)); ui.showTitle(); }
       }));
       sl.appendChild(card);
     }

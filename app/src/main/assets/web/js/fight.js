@@ -1,7 +1,8 @@
 // Mirehollow — health & fights.
-// The player has HP. Fights are a reflex minigame (tap the circles when the ring closes, drag the sliders),
-// harder the tougher the opponent. Fights can be friendly spars or the real thing; villagers fight each
-// other too. At 0 HP you black out: robbed, rescued to the clinic, or — rarely — you die and the day restarts.
+// The player has HP. Fights are turn-based inside conversations (Undertale-style): you type attacks that hit or
+// miss depending on the opponent, then dodge their attacks with a ❤️ in a box. Friendly spars or the real thing;
+// group fights; villagers fight each other too. At 0 HP you black out: robbed, rescued, or — rarely — you die
+// and the day restarts.
 'use strict';
 (function (MH) {
   const F = (MH.fight = { active: null });
@@ -54,7 +55,7 @@
   };
   // slow regeneration; called about once a second of real time
   F.tick = function () {
-    if (!MH.state || F.active) return;
+    if (!MH.state || F.active || F.inCombat(MH.chat && MH.chat.convo)) return;
     const p = P(), now = MH.absMinutes();
     if (p.hpT == null) p.hpT = now;
     const dm = now - p.hpT;
@@ -140,140 +141,280 @@
     return out;
   };
 
-  // opts: { opp, kind: 'spar'|'brawl'|'mugging', starter: 'player'|'npc', why, onEnd(result) }
-  F.start = function (opts) {
-    if (F.active || !MH.CHAR[opts.opp]) return;
-    const opp = opts.opp, ch = MH.CHAR[opp], pow = MH.clamp(F.power(opp), 1, 5);
-    const spar = opts.kind === 'spar';
-    const pw = F.weaponOf('player'), ow = F.weaponOf(opp);
-    const sides = spar ? { foes: [], friends: [], fled: [] } : F.sides(opp);
-    // bystanders react before the first blow
-    sides.fled.forEach((id) => { const o = MH.npcById[id]; if (MH.chat.active && MH.chat.convo.members.includes(id)) MH.chat.removeMember(id, 'runs off, terrified'); MH.sim.flee(o, MH.player); });
-    sides.foes.concat(sides.friends).forEach((id) => { const o = MH.npcById[id]; o.busy = 'talking'; o.path = null; o.face(MH.player.x, MH.player.y); o.showEmote('anger', 3); });
-    const st = {
-      opts, opp, pow, spar, pw, ow,
-      sides, foeMult: 1 + 0.35 * sides.foes.length, helpMult: 1 + 0.4 * sides.friends.length, guard: Math.max(0.5, 1 - 0.25 * sides.friends.length),
-      oppMax: (60 + pow * 25) * (1 + 0.5 * sides.foes.length), oppHp: (60 + pow * 25) * (1 + 0.5 * sides.foes.length),
-      notes: 10 + pow * 3, spawned: 0, hits: 0, perfect: 0, misses: 0, over: false,
-      appr: 1450 - pow * 180, rad: 44 - pow * 3.5, gap: 880 - pow * 105, sliderP: 0.12 + pow * 0.07,
-    };
-    F.active = st;
-    const ui = h(`<div class="fightui ${spar ? 'spar' : ''}"><div class="fbars">
-        <div class="fb me"><span>You${pw !== 'fists' ? ' · ' + MH.esc(MH.WEAPONS[pw].name) : ''}</span><div class="bar"><i></i></div></div>
-        <div class="fvs">${spar ? '🤝 SPAR' : '⚔️'}<small>${F.DIFF[pow]}</small></div>
-        <div class="fb them"><span>${MH.esc(ch.name)}${ow !== 'fists' ? ' · ' + MH.esc(MH.WEAPONS[ow].name) : ''}</span><div class="bar"><i></i></div></div></div>
-      ${sides.foes.length || sides.friends.length || sides.fled.length ? `<div class="fsides">${sides.friends.length ? '🛡️ With you: ' + sides.friends.map((id) => MH.esc(nm(id))).join(', ') + ' ' : ''}${sides.foes.length ? '⚔️ With ' + MH.esc(ch.name) + ': ' + sides.foes.map((id) => MH.esc(nm(id))).join(', ') + ' ' : ''}${sides.fled.length ? '🏃 Fled: ' + sides.fled.map((id) => MH.esc(nm(id))).join(', ') : ''}</div>` : ''}
-      <div class="fplay"></div><div class="fmsg">Get ready…</div>
-      <div class="fbtns">${(P().bhCharges || 0) > 0 && !spar ? '<button class="btn small fbh">🕳️ Black Hole Sniper 3000</button>' : ''}<button class="btn small ghost frun">${spar ? 'Give up' : 'Run away'}</button></div></div>`);
-    document.getElementById('game').appendChild(ui);
-    st.ui = ui; st.play = ui.querySelector('.fplay'); st.msg = ui.querySelector('.fmsg');
-    document.body.classList.add('fighting');
-    const bars = () => {
-      ui.querySelector('.me i').style.width = F.hp() + '%';
-      ui.querySelector('.them i').style.width = Math.max(0, st.oppHp / st.oppMax * 100) + '%';
-    };
-    st.bars = bars; bars();
-    ui.querySelector('.frun').onclick = () => {
-      if (st.over) return;
-      if (spar || Math.random() < 0.75 - pow * 0.1) end(spar ? 'gaveup' : 'fled');
-      else { say('Blocked! You can\'t get away!', 'bad'); hurt(1); }
-    };
-    const bh = ui.querySelector('.fbh');
-    if (bh) bh.onclick = () => {
-      if (st.over) return;
-      P().bhCharges = (P().bhCharges || 1) - 1;
-      const flash = h('<div class="bhole"></div>'); st.play.appendChild(flash);
-      say(`FWOOOMP. A tiny black hole swallows ${ch.name}… and spits them out somewhere near the swamp.`, 'ok');
-      st.oppHp = 0; bars(); st.blackhole = true;
-      setTimeout(() => end('win'), 1400);
-    };
-    const say = (t, cls) => { st.msg.textContent = t; st.msg.className = 'fmsg ' + (cls || ''); };
-    st.say = say;
-    const dmgTo = (mult) => { st.oppHp -= 10 * MH.WEAPONS[pw].dmg * mult * st.helpMult; bars(); if (st.oppHp <= 0) end('win'); };
-    const hurt = (mult) => {
-      let d = (4 + pow * 3) * MH.WEAPONS[ow].dmg * mult * (spar ? 0.5 : 1) * st.foeMult * st.guard;
-      if (spar && F.hp() - d < 15) d = Math.max(0, F.hp() - 15);
-      F.damage(d, { inFight: true, by: opp });
-      bars(); st.ui.classList.remove('shake'); void st.ui.offsetWidth; st.ui.classList.add('shake');
-      if (F.hp() <= (spar ? 15 : 0)) end('lose');
-    };
-    // spawn notes: tap circles (ring closes in) and sliders (drag the ball to the end)
-    const spawn = () => {
-      if (st.over) return;
-      if (st.spawned >= st.notes) { if (!st.play.querySelector('.note')) end(st.oppHp / st.oppMax <= F.hp() / 100 ? 'win' : 'lose'); else setTimeout(spawn, 300); return; }
-      st.spawned++;
-      const W = st.play.clientWidth, H = st.play.clientHeight, R = st.rad;
-      const x = MH.rand(R + 6, W - R - 6), y = MH.rand(R + 6, H - R - 6);
-      const slider = Math.random() < st.sliderP && W > 200;
-      const n = h(`<div class="note ${slider ? 'slider' : ''}" style="left:${x - R}px;top:${y - R}px;width:${R * 2}px;height:${R * 2}px"><div class="ring"></div><span>${st.spawned}</span></div>`);
-      const born = performance.now();
-      let done = false;
-      const resolve = (ok, perfect) => {
-        if (done) return; done = true;
-        n.classList.add(ok ? 'hit' : 'miss'); setTimeout(() => n.remove(), 260);
-        if (st.over) return;
-        if (ok) { st.hits++; if (perfect) st.perfect++; say(perfect ? MH.pick(['PERFECT!', 'CRITICAL HIT!', 'Clean hit!']) : MH.pick(['Hit!', 'Good!', 'Got them!']), 'ok'); dmgTo(perfect ? 1.5 : 1); }
-        else { st.misses++; say(MH.pick([`${ch.name} hits you!`, 'Ouch!', 'Too slow!', 'Blocked — and countered!']), 'bad'); hurt(1); }
-      };
-      if (!slider) {
-        n.addEventListener('pointerdown', (e) => {
-          e.preventDefault();
-          const t = (performance.now() - born) / st.appr; // 1 = ring meets the circle
-          resolve(t > 0.55 && t < 1.18, t > 0.82 && t < 1.08);
-        });
-        setTimeout(() => resolve(false), st.appr * 1.2);
-      } else {
-        // slider: a path to drag along
-        const ang = Math.random() * Math.PI * 2, len = Math.min(W, H) * 0.38;
-        let ex = MH.clamp(x + Math.cos(ang) * len, R, W - R), ey = MH.clamp(y + Math.sin(ang) * len, R, H - R);
-        const track = h(`<div class="track"></div>`);
-        const dx = ex - x, dy = ey - y, L = Math.hypot(dx, dy);
-        track.style.cssText = `left:${x}px;top:${y - R * 0.55}px;width:${L}px;height:${R * 1.1}px;transform:rotate(${Math.atan2(dy, dx)}rad);border-radius:${R}px`;
-        const end2 = h(`<div class="sliderend" style="left:${ex - R * 0.6}px;top:${ey - R * 0.6}px;width:${R * 1.2}px;height:${R * 1.2}px"></div>`);
-        st.play.appendChild(track); st.play.appendChild(end2);
-        let drag = false;
-        const cleanup = () => { track.remove(); end2.remove(); };
-        n.addEventListener('pointerdown', (e) => { e.preventDefault(); const t = (performance.now() - born) / st.appr; if (t < 0.5) { cleanup(); resolve(false); return; } drag = true; n.setPointerCapture(e.pointerId); n.classList.add('held'); });
-        n.addEventListener('pointermove', (e) => {
-          if (!drag) return;
-          const r = st.play.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
-          // keep the ball on the track
-          const k = MH.clamp(((px - x) * dx + (py - y) * dy) / (L * L), 0, 1), bx = x + dx * k, by = y + dy * k;
-          if (Math.hypot(px - bx, py - by) > R * 1.8) { drag = false; cleanup(); resolve(false); return; }
-          n.style.left = (bx - R) + 'px'; n.style.top = (by - R) + 'px';
-          if (k > 0.94) { drag = false; cleanup(); resolve(true, true); }
-        });
-        n.addEventListener('pointerup', () => { if (drag) { drag = false; cleanup(); resolve(false); } });
-        setTimeout(() => { if (!done) { cleanup(); resolve(false); } }, st.appr * 1.25 + 1500 - pow * 150);
-      }
-      st.play.appendChild(n);
-      requestAnimationFrame(function ringLoop() {
-        if (done) return;
-        const t = (performance.now() - born) / st.appr;
-        const ring = n.querySelector('.ring'); if (ring) ring.style.transform = `scale(${Math.max(1, 2.6 - 1.6 * t)})`;
-        if (t < 1.3) requestAnimationFrame(ringLoop);
-      });
-      setTimeout(spawn, st.gap * MH.rand(0.8, 1.25));
-    };
-    setTimeout(() => { say(spar ? `Friendly spar with ${ch.name}! Tap the circles when the ring closes, drag the sliders.` : `${ch.name} attacks! Tap the circles when the ring closes, drag the sliders.`); }, 50);
-    setTimeout(spawn, 1300);
+  // ================================================================ TURN-BASED FIGHTS (Undertale-style)
+  // A fight lives inside the conversation (c.combat). YOUR TURN: type an *attack* — it hits or misses depending on
+  // how tough the target is — or just talk, or try to leave. THEIR TURN: dodge their attacks with your ❤️ in the box.
+  // Group fights: several enemies (each with HP), allies who land their own hits, friends who drag you out.
+  const HIT = [0, 0.92, 0.8, 0.66, 0.52, 0.4];      // chance to land a hit, by target's strength 1..5
+  const EHP = [0, 25, 50, 80, 110, 140];            // enemy HP by strength (weak ones can go down in one hit)
+  F.inCombat = (c) => !!(c && c.combat && !c.combat.over);
+  F.alive = (c) => (c && c.combat ? c.combat.enemies.filter((x) => !x.out && x.hp > 0) : []);
+  const pw5 = (id) => MH.clamp(F.power(id), 1, 5);
 
-    function end(res) {
-      if (st.over) return; st.over = true;
-      const ko = res === 'lose' && !spar && F.hp() <= 0; // decided now (no regen sneaking in before the card)
-      const result = { res, win: res === 'win', opp, kind: opts.kind, spar, perfect: st.perfect, hits: st.hits, misses: st.misses, blackhole: !!st.blackhole, weapon: pw, sides: st.sides };
-      st.sides.foes.concat(st.sides.friends).forEach((id) => { const o = MH.npcById[id]; if (o && o.busy === 'talking' && !(MH.chat.convo && MH.chat.convo.members.includes(id))) o.busy = null; });
-      say(res === 'win' ? (spar ? `You win the spar!` : `${ch.name} goes down!`) : res === 'lose' ? (spar ? `${ch.name} wins the spar.` : `You're beaten…`) : res === 'fled' ? 'You got away!' : 'You give up.', res === 'win' || res === 'fled' ? 'ok' : 'bad');
-      setTimeout(() => {
-        ui.remove(); document.body.classList.remove('fighting');
-        F.active = null;
-        if (ko) P().hp = 0;
-        F.after(result);
-        opts.onEnd && opts.onEnd(result);
-        if (ko) F.knockout({ by: opp, kind: opts.kind });
-      }, 1300);
-    }
+  F.begin = function (c, f) {
+    if (!c || c.phone || !MH.CHAR[f.with] || !MH.chat.active) return;
+    if (F.inCombat(c)) { addEnemy(c, f.with, 'joins the fight'); F.renderBar(c); return; }
+    const spar = f.kind === 'spar';
+    const sides = spar ? { foes: [], friends: [], fled: [] } : F.sides(f.with);
+    const cb = (c.combat = { kind: f.kind || 'brawl', spar, starter: f.starter || 'npc', primary: f.with, enemies: [], allies: [], fled: sides.fled.slice(), round: 0, over: false });
+    addEnemy(c, f.with);
+    sides.foes.forEach((id) => addEnemy(c, id, 'jumps into the fight against you'));
+    sides.friends.forEach((id) => { if (!c.members.includes(id)) MH.chat.addMember(id, 'jumps in to help you'); if (!cb.allies.includes(id)) cb.allies.push(id); });
+    if (!spar) c.members.forEach((id) => { if (!cb.enemies.some((x) => x.id === id) && !cb.allies.includes(id) && MH.social.attitude(id) >= 40 && F.power(id) >= 2 && !MH.social.isAfraid(id) && (MH.social.npc(id).rel[f.with] || 0) <= 20) cb.allies.push(id); });
+    sides.fled.forEach((id) => { const o = MH.npcById[id]; if (c.members.includes(id)) MH.chat.removeMember(id, 'runs off, terrified'); if (o) MH.sim.flee(o, MH.player); });
+    const names = cb.enemies.map((x) => nm(x.id)).join(' and ');
+    c.lines.push({ who: 'system', text: `${spar ? 'A friendly SPARRING match' : 'A FIGHT'} starts: ${P().name} vs ${names}${cb.allies.length ? ' — ' + cb.allies.map(nm).join(' and ') + ' on the player\'s side' : ''}.` });
+    MH.social.log({ kind: 'sys', text: `⚔️ ${spar ? 'Spar' : 'Fight'}: you vs ${names}${cb.allies.length ? ' (with ' + cb.allies.map(nm).join(', ') + ')' : ''}`, convo: c.id });
+    MH.chat.combatMode(true); F.renderBar(c);
   };
+  function addEnemy(c, id, how) {
+    const cb = c.combat; if (!MH.CHAR[id] || cb.enemies.some((x) => x.id === id)) return;
+    if (!c.members.includes(id)) MH.chat.addMember(id, how || 'joins the fight');
+    cb.allies = cb.allies.filter((a) => a !== id);
+    const max = EHP[pw5(id)];
+    cb.enemies.push({ id, hp: max, max });
+    const e = MH.npcById[id]; if (e) e.showEmote('anger', 3);
+  }
+
+  // YOUR TURN — called from chat.submit before the storyteller replies
+  F.playerMove = function (c, text, to) {
+    const cb = c.combat; if (!cb || cb.over) return;
+    cb.round++; cb.lastMove = null;
+    const acts = (String(text).match(/\*([^*]+)\*/g) || []).join(' ').replace(/\*/g, '').trim();
+    if (!acts || !MH.chat.isAttack(acts)) { cb.lastMove = 'The player did not attack this turn (they talked or did something else).'; return; }
+    const alive = F.alive(c), low = acts.toLowerCase();
+    const tgt = alive.find((x) => x.id === to) || alive.find((x) => { const n = nm(x.id).toLowerCase(); return low.includes(n) || low.includes(n.split(' ').pop()); }) || alive[0];
+    if (!tgt) return;
+    const pw = F.weaponOf('player'), W = MH.WEAPONS[pw], p = pw5(tgt.id);
+    if (/black hole|sniper/i.test(acts) && (P().bhCharges || 0) > 0 && !cb.spar) {
+      P().bhCharges--; tgt.hp = 0; tgt.out = true; tgt.blackhole = true;
+      F.popup(tgt.id, '🕳️ GONE', 'hit');
+      const e = MH.npcById[tgt.id]; if (e) { const s2 = MH.world.randomSpot('swamp'); setTimeout(() => { e.setTile(s2.tx, s2.ty); }, 900); }
+      cb.lastMove = `The player fired Penelope's Black Hole Sniper 3000: ${nm(tgt.id)} was sucked into a tiny black hole and spat out near the swamp (gone from the fight, dazed, unhurt, furious).`;
+      setTimeout(() => MH.chat.convo === c && c.members.includes(tgt.id) && MH.chat.removeMember(tgt.id, 'vanishes into a tiny black hole'), 1100);
+      F.renderBar(c); return;
+    }
+    const chance = HIT[p] + (pw !== 'fists' ? 0.06 : 0) + (cb.allies.length ? 0.05 : 0);
+    const hit = Math.random() < chance, crit = hit && Math.random() < 0.12;
+    let dmg = 0;
+    if (hit) { dmg = Math.round(26 * W.dmg * MH.rand(0.85, 1.15) * (crit ? 1.6 : 1) * (cb.spar ? 0.75 : 1)); tgt.hp = Math.max(0, tgt.hp - dmg); }
+    const down = tgt.hp <= 0 || (cb.spar && tgt.hp <= tgt.max * 0.2);
+    if (down) tgt.out = true;
+    F.popup(tgt.id, hit ? (crit ? `CRIT −${dmg}` : `−${dmg}`) : 'MISS', hit ? 'hit' : 'miss');
+    cb.lastMove = `The player's move "${acts.slice(0, 120)}" ${hit ? (crit ? 'landed a CRITICAL hit on' : 'HIT') : 'MISSED'} ${nm(tgt.id)}${hit ? ` (−${dmg} HP, now ${tgt.hp}/${tgt.max})` : ` (${nm(tgt.id)} dodged or blocked it)`}${down ? (cb.spar ? ` — ${nm(tgt.id)} is beaten and yields` : ` — ${nm(tgt.id)} is KNOCKED OUT and can't fight any more`) : ''}.`;
+    F.renderBar(c);
+  };
+
+  // after the storyteller's reply: allies' hits, surrenders, end checks, then THEIR TURN
+  F.afterTurn = function (c, res) {
+    const cb = c.combat; if (!cb || cb.over) return false;
+    if (cb.lastMove) { c.lines.push({ who: 'system', text: 'COMBAT: ' + cb.lastMove }); cb.lastMove = null; }
+    const hitBy = (by, t, d) => { t.hp = Math.max(0, t.hp - d); F.popup(t.id, `−${d} ${nm(by).split(' ')[0]}`, 'hit'); if (t.hp <= 0 || (cb.spar && t.hp <= t.max * 0.2)) t.out = true; };
+    (res.allyAttacks || []).forEach((a) => {
+      if (!c.members.includes(a.by) || cb.enemies.some((x) => x.id === a.by)) return;
+      if (!cb.allies.includes(a.by)) cb.allies.push(a.by);
+      const t = F.alive(c).find((x) => x.id === a.target) || F.alive(c)[0]; if (!t) return;
+      hitBy(a.by, t, a.strength === 'finisher' ? Math.max(45, t.hp) : a.strength === 'heavy' ? 28 : 14);
+    });
+    // no instructions from the storyteller (offline): allies still help now and then
+    if (!(res.allyAttacks || []).length && !cb.spar) cb.allies.forEach((id) => { if (c.members.includes(id) && Math.random() < 0.45) { const t = MH.pick(F.alive(c)); if (t) hitBy(id, t, MH.randi(8, 16) + F.power(id) * 3); } });
+    (res.surrender || []).forEach((id) => { const t = cb.enemies.find((x) => x.id === id); if (t) { t.out = true; t.surrendered = true; } });
+    cb.enemies.forEach((t) => { if (!c.members.includes(t.id) && !t.out) { t.out = true; t.left = true; } });
+    cb.allies = cb.allies.filter((id) => c.members.includes(id));
+    F.renderBar(c);
+    if (res.drag) { F.end(c, 'dragged'); return true; }
+    if (res.fightOver) { F.end(c, 'stopped'); return true; }
+    if (!F.alive(c).length) { F.end(c, cb.enemies.every((x) => x.left) ? 'theyfled' : 'win'); return true; }
+    setTimeout(() => MH.chat.convo === c && F.enemyTurn(c, res.enemyAttack), 450);
+    return true;
+  };
+
+  // THEIR TURN: everyone still standing attacks; dodge in the box
+  F.enemyTurn = function (c, caption) {
+    const cb = c.combat; if (!cb || cb.over) return;
+    const alive = F.alive(c); if (!alive.length) { F.end(c, 'win'); return; }
+    MH.chat.setBusy(true);
+    const guard = Math.max(0.6, 1 - 0.2 * cb.allies.length);
+    F.dodge({ enemies: alive.map((x) => x.id), spar: cb.spar, guard, caption: caption || defaultCaption(alive.map((x) => x.id)) }, (taken) => {
+      if (MH.chat.convo !== c || cb.over) return;
+      MH.chat.setBusy(false);
+      c.lines.push({ who: 'system', text: `COMBAT: ${alive.map((x) => nm(x.id)).join(' and ')} attacked — the player ${taken ? `took ${taken} damage (HP now ${Math.round(F.hp())}/100)` : 'dodged everything'}.` });
+      F.renderBar(c);
+      if (F.hp() <= (cb.spar ? 15 : 0)) { F.end(c, 'lose'); return; }
+      MH.chat.yourMove();
+    });
+  };
+  function defaultCaption(ids) {
+    const a = nm(ids[0]);
+    if (ids.length > 1) return `${ids.map(nm).join(' and ')} come at you together!`;
+    return MH.pick([`${a} attacks!`, `${a} lunges at you!`, `${a} swings!`, `${a} isn't holding back!`]);
+  }
+
+  // trying to run during a fight
+  F.tryFlee = function (c) {
+    const cb = c.combat; if (!cb || cb.over) return;
+    const top = Math.max(...F.alive(c).map((x) => pw5(x.id)), 1);
+    if (cb.spar || Math.random() < 0.72 - top * 0.1) { F.end(c, 'fled'); return; }
+    const blocker = MH.pick(F.alive(c));
+    MH.ui.narrate(`${nm(blocker.id)} blocks your escape!`);
+    c.lines.push({ who: 'system', text: `COMBAT: the player tried to run, but ${nm(blocker.id)} blocked the way.` });
+    F.enemyTurn(c, `${nm(blocker.id)} blocks your escape and attacks!`);
+  };
+
+  F.end = function (c, how) {
+    const cb = c.combat; if (!cb || cb.over) return; cb.over = true;
+    MH.chat.setBusy(false); MH.chat.combatMode(false); F.renderBar(c);
+    const primary = cb.primary, win = how === 'win', lose = how === 'lose';
+    const foes = cb.enemies.filter((x) => x.id !== primary).map((x) => x.id);
+    if (win || lose || how === 'fled') F.after({ res: win ? 'win' : lose ? 'lose' : 'fled', win, opp: primary, kind: cb.kind, spar: cb.spar, weapon: F.weaponOf('player'), blackhole: cb.enemies.some((x) => x.blackhole && x.id === primary), sides: { foes, friends: cb.allies.slice(), fled: cb.fled } });
+    if (win && !cb.spar) cb.enemies.forEach((x) => { const e = MH.npcById[x.id]; if (e && x.hp <= 0) { e.hurtUntil = MH.absMinutes() + 240; MH.social.npc(x.id).mood = 'beaten'; } });
+    const P2 = P().name, names = cb.enemies.map((x) => nm(x.id)).join(' and ');
+    const txt = how === 'win' ? (cb.spar ? `SPAR OVER: ${P2} won the friendly spar against ${names}. Friendly — react in kind.` : `FIGHT OVER: ${P2} beat ${names}${cb.allies.length ? ' (with help from ' + cb.allies.map(nm).join(' and ') + ')' : ''}. ${cb.enemies.filter((x) => x.hp <= 0).map((x) => nm(x.id)).join(', ') || 'They'} ${cb.enemies.filter((x) => x.hp <= 0).length > 1 ? 'are' : 'is'} down; ${cb.enemies.filter((x) => x.surrendered).map((x) => nm(x.id)).join(', ') || 'nobody'} surrendered.`)
+      : how === 'lose' ? (cb.spar ? `SPAR OVER: ${names} won the friendly spar. Friendly — react in kind.` : `FIGHT OVER: ${P2} was beaten.`)
+      : how === 'stopped' ? 'The fight stops — talked down or interrupted.'
+      : how === 'theyfled' ? `The fight is over — ${names} ran off.`
+      : how === 'dragged' ? `The fight is over — ${P2} was dragged out of it.` : '';
+    if (txt) { c.lines.push({ who: 'system', text: txt }); MH.social.log({ kind: 'sys', text: '⚔️ ' + txt.replace(/^[A-Z ]+: /, ''), convo: c.id }); }
+    if (win) MH.ui.toast(cb.spar ? '🤝 You won the spar!' : `🏆 You won the fight!`, 3);
+    if (lose && !cb.spar) { P().hp = 0; F.knockout({ by: primary, kind: cb.kind }); return; }
+    if (how === 'fled') {
+      MH.chat.end();
+      const e = MH.npcById[primary];
+      if (e) { const pl = MH.player, dx = pl.x - e.x, dy = pl.y - e.y, L = Math.hypot(dx, dy) || 1, t = pl.tile(); const s2 = MH.world.nearestWalkable(Math.round(t.tx + dx / L * 4), Math.round(t.ty + dy / L * 4)); if (!MH.roomOf(pl) || MH.world.roomAt(s2.tx, s2.ty)) pl.setTile(s2.tx, s2.ty); }
+      if (!cb.spar && e && !MH.social.isAfraid(primary) && F.power(primary) >= 2 && Math.random() < 0.75) setTimeout(() => MH.sim.startChase(e, { kind: cb.kind === 'mugging' ? 'mugging' : 'brawl', reason: 'you ran away from the fight' }), 1200);
+      else MH.ui.toast('You got away!', 2.5);
+      return;
+    }
+    if (how === 'left' || how === 'dragged') return;
+    setTimeout(() => MH.chat.convo === c && !MH.chat.waiting && MH.chat.letThemTalk(), 500);
+  };
+
+  // little floating numbers over a portrait
+  F.popup = function (id, text, cls) {
+    const card = document.querySelector(`#cast .card[data-id="${id}"]`); if (!card) return;
+    const d = h(`<div class="dmgpop ${cls || ''}">${MH.esc(text)}</div>`);
+    card.appendChild(d); setTimeout(() => d.remove(), 1400);
+    if (cls === 'hit') { card.classList.remove('struck'); void card.offsetWidth; card.classList.add('struck'); }
+  };
+  // the strip above the chat bar: round, your HP, enemies' HP, allies
+  F.renderBar = function (c) {
+    let bar = document.getElementById('combatBar');
+    const cb = c && c.combat;
+    if (!cb || cb.over) { if (bar) bar.remove(); return; }
+    if (!bar) { bar = h('<div id="combatBar"></div>'); document.getElementById('chat').appendChild(bar); }
+    bar.innerHTML = `<div class="cbtop"><b>${cb.spar ? '🤝 SPAR' : '⚔️ FIGHT'}</b> · round ${cb.round + 1} · ❤️ ${Math.round(F.hp())}${cb.allies.length ? ' · 🛡️ ' + cb.allies.map((id) => MH.esc(nm(id).split(' ')[0])).join(', ') : ''}</div>` +
+      cb.enemies.map((x) => `<button class="foe ${x.out ? 'out' : ''} ${MH.chat.to === x.id ? 'sel' : ''}" data-id="${x.id}"><span>${MH.esc(nm(x.id).split(' ')[0])} <small>${F.DIFF[pw5(x.id)]}</small></span><i style="width:${Math.max(0, x.hp / x.max * 100)}%"></i></button>`).join('');
+    bar.querySelectorAll('.foe').forEach((b) => (b.onclick = () => { if (!b.classList.contains('out')) { MH.chat.setTarget(b.dataset.id); F.renderBar(c); } }));
+  };
+
+  // ---------------------------------------------------------------- the dodge box (your ❤️ vs their attacks)
+  const STYLE = { kira: ['bars', 'aimed', 'slam'], rook: ['aimed', 'aimed', 'side'], gristle: ['slam', 'rain'], snitch: ['pebbles'], mortimer: ['bars', 'aimed'], vesper: ['homing'], box: ['bouncers', 'slam'], bunny: ['side', 'side', 'aimed'], marina: ['waves', 'side'], gertie: ['slam', 'bouncers'], nimbus: ['storm', 'rain'], darkborn: ['ring', 'homing', 'bars'], solaris: ['ring', 'rain'], zahra: ['ring', 'homing'], thistle: ['slam', 'aimed'], maggie: ['swarm', 'homing'], clucky: ['aimed', 'rain'], sable: ['homing', 'bars'], scarecrow: ['ring', 'homing'], dionne: ['waves', 'rain'], chuckles: ['bouncers', 'rain'], brenda: ['slam', 'bouncers'] };
+  F.dodge = function (o, done) {
+    const pows = o.enemies.map(pw5), maxP = Math.max(...pows);
+    const dur = 3 + maxP * 0.95 + (o.enemies.length - 1) * 1.3;
+    const ui = h(`<div class="dodge"><div class="dcap">${MH.esc(o.caption)}</div><canvas></canvas><div class="dinfo"><span>❤️ <b class="dhp">${Math.round(F.hp())}</b></span><span class="dtime"><i></i></span></div><div class="dhint">Drag anywhere to move your ❤️ · dodge everything</div></div>`);
+    document.getElementById('game').appendChild(ui);
+    document.body.classList.add('fighting');
+    const cv = ui.querySelector('canvas'), dpr = Math.min(2, window.devicePixelRatio || 1);
+    const W = Math.round(Math.min(320, window.innerWidth * 0.86)), H = Math.round(W * 0.78);
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    const x = cv.getContext('2d'); x.scale(dpr, dpr);
+    const heart = { x: W / 2, y: H * 0.62, r: 7 };
+    const bullets = [], rects = [];
+    let t = 0, inv = 0, taken = 0, over = false, last = performance.now();
+    const ow = (id) => MH.WEAPONS[F.weaponOf(id)].dmg;
+    const dmgOf = (id) => Math.max(2, Math.round((2 + pw5(id) * 1.8) * ow(id) * (o.spar ? 0.5 : 1) * o.guard));
+    // --- primitives
+    const add = (b) => bullets.push(Object.assign({ r: 5, life: 8, col: '#ffffff' }, b));
+    const toward = (sx, sy, sp) => { const dx = heart.x - sx, dy = heart.y - sy, L = Math.hypot(dx, dy) || 1; return { vx: dx / L * sp, vy: dy / L * sp }; };
+    const edge = () => { const s = MH.randi(0, 3); return s === 0 ? { x: MH.rand(0, W), y: -8 } : s === 1 ? { x: W + 8, y: MH.rand(0, H) } : s === 2 ? { x: MH.rand(0, W), y: H + 8 } : { x: -8, y: MH.rand(0, H) }; };
+    const PRIM = {
+      pebbles: (S, p) => { if (S.cd('a', 1.4 - p * 0.15)) add({ x: MH.rand(10, W - 10), y: -6, vx: 0, vy: 55 + p * 15, r: 5 }); },
+      rain: (S, p) => { if (S.cd('a', 0.9 / (0.5 + p * 0.5))) add({ x: MH.rand(6, W - 6), y: -6, vx: MH.rand(-12, 12), vy: 70 + p * 30, r: 4.5 }); },
+      side: (S, p) => { if (S.cd('a', 1.1 / (0.5 + p * 0.45))) { const l = Math.random() < 0.5; add({ x: l ? -6 : W + 6, y: MH.rand(8, H - 8), vx: (l ? 1 : -1) * (90 + p * 34), vy: 0, r: 4.5 }); } },
+      aimed: (S, p) => { if (S.cd('a', 1.5 / (0.5 + p * 0.4))) { const e = edge(); add(Object.assign({ x: e.x, y: e.y, r: 4 }, toward(e.x, e.y, 110 + p * 38))); } },
+      homing: (S, p) => { if (S.cd('a', 1.7 / (0.5 + p * 0.35))) { const e = edge(); add(Object.assign({ x: e.x, y: e.y, r: 5, home: 60 + p * 25, col: '#d8a8ff' }, toward(e.x, e.y, 60 + p * 18))); } },
+      swarm: (S, p) => { if (S.cd('a', 0.35 / (0.5 + p * 0.3))) { const e = edge(); add(Object.assign({ x: e.x, y: e.y, r: 2.6, home: 40, col: '#c8c0c8' }, toward(e.x, e.y, 90 + p * 25))); } },
+      bouncers: (S, p) => { if (S.cd('a', 2.6 - p * 0.25) && bullets.filter((b) => b.bounce).length < 1 + p) add({ x: MH.rand(20, W - 20), y: 10, vx: MH.rand(-1, 1) * (60 + p * 20), vy: 50 + p * 22, r: 10 + p, bounce: true, life: 6, col: '#f4d0a0' }); },
+      waves: (S, p) => { if (S.cd('a', 0.5 / (0.5 + p * 0.3))) { const l = S.flip = !S.flip; add({ x: l ? -6 : W + 6, y: H / 2, vx: (l ? 1 : -1) * (70 + p * 20), vy: 0, r: 4, wave: MH.rand(0, 6), amp: H * 0.38, col: '#9ad8f4' }); } },
+      ring: (S, p) => { if (S.cd('a', 2.6 - p * 0.3)) { const n = 6 + p * 2, ox = MH.rand(W * 0.3, W * 0.7), oy = MH.rand(H * 0.3, H * 0.7); for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; add({ x: ox + Math.cos(a) * 140, y: oy + Math.sin(a) * 140, vx: -Math.cos(a) * (55 + p * 14), vy: -Math.sin(a) * (55 + p * 14), r: 4, col: '#ffd86a' }); } } },
+      bars: (S, p) => { if (S.cd('b', 2.2 - p * 0.25)) { const vert = Math.random() < 0.5, gap = Math.max(30, 58 - p * 5), at = MH.rand(gap, (vert ? W : H) - gap), sp = 70 + p * 26; const from = Math.random() < 0.5;
+          if (vert) { rects.push({ x: 0, y: from ? -14 : H + 2, w: at - gap / 2, h: 12, vx: 0, vy: from ? sp : -sp }); rects.push({ x: at + gap / 2, y: from ? -14 : H + 2, w: W, h: 12, vx: 0, vy: from ? sp : -sp }); }
+          else { rects.push({ x: from ? -14 : W + 2, y: 0, w: 12, h: at - gap / 2, vx: from ? sp : -sp, vy: 0 }); rects.push({ x: from ? -14 : W + 2, y: at + gap / 2, w: 12, h: H, vx: from ? sp : -sp, vy: 0 }); } } },
+      slam: (S, p) => { if (S.cd('c', 2.8 - p * 0.3)) { const q = MH.randi(0, 3); const R = q === 0 ? { x: 0, y: 0, w: W / 2, h: H } : q === 1 ? { x: W / 2, y: 0, w: W / 2, h: H } : q === 2 ? { x: 0, y: 0, w: W, h: H / 2 } : { x: 0, y: H / 2, w: W, h: H / 2 }; rects.push(Object.assign({ warn: 0.75 - p * 0.05, live: 0.35, vx: 0, vy: 0 }, R)); } },
+      storm: (S, p) => { if (S.cd('c', 1.6 - p * 0.15)) rects.push({ x: MH.rand(0, W - 26), y: 0, w: 26, h: H, warn: 0.6, live: 0.3, vx: 0, vy: 0, col: '#fff6a0' }); },
+    };
+    // each enemy gets a spawner built from their style; several enemies share the load a bit
+    const spawners = o.enemies.map((id, i) => {
+      const p = pows[i], styles = STYLE[id] || (p >= 4 ? ['aimed', 'bars', 'rain'] : p >= 3 ? ['rain', 'aimed'] : p >= 2 ? ['rain'] : ['pebbles']);
+      const S = { t: {}, cd(k, every) { every = every * Math.sqrt(o.enemies.length); S.t[k] = (S.t[k] == null ? MH.rand(0, every * 0.6) : S.t[k]) - S.dt; if (S.t[k] <= 0) { S.t[k] = every * MH.rand(0.8, 1.2); return true; } return false; }, dt: 0 };
+      return { id, p, run: (dt) => { S.dt = dt; styles.slice(0, Math.max(1, Math.min(styles.length, p - 1))).forEach((st) => PRIM[st](S, p)); } };
+    });
+    // controls: drag anywhere (relative, so your finger never hides the heart) or arrow keys
+    let drag = null; const keys = {};
+    ui.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; ui.setPointerCapture(e.pointerId); e.preventDefault(); });
+    ui.addEventListener('pointermove', (e) => { if (!drag) return; heart.x = MH.clamp(heart.x + (e.clientX - drag.x) * 1.2, heart.r, W - heart.r); heart.y = MH.clamp(heart.y + (e.clientY - drag.y) * 1.2, heart.r, H - heart.r); drag = { x: e.clientX, y: e.clientY }; });
+    ui.addEventListener('pointerup', () => (drag = null));
+    const kd = (e) => { keys[e.key] = e.type === 'keydown'; }; window.addEventListener('keydown', kd); window.addEventListener('keyup', kd);
+    const hitHeart = (id) => {
+      if (inv > 0) return;
+      const floor = o.spar ? 15 : 0;
+      let d = dmgOf(id); if (F.hp() - d < floor) d = Math.max(0, F.hp() - floor);
+      F.damage(d, { inFight: true, by: id }); taken += d; inv = 0.85;
+      ui.querySelector('.dhp').textContent = Math.round(F.hp());
+      ui.classList.remove('hurt'); void ui.offsetWidth; ui.classList.add('hurt');
+      if (F.hp() <= floor) finish();
+    };
+    function finish() {
+      if (over) return; over = true;
+      window.removeEventListener('keydown', kd); window.removeEventListener('keyup', kd);
+      setTimeout(() => { ui.remove(); document.body.classList.remove('fighting'); done(Math.round(taken)); }, 350);
+    }
+    const owner = (b) => b.owner || o.enemies[0];
+    function frame(now) {
+      if (over) return;
+      const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; inv = Math.max(0, inv - dt);
+      const ks = 150 * dt; if (keys.ArrowLeft) heart.x -= ks; if (keys.ArrowRight) heart.x += ks; if (keys.ArrowUp) heart.y -= ks; if (keys.ArrowDown) heart.y += ks;
+      heart.x = MH.clamp(heart.x, heart.r, W - heart.r); heart.y = MH.clamp(heart.y, heart.r, H - heart.r);
+      if (t < dur - 0.6) spawners.forEach((s) => { const n0 = bullets.length, r0 = rects.length; s.run(dt); for (let i = n0; i < bullets.length; i++) bullets[i].owner = s.id; for (let i = r0; i < rects.length; i++) rects[i].owner = s.id; });
+      for (const b of bullets) {
+        b.life -= dt;
+        if (b.home) { const d = toward(b.x, b.y, 1); b.vx += d.vx * b.home * dt; b.vy += d.vy * b.home * dt; const sp = Math.hypot(b.vx, b.vy), mx = 150; if (sp > mx) { b.vx *= mx / sp; b.vy *= mx / sp; } }
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        if (b.wave != null) b.y = H / 2 + Math.sin(b.wave + b.x * 0.035) * b.amp;
+        if (b.bounce) { if (b.x < b.r || b.x > W - b.r) b.vx *= -1; if (b.y < b.r || b.y > H - b.r) b.vy *= -1; }
+        if (Math.hypot(b.x - heart.x, b.y - heart.y) < b.r + heart.r * 0.6) { b.life = 0; hitHeart(owner(b)); }
+      }
+      for (const r of rects) {
+        if (r.warn != null) { if (r.warn > 0) r.warn -= dt; else r.live -= dt; }
+        r.x += r.vx * dt; r.y += r.vy * dt;
+        const active = r.warn == null || r.warn <= 0;
+        if (active && heart.x > r.x && heart.x < r.x + r.w && heart.y > r.y && heart.y < r.y + r.h) hitHeart(owner(r));
+      }
+      for (let i = bullets.length - 1; i >= 0; i--) { const b = bullets[i]; if (b.life <= 0 || b.x < -40 || b.x > W + 40 || b.y < -40 || b.y > H + 40) bullets.splice(i, 1); }
+      for (let i = rects.length - 1; i >= 0; i--) { const r = rects[i]; if ((r.live != null && r.live <= 0) || r.x > W + 30 || r.x + r.w < -30 || r.y > H + 30 || r.y + r.h < -30) rects.splice(i, 1); }
+      // draw
+      x.clearRect(0, 0, W, H); x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+      for (const r of rects) {
+        const active = r.warn == null || r.warn <= 0;
+        if (!active) { x.strokeStyle = 'rgba(255,70,70,' + (0.5 + 0.5 * Math.sin(t * 30)) + ')'; x.lineWidth = 2; x.strokeRect(r.x + 2, r.y + 2, r.w - 4, r.h - 4); x.fillStyle = 'rgba(255,60,60,0.12)'; x.fillRect(r.x, r.y, r.w, r.h); }
+        else { x.fillStyle = r.col || '#ffffff'; x.fillRect(r.x, r.y, r.w, r.h); }
+      }
+      for (const b of bullets) { x.fillStyle = b.col; x.beginPath(); x.arc(b.x, b.y, b.r, 0, 7); x.fill(); }
+      if (!(inv > 0 && Math.floor(t * 16) % 2)) {
+        x.fillStyle = '#ff2a3a'; const hx = heart.x, hy = heart.y, s = heart.r;
+        x.beginPath(); x.moveTo(hx, hy + s); x.bezierCurveTo(hx - s * 1.6, hy - s * 0.1, hx - s * 0.7, hy - s * 1.3, hx, hy - s * 0.35); x.bezierCurveTo(hx + s * 0.7, hy - s * 1.3, hx + s * 1.6, hy - s * 0.1, hx, hy + s); x.fill();
+      }
+      x.strokeStyle = '#fff'; x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
+      ui.querySelector('.dtime i').style.width = Math.max(0, 100 - t / dur * 100) + '%';
+      if (t >= dur) { finish(); return; }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  };
+
+  // old name, still used by a few callers
+  F.inChat = (c, f) => F.begin(c, f);
 
   // consequences of a fight with the player
   F.after = function (r) {
@@ -352,36 +493,11 @@
     const card = h(`<div id="fightCard" class="questcard fightcard"><div class="qh">${spar ? '🤝 Sparring match' : mug ? '💰 Mugging' : '⚔️ Fight'} · ${F.DIFF[MH.clamp(F.power(f.with), 1, 5)]}</div><b>${MH.esc(ch.name)} ${spar ? 'wants to spar with you' : mug ? 'wants your money' : 'is coming at you'}</b><div class="row"><button class="btn small ghost" data-v="0">${spar ? 'Not now' : mug ? 'Hand over coins' : 'Back off'}</button><button class="btn small" data-v="1">${spar ? 'Let\'s spar!' : 'Fight!'}</button></div></div>`);
     card.querySelectorAll('[data-v]').forEach((b) => (b.onclick = () => {
       card.remove();
-      if (b.dataset.v === '1') F.inChat(c, f);
+      if (b.dataset.v === '1') F.begin(c, Object.assign({}, f, { enemyFirst: false }));
       else if (mug) { const lost = Math.min(P().coins, MH.randi(15, 35)); P().coins -= lost; MH.chat.sendText(`*reluctantly hands over ${lost} coins*`); MH.social.addMemory(f.with, `${P().name} paid up when I mugged them (${lost} coins).`, { imp: 2 }); }
       else MH.chat.sendText(spar ? '*shakes head — maybe another time*' : '*backs off, hands raised*');
     }));
     document.getElementById('chat').appendChild(card);
   };
   F.hideOffer = () => { const old = document.getElementById('fightCard'); if (old) old.remove(); };
-  // run the fight inside a conversation, then tell the storyteller how it went
-  F.inChat = function (c, f) {
-    F.lastStarter = f.starter || 'npc';
-    F.start({ opp: f.with, kind: f.kind, starter: f.starter, onEnd: (r) => {
-      if (!MH.chat.active || MH.chat.convo !== c) return;
-      if (r.res === 'fled') {
-        MH.chat.end();
-        const e = MH.npcById[f.with];
-        // you break free and bolt a few steps away
-        if (e) { const pl = MH.player, dx = pl.x - e.x, dy = pl.y - e.y, L = Math.hypot(dx, dy) || 1, t = pl.tile(); const s2 = MH.world.nearestWalkable(Math.round(t.tx + dx / L * 4), Math.round(t.ty + dy / L * 4)); if (!MH.roomOf(pl) || MH.world.roomAt(s2.tx, s2.ty)) pl.setTile(s2.tx, s2.ty); }
-        if (e && !MH.social.isAfraid(f.with) && F.power(f.with) >= 2 && Math.random() < 0.75) setTimeout(() => MH.sim.startChase(e, { kind: f.kind === 'mugging' ? 'mugging' : 'brawl', reason: 'you ran away from the fight' }), 1200);
-        else MH.ui.toast('You got away!', 2.5);
-        return;
-      }
-      const P2 = P().name, n2 = nm(f.with);
-      const txt = r.spar ? `SPARRING RESULT: ${r.win ? P2 + ' won the friendly spar against ' + n2 : n2 + ' won the friendly spar'}${r.res === 'gaveup' ? ' (the player gave up)' : ''}. It was friendly — react in kind.`
-        : r.res === 'fled' ? `FIGHT RESULT: ${P2} ran away from the fight with ${n2}.`
-        : r.blackhole ? `FIGHT RESULT: ${P2} fired Penelope's Black Hole Sniper 3000 — ${n2} got sucked into a tiny black hole and spat out near the swamp (dazed, unhurt, furious).`
-        : `FIGHT RESULT: ${r.win ? P2 + ' beat ' + n2 : n2 + ' beat ' + P2}${r.weapon !== 'fists' ? ' (the player fought with a ' + MH.WEAPONS[r.weapon].name.toLowerCase() + ')' : ''}. ${r.win ? n2 + ' is hurt and beaten.' : P2 + ' is hurt.'}`;
-      c.lines.push({ who: 'system', text: txt });
-      MH.social.log({ kind: 'sys', text: '⚔️ ' + txt.replace(/^\w+ RESULT: /, ''), convo: c.id });
-      if (r.blackhole && c.members.includes(f.with)) MH.chat.removeMember(f.with, 'vanishes into a tiny black hole');
-      if (F.hp() > 0 && MH.chat.convo === c && c.members.length) MH.chat.letThemTalk();
-    } });
-  };
 })(window.MH);

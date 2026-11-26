@@ -122,6 +122,8 @@ window.MH = window.MH || {};
     },
   };
   MH.isNative = () => !!(window.AndroidBridge && window.AndroidBridge.http);
+  // read the auto-backup file through the native bridge (answers like an HTTP call)
+  MH.nativeReadAuto = () => new Promise((resolve) => { const id = MH.uid(); pending[id] = resolve; window.AndroidBridge.readAutoBackup(id); });
   MH.http = function (method, url, headers, body) {
     if (MH.isNative()) {
       return new Promise((resolve) => {
@@ -245,6 +247,51 @@ window.MH = window.MH || {};
       MH.backup.loadGame(data); // older export: just the game
       return true;
     },
+    // ---- what's in a backup vs what you have now (so an old file can't silently eat newer progress)
+    compare(text) {
+      let data; try { data = JSON.parse(text); } catch (e) { return null; }
+      const inc = data && data.format === 'mirehollow-backup' ? (data.slots ? data.slots[data.currentSlot || 1] || data.state : data.state) : data;
+      const cur = MH.state && !MH.titleMode ? MH.state : MH.store.get(MH.slotKey('save'), null);
+      if (!inc || !inc.time || !cur || !cur.time) return null;
+      const abs = (st) => st.time.day * 1440 + st.time.minutes, when = (st) => `Day ${st.time.day + 1} ${MH.clockStr(st.time.minutes)}`;
+      if (inc.created === cur.created && abs(inc) < abs(cur)) return `⚠ This backup is OLDER than your current game: ${when(inc)} vs ${when(cur)} for ${cur.player.name}. You would lose the progress in between.`;
+      if (inc.created !== cur.created) return `This backup is a different game (${inc.player.name}, ${when(inc)}) — it replaces ${cur.player.name} (${when(cur)}).`;
+      return null;
+    },
+    // ---- restore points: rolling snapshots kept inside the app (last 8)
+    async snapshot(reason) {
+      if (!MH.state && !MH.store.get(MH.slotKey('save'), null)) return;
+      const b = await MH.backup.build();
+      const key = 'rp_' + Date.now();
+      await MH.idb.set(key, JSON.stringify(b));
+      const list = MH.store.get('restorePoints', []);
+      const cur = b.slots[b.currentSlot] || b.state;
+      list.push({ key, t: Date.now(), reason: reason || 'autosave', who: cur ? cur.player.name : '?', day: cur ? cur.time.day + 1 : 0, slots: Object.keys(b.slots).length });
+      while (list.length > 8) { const old = list.shift(); await MH.idb.del(old.key); }
+      MH.store.set('restorePoints', list);
+    },
+    points: () => MH.store.get('restorePoints', []).slice().reverse(),
+    async restore(key) { const text = await MH.idb.get(key); if (!text) throw new Error('missing'); return MH.backup.import(text); },
+    // ---- the auto-backup file (Android): picked once, rewritten regularly. Pick Google Drive for a cloud copy.
+    autoName: () => (MH.isNative() && window.AndroidBridge.autoBackupName ? window.AndroidBridge.autoBackupName() : ''),
+    chooseAuto() { if (MH.isNative() && window.AndroidBridge.chooseAutoBackup) window.AndroidBridge.chooseAutoBackup('mirehollow-autobackup.json'); },
+    onAutoChosen(name) { if (!name) { MH.ui.toast('No auto-backup file chosen.'); return; } MH.ui.toast(`💾 Auto-backup on: ${name}`, 3.5); MH.backup.autoSave(true); MH.emit('autobackup'); },
+    async autoSave(force) {
+      if (!MH.backup.autoName() || MH.backup._writing) return;
+      const now = Date.now();
+      if (!force && now - (MH.backup._lastAuto || 0) < 4 * 60 * 1000) return;
+      if (force && now - (MH.backup._lastAuto || 0) < 20 * 1000) return;
+      MH.backup._lastAuto = now; MH.backup._writing = true;
+      try { const b = await MH.backup.build(); window.AndroidBridge.writeAutoBackup(JSON.stringify(b)); }
+      catch (e) { MH.backup._writing = false; console.warn('auto-backup', e); }
+    },
+    onAutoWritten(ok, err) {
+      MH.backup._writing = false;
+      MH.store.set('lastAutoBackup', { t: Date.now(), ok, err });
+      if (!ok) MH.ui.toast('⚠ Auto-backup failed: ' + err, 4);
+      MH.emit('autobackup');
+    },
+    async readAuto() { const r = await MH.nativeReadAuto(); if (r.status !== 200) throw new Error(r.text || 'could not read'); return r.text; },
     loadGame(st) {
       if (MH.chat && MH.chat.active) MH.chat.end();
       MH.loadState(st);

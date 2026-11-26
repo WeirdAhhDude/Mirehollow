@@ -33,6 +33,8 @@
     MH.quests && MH.quests.tick();
     MH.social.compactAll(); // fuse long memory lists (AI summary when available), in the background
     MH.daySnapshot();
+    MH.backup.snapshot('new day').catch(() => {});
+    MH.backup.autoSave(true);
   }
   sim.advance = function (dtReal) {
     const st = MH.state;
@@ -345,7 +347,11 @@
       ? `${e.ch.name} was chasing ${P.name} for fun and just caught them (tag!). Playful, breathless.`
       : `${e.ch.name}${crew.length ? ' (with ' + crew.map((o) => o.ch.name).join(' and ') + ')' : ''} chased ${P.name} down and caught them${c.reason ? ' — ' + c.reason : ''}. Out of breath and ready to ${c.kind === 'mugging' ? 'take their money' : 'fight'}.`;
     MH.chat.start(ids, 'opener', reason);
-    if (c.kind !== 'playful' && MH.chat.convo) MH.chat.convo.pendingFight = { with: e.id, kind: fightKind };
+    if (MH.chat.convo) {
+      if (c.kind !== 'playful') MH.chat.convo.pendingFight = { with: e.id, kind: fightKind };
+      // you just got caught: no running off again (playful catches hold you for a moment too)
+      MH.chat.convo.lock = { by: e.id, why: c.kind === 'playful' ? `${e.ch.name} is holding on to you, laughing` : `${e.ch.name} has you cornered`, turns: c.kind === 'playful' ? 1 : 4 };
+    }
   }
   sim.chasers = () => MH.npcs.filter((e) => e.chase);
 

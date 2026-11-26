@@ -174,6 +174,7 @@
       '- Villagers know where they are (see SCENE) and roughly where other people tend to be (see WHEREABOUTS); use it naturally ("Sunny\'s at the bakery, where else?").',
       '- FIGHTS: when a fight really breaks out with the player — a villager attacks them, fights back after being attacked, a bandit mugs them, or someone agrees to (or proposes) a friendly sparring match — set "fight":{"with":"<id>","kind":"spar|brawl|mugging"} and stop the scene there; the game plays the fight and tells you the result next turn. Sparring is friendly (Kira, Bunny, Box, Gertie and Marina may enjoy it; it builds respect). A quick slap or shove at the player that is not a full fight goes in "hurt_player" (HP damage 3-20).',
       '- CHASES: a villager can start chasing the player when it fits — the player stole something and bolted, insulted them and ran, a bandit going after a target, or a playful game of tag: set "chase":{"who":"<id>","kind":"brawl|mugging|playful"}. The scene ends and they run after the player; if they catch them, the scene picks up again (often as a fight).',
+      '- Sometimes the player can\'t just walk away: they\'re cornered, held by the arm, blocked in, or (playfully) trapped in a hug that won\'t end or made to finish their slice of pie first. Then set "no_leave":{"by":"<id>","why":"<short reason, e.g. Gristle is blocking the way>"}; set "no_leave":false when they let the player go. If the scene shows the player *tries to leave* while held, react to it.',
       '- DRAGGING: a villager may grab the player and drag them somewhere (to the bakery to taste something, home, away from danger, into the bandits\' cave…) — set "drag":{"by":"<id>","to":"<place key or home>"}; the player ends up there with them.',
       '- The Hollow Gang (Rook, Gristle, Snitch) are bandits: they extort, steal, threaten and may mug a player who looks weak or alone. Mortimer Vale and Vesper are genuinely malevolent (bullying, manipulation, cruel rumours) but subtle. Play them as real villains, not cartoons who back down at once.',
       '- Dr. Penelope invents working gadgets (jetpacks, a Black Hole Sniper 3000, teleporters, invisibility cloaks, gravity boots, translator collars, healing gizmos…). If she gives or builds one for the player, put it in "give_player" with a clear name.',
@@ -188,7 +189,8 @@
       ' "coins":0, "relations":[{"a":"<id>","b":"<id>","delta":0}], "label":{},',
       ' "follow":{"<id>":"start|stop"}, "invite_reply":{"<id>":"yes|no|maybe"}, "plans":[{"who":"<id>","where":"<place key or home>","day":"today|tomorrow","hour":0,"what":"<short>"}],',
       ' "quest":{"from":"<id>","title":"<short>","task":"<what the player must do, one sentence>","type":"fetch|deliver|visit|talk|other","item":"<item to bring or deliver>","target":"<villager id or place key>","reward":0}, "quest_done":["<quest id>"],',
-      ' "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "chase":{"who":"<id>","kind":"brawl|mugging|playful"}, "drag":{"by":"<id>","to":"<place key or home>"}, "hurt_player":0, "end":false}',
+      ' "ally_attacks":[{"by":"<id>","target":"<id>","move":"<short>","strength":"light|heavy|finisher"}], "enemy_attack":"<short>", "surrender":["<id>"], "fight_over":false,',
+      ' "no_leave":{"by":"<id>","why":"<short>"}, "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "chase":{"who":"<id>","kind":"brawl|mugging|playful"}, "drag":{"by":"<id>","to":"<place key or home>"}, "hurt_player":0, "end":false}',
       'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0; violent = physical aggression). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
       'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). quest: only when a villager actually asks the player for a favour this turn; reward = coins they will pay (5-60, fitting their means); fetch needs "item", deliver needs "item" and "target" (villager id), visit needs "target" (a place key), talk needs "target" (villager id). quest_done: only ids from OPEN QUESTS. end = true only if the whole conversation is over. Omit empty fields.',
     ].filter((x) => x !== '').join('\n');
@@ -321,6 +323,14 @@
       qs.forEach((q) => parts.push(`- id ${q.id}: ${MH.CHAR[q.from] ? MH.CHAR[q.from].name : q.from} asked: "${q.task}" (${q.type}${q.item ? ', item: ' + q.item : ''}${q.target ? ', target: ' + (MH.CHAR[q.target] ? MH.CHAR[q.target].name : q.target) : ''}; reward ${q.reward} coins)`));
       parts.push('');
     }
+    const cb = convo.combat;
+    if (cb && !cb.over) {
+      parts.push(`⚔️ ${cb.spar ? 'FRIENDLY SPARRING MATCH' : 'FIGHT'} IN PROGRESS (turn-based, like an RPG battle) — round ${cb.round + 1}. Player HP ${Math.round(MH.fight.hp())}/100.${cb.spar ? ' Nobody gets seriously hurt; whoever is beaten yields.' : ''}`);
+      parts.push('Enemies: ' + cb.enemies.map((x) => `${MH.CHAR[x.id].name} (id: ${x.id}) HP ${x.hp}/${x.max}${x.out ? (x.surrendered ? ' — SURRENDERED' : x.left ? ' — RAN OFF' : ' — KNOCKED OUT, can\'t act') : ''}`).join('; ') + '.');
+      if (cb.allies.length) parts.push('On the player\'s side: ' + cb.allies.map((id) => `${MH.CHAR[id].name} (id: ${id}, strength ${MH.fight.power(id)}/5)`).join('; ') + '.');
+      parts.push('This turn: ' + (cb.lastMove || 'the fight just started.'));
+      parts.push('Write reactions to what just happened (a hit hurts, a miss gets dodged or mocked). Enemies still standing then attack: describe their next attack in "enemy_attack" (one short vivid sentence — the game turns it into a dodging minigame). Allies may land their own moves: "ally_attacks":[{"by":"<ally id>","target":"<enemy id>","move":"<short>","strength":"light|heavy|finisher"}]. An enemy may give up ("surrender":["<id>"]) or run ("leave"); a friend may drag the player out ("drag"); if the fight is talked down or interrupted set "fight_over":true. Knocked-out characters can\'t speak or act beyond a groan.', '');
+    }
     const prior = mode === 'player' ? { lines: convo.lines.slice(0, -1) } : convo;
     if (prior.lines.length) parts.push('CONVERSATION SO FAR:', transcript(prior), '');
     const P = MH.state.player;
@@ -415,6 +425,13 @@
       if (by && by !== 'narrator' && present.has(by) && to) out.drag = { by, to };
     }
     out.hurt = convo && convo.phone ? 0 : MH.clamp(Math.round(Number(raw.hurt_player) || 0), 0, 30);
+    out.allyAttacks = (Array.isArray(raw.ally_attacks) ? raw.ally_attacks : []).slice(0, 4).map((a) => ({ by: AI.resolveId(a && a.by), target: AI.resolveId(a && a.target), strength: /finish|knock|ko/i.test(a && a.strength) ? 'finisher' : /heavy|hard|big/i.test(a && a.strength) ? 'heavy' : 'light' })).filter((a) => a.by && present.has(a.by));
+    out.enemyAttack = typeof raw.enemy_attack === 'string' ? raw.enemy_attack.slice(0, 120) : '';
+    out.surrender = (Array.isArray(raw.surrender) ? raw.surrender : []).map((w) => AI.resolveId(w)).filter(Boolean);
+    out.fightOver = !!raw.fight_over;
+    out.noLeave = null;
+    if (raw.no_leave === false || raw.no_leave === 'false') out.noLeave = false;
+    else if (raw.no_leave && typeof raw.no_leave === 'object' && !(convo && convo.phone)) { const by = AI.resolveId(raw.no_leave.by || raw.no_leave.who); if (by && present.has(by)) out.noLeave = { by, why: String(raw.no_leave.why || '').slice(0, 80) }; }
     out.chase = null;
     if (raw.chase && typeof raw.chase === 'object' && !(convo && convo.phone)) {
       const w = AI.resolveId(raw.chase.who || raw.chase.by);

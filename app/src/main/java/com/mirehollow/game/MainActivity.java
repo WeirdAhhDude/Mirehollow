@@ -3,6 +3,9 @@ package com.mirehollow.game;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -43,7 +46,9 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private static final int PICK_FILE = 4242;
     private static final int SAVE_FILE = 4243;
+    private static final int AUTO_FILE = 4244;
     private String pendingSave;
+    private SharedPreferences prefs() { return getSharedPreferences("mirehollow", MODE_PRIVATE); }
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -142,6 +147,15 @@ public class MainActivity extends Activity {
             if (resultCode == RESULT_OK && data != null && data.getData() != null) result = new Uri[]{data.getData()};
             fileCallback.onReceiveValue(result);
             fileCallback = null;
+            return;
+        }
+        if (requestCode == AUTO_FILE) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) { callJs("window.MH && MH.backup && MH.backup.onAutoChosen(null)"); return; }
+            final Uri uri = data.getData();
+            try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch (Exception e) { android.util.Log.w("Mirehollow", "persist", e); }
+            String name = displayName(uri);
+            prefs().edit().putString("autoUri", uri.toString()).putString("autoName", name).apply();
+            callJs("window.MH && MH.backup && MH.backup.onAutoChosen(" + JSONObject.quote(name) + ")");
             return;
         }
         if (requestCode == SAVE_FILE) {
@@ -256,8 +270,66 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** Pick (once) a file that the game keeps overwriting with fresh backups — local or e.g. Google Drive. */
+        @JavascriptInterface
+        public void chooseAutoBackup(final String name) {
+            runOnUiThread(() -> {
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("application/json");
+                i.putExtra(Intent.EXTRA_TITLE, name);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                try { startActivityForResult(i, AUTO_FILE); } catch (Exception e) { callJs("window.MH && MH.backup && MH.backup.onAutoChosen(null)"); }
+            });
+        }
+
+        @JavascriptInterface
+        public String autoBackupName() { return prefs().getString("autoName", ""); }
+
+        @JavascriptInterface
+        public void clearAutoBackup() {
+            String u = prefs().getString("autoUri", null);
+            if (u != null) { try { getContentResolver().releasePersistableUriPermission(Uri.parse(u), Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch (Exception e) { /* already gone */ } }
+            prefs().edit().remove("autoUri").remove("autoName").apply();
+        }
+
+        /** Overwrite the auto-backup file in the background; reports back to MH.backup.onAutoWritten. */
+        @JavascriptInterface
+        public void writeAutoBackup(final String content) {
+            final String u = prefs().getString("autoUri", null);
+            if (u == null) { callJs("window.MH && MH.backup && MH.backup.onAutoWritten(false, 'no file chosen')"); return; }
+            new Thread(() -> {
+                String err = null;
+                try (OutputStream os = getContentResolver().openOutputStream(Uri.parse(u), "wt")) {
+                    if (os == null) err = "cannot open";
+                    else os.write(content.getBytes(StandardCharsets.UTF_8));
+                } catch (Exception e) { err = String.valueOf(e.getMessage()); }
+                callJs("window.MH && MH.backup && MH.backup.onAutoWritten(" + (err == null) + "," + JSONObject.quote(err == null ? "" : err) + ")");
+            }).start();
+        }
+
+        /** Read the auto-backup file back (answer arrives through MHNative.resolve like an HTTP call). */
+        @JavascriptInterface
+        public void readAutoBackup(final String id) {
+            final String u = prefs().getString("autoUri", null);
+            new Thread(() -> {
+                int status = 200; String text;
+                try (InputStream is = u == null ? null : getContentResolver().openInputStream(Uri.parse(u))) {
+                    if (is == null) { status = 404; text = ""; } else text = readAll(is);
+                } catch (Exception e) { status = 500; text = String.valueOf(e.getMessage()); }
+                callJs("window.MHNative && MHNative.resolve(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(text) + ")");
+            }).start();
+        }
+
         @JavascriptInterface
         public boolean isNative() { return true; }
+    }
+
+    private String displayName(Uri uri) {
+        try (Cursor c = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (Exception e) { /* provider without a name */ }
+        return "backup file";
     }
 
     private static String readAll(InputStream is) throws Exception {

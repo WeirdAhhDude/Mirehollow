@@ -1087,10 +1087,13 @@
     const side = dir === 'left', back = dir === 'up';
     const walk = frame === 0 ? 0 : frame === 1 ? 1 : -1;
     const bob = frame === 0 ? 0 : -0.8;
-    const legLen = 5.5 + t * 0.6, bodyH = 10.5 + t * 0.9, bw = 11.5 + wd * 2.2;
+    // proportions: about three heads tall (the head is drawn at K scale around its centre)
+    const K = 0.8;
+    const legLen = 9 + t * 0.8, bodyH = 12.5 + t * 1.1, bw = 11 + wd * 2.4;
     const legsTop = FOOT - legLen;
     const bodyTop = legsTop - bodyH + 1.5 + bob;
-    const hcy = bodyTop - 7.2, hrx = 9.8, hry = 8.8;
+    const hcy = bodyTop - 6.1, hrx = 9.8, hry = 8.8;
+    const headIn = () => { x.save(); x.translate(cx, hcy); x.scale(K, K); x.translate(-cx, -hcy); };
     const hs = L.hairStyle || 'short';
     const O = (c) => ink(c);
     const lw = 0.75;
@@ -1134,8 +1137,10 @@
     if (!back) { drawWings(); drawTail(); } else drawWings();
     if (has('shadowarms') && !back) { for (const s of [-1, 1]) { x.beginPath(); x.moveTo(cx + s * 6, bodyTop + 3); x.quadraticCurveTo(cx + s * 14, bodyTop + 4, cx + s * 12, bodyTop + 12); x.strokeStyle = 'rgba(40,24,64,0.8)'; x.lineWidth = 1.6; x.stroke(); } }
     if (!back && body !== 'cloud') {
-      if (hs === 'long') rr(x, cx - hrx - 0.8, hcy - 2, hrx * 2 + 1.6, bodyTop - hcy + 12, 5, hair, O(hair), lw);
+      headIn();
+      if (hs === 'long') rr(x, cx - hrx - 0.8, hcy - 2, hrx * 2 + 1.6, (bodyTop - hcy + 10) / K, 5, hair, O(hair), lw);
       if (hs === 'curly') for (let i = 0; i < 6; i++) ell(x, cx - 9 + i * 3.6, hcy + 9 + (i % 2), 2.6, 3.2, hair, O(hair), 0.5);
+      x.restore();
     }
 
     // --------- legs / lower body
@@ -1154,17 +1159,32 @@
       for (let i = 0; i < 4; i++) ell(x, cx - 7 + i * 4.6, FOOT - 1 + (frame === i % 3 ? 1.5 : 0), 0.6, 1, '#9ac0e8');
     } else {
       const lc = L.dress ? fur : bottom, shoe = shade(lc === fur ? '#5a4a40' : lc, 0.55);
-      const leg = (lx, lift, fwd) => { rr(x, lx - 1.8 + fwd, legsTop, 3.6, legLen - lift, 1.8, lc, O(lc), lw); ell(x, lx + fwd + (side ? -0.8 : 0), FOOT - lift - 0.6, 2.4, 1.4, shoe, O(shoe), 0.5); };
-      if (side) { leg(cx + 1.2, 0, -walk * 2); leg(cx - 1, 0, walk * 2); }
-      else { leg(cx - 2.6, walk === 1 ? 1.2 : 0, 0); leg(cx + 2.6, walk === -1 ? 1.2 : 0, 0); }
+      const leg = (lx, ang, lift) => {
+        x.save(); x.translate(lx, legsTop - 0.5); x.rotate(ang);
+        rr(x, -1.75, 0, 3.5, legLen - lift + 0.4, 1.6, lc, O(lc), lw);
+        line(x, [[-0.6, 1.5], [-0.6, legLen - lift - 1.5]], shade(lc, 1.15), 0.5, 0.5);
+        ell(x, side ? -0.9 : 0, legLen - lift, side ? 2.8 : 2.2, 1.45, shoe, O(shoe), 0.5);
+        x.restore();
+      };
+      if (side) { leg(cx + 0.6, walk * 0.34, 0); leg(cx - 0.6, -walk * 0.34, 0); }
+      else { leg(cx - 2.4, 0, walk === 1 ? 1.3 : 0); leg(cx + 2.4, 0, walk === -1 ? 1.3 : 0); }
     }
 
     // --------- torso
     if (body !== 'cloud') {
       const bx0 = cx - bw / 2;
       const fill = vgrad(x, bodyTop, bodyTop + bodyH, shade(top, 1.06), shade(top, 0.88));
-      if (L.dress && body === 'normal') poly(x, [[bx0 + 1, bodyTop], [bx0 + bw - 1, bodyTop], [bx0 + bw + 1.6, bodyTop + bodyH + 1.5], [bx0 - 1.6, bodyTop + bodyH + 1.5]], fill, O(top), lw);
-      else rr(x, side ? bx0 + 1 : bx0, bodyTop, side ? bw - 2 : bw, bodyH, 4, fill, O(top), lw);
+      if (L.dress && body === 'normal') poly(x, [[bx0 + 1.4, bodyTop], [bx0 + bw - 1.4, bodyTop], [bx0 + bw + 1.8, bodyTop + bodyH + 2], [bx0 - 1.8, bodyTop + bodyH + 2]], fill, O(top), lw);
+      else {
+        const sh = (side ? bw - 3 : bw) / 2, wa = sh - (side ? 0.6 : 1.3);
+        x.beginPath(); x.moveTo(cx - sh + 1.6, bodyTop); x.quadraticCurveTo(cx - sh, bodyTop, cx - sh, bodyTop + 2.6);
+        x.lineTo(cx - wa, bodyTop + bodyH - 0.8); x.quadraticCurveTo(cx - wa, bodyTop + bodyH, cx - wa + 1, bodyTop + bodyH);
+        x.lineTo(cx + wa - 1, bodyTop + bodyH); x.quadraticCurveTo(cx + wa, bodyTop + bodyH, cx + wa, bodyTop + bodyH - 0.8);
+        x.lineTo(cx + sh, bodyTop + 2.6); x.quadraticCurveTo(cx + sh, bodyTop, cx + sh - 1.6, bodyTop); x.closePath();
+        x.fillStyle = fill; x.fill(); x.strokeStyle = O(top); x.lineWidth = lw; x.stroke();
+        if (body === 'normal' && !L.dress && !has('overalls') && !has('labcoat')) { rr(x, cx - wa + 0.3, bodyTop + bodyH - 2, (wa - 0.3) * 2, 2.1, 0.6, bottom, O(bottom), 0.45); }
+        if (!back) line(x, [[cx - sh + 1.4, bodyTop + 3.5], [cx - wa + 1, bodyTop + bodyH - 2.6]], shade(top, 1.18), 0.5, 0.5);
+      }
       if (!back && !side && body === 'normal' && !has('labcoat') && !has('overalls') && !has('tie')) ell(x, cx, bodyTop + 1, 2.2, 1.4, fur2);
       if (has('labcoat')) {
         if (back) rr(x, bx0 - 1, bodyTop, bw + 2, bodyH + 3, 3, '#f4f4f0', O('#e0e0dc'), lw);
@@ -1190,14 +1210,16 @@
       // arms
       const sleeve = has('labcoat') ? '#f4f4f0' : top;
       const arm = (sx, swing, dirX) => {
-        x.save(); x.translate(sx, bodyTop + 2); x.rotate(dirX * 0.18 + swing * 0.35);
-        rr(x, -1.7, -0.6, 3.4, 4.5, 1.6, sleeve, O(sleeve), lw);
-        rr(x, -1.5, 3, 3, 4.2, 1.5, has('pandapatch') ? '#1e1e22' : fur, O(fur), lw);
-        if (has('gold')) line(x, [[-1.5, 4.5], [1.5, 4.5]], '#f4c84a', 0.8);
+        const hand = has('pandapatch') ? '#1e1e22' : fur;
+        x.save(); x.translate(sx, bodyTop + 1.4); x.rotate(dirX * 0.1 + swing * 0.38);
+        rr(x, -1.6, -0.6, 3.2, 6.2, 1.5, sleeve, O(sleeve), lw);
+        rr(x, -1.3, 5, 2.6, 4.2, 1.3, hand, O(hand), lw);
+        ell(x, 0, 9.4, 1.6, 1.5, hand, O(hand), lw * 0.8);
+        if (has('gold')) line(x, [[-1.4, 5.8], [1.4, 5.8]], '#f4c84a', 0.8);
         x.restore();
       };
       if (side) arm(cx - 0.5, walk * 0.8, 0);
-      else { arm(bx0 - 0.3, walk, 1); arm(bx0 + bw + 0.3, -walk, -1); }
+      else { arm(bx0 + 0.4, walk, 1); arm(bx0 + bw - 0.4, -walk, -1); }
       if (has('phone') && !back) rr(x, side ? cx - 3 : bx0 + bw + 1, bodyTop + 7, 2.4, 3.4, 0.5, '#1a1a1e', '#000', 0.3);
       if (has('scissors') && !back && !side) { line(x, [[bx0 + bw + 2, bodyTop + 9], [bx0 + bw + 4.5, bodyTop + 6.5]], '#a8a8b0', 0.6); line(x, [[bx0 + bw + 2.6, bodyTop + 6.5], [bx0 + bw + 4, bodyTop + 9]], '#a8a8b0', 0.6); }
     }
@@ -1244,13 +1266,14 @@
       if (hs === 'buns') { ell(x, cx - 7.6, hcy - 6.6, 3.4, 3.4, hair, O(hair), lw); ell(x, cx + 7.6, hcy - 6.6, 3.4, 3.4, hair, O(hair), lw); }
       if (hs === 'bun') { ell(x, cx, hcy - hry - 1.4, 3.8, 3.4, hair, O(hair), lw); if (has('pencil')) { line(x, [[cx - 6, hcy - hry - 2.4], [cx + 6, hcy - hry - 0.6]], '#f4d03a', 1); line(x, [[cx + 5.5, hcy - hry - 0.7], [cx + 6.6, hcy - hry - 0.5]], '#2a2a2a', 1); } }
       if (hs === 'pony' && (back || side)) { x.save(); x.translate(side ? cx + hrx - 1.5 : cx, hcy - 2); x.rotate(side ? 0.3 + walk * 0.08 : walk * 0.06); ell(x, 0, 6, 2.6, 7, hair, O(hair), lw); x.restore(); }
-      if (back && hs === 'long') rr(x, cx - hrx - 0.8, hcy - 2, hrx * 2 + 1.6, bodyTop - hcy + 12, 5, hair, O(hair), lw);
+      if (back && hs === 'long') rr(x, cx - hrx - 0.8, hcy - 2, hrx * 2 + 1.6, (bodyTop - hcy + 10) / K, 5, hair, O(hair), lw);
       if (back && hs === 'curly') for (let i = 0; i < 6; i++) ell(x, cx - 9 + i * 3.6, hcy + 9 + (i % 2), 2.6, 3.2, hair, O(hair), 0.5);
       if (hs === 'wild' || hs === 'straw') { for (let i = 0; i < 9; i++) { const a = -Math.PI + (i / 8) * Math.PI; const r = hrx + 1.8; poly(x, [[cx + Math.cos(a - 0.18) * (r - 3), hcy + Math.sin(a - 0.18) * (r - 3)], [cx + Math.cos(a) * (r + 1.8), hcy + Math.sin(a) * (r + 1.8)], [cx + Math.cos(a + 0.18) * (r - 3), hcy + Math.sin(a + 0.18) * (r - 3)]], hair, O(hair), 0.5); } }
       if (hs === 'cloud' || hs === 'wool') { for (let i = 0; i < 8; i++) { const a = -Math.PI * 1.05 + (i / 7) * Math.PI * 1.1; ell(x, cx + Math.cos(a) * (hrx + 0.6), hcy + Math.sin(a) * (hry + 0.4), 3, 2.8, hair, O(hair), 0.5); } }
       if (hs === 'flame') { for (let i = 0; i < 7; i++) { const fx = cx - 9 + i * 3; poly(x, [[fx - 1.6, hcy - hry + 3], [fx + (i % 2 ? 0.8 : -0.6), hcy - hry - 5 - (i % 3) * 1.6], [fx + 1.8, hcy - hry + 3]], i % 2 ? '#ffd23a' : hair, O(hair), 0.4); } }
     };
 
+    headIn();
     ear(false, false); ear(true, false);
     hairBack();
 
@@ -1346,6 +1369,7 @@
     if (has('postcap') || has('cap')) { const cc = has('postcap') ? '#3a5a9a' : (L.capColor || '#3a5a9a'); rr(x, cx - 7.6, hcy - hry - 2, 15.2, 6, 3, cc, O(cc), lw); if (!back) ell(x, side ? cx - 8 : cx, hcy - hry + 3.6, side ? 5 : 7.6, 1.4, shade(cc, 0.75), O(cc), 0.5); ell(x, cx, hcy - hry - 0.4, 1, 1, '#f4d03a'); }
     if (has('rays')) { for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; line(x, [[cx + Math.cos(a) * (hrx + 2), hcy + Math.sin(a) * (hry + 2)], [cx + Math.cos(a) * (hrx + 5), hcy + Math.sin(a) * (hry + 5)]], '#ffd23a', 1, 0.9); } }
     if (has('flowercrown')) { for (let i = 0; i < 6; i++) ell(x, cx - 7 + i * 2.8, hcy - hry + 1.6 - Math.sin((i / 5) * Math.PI) * 1.6, 1.2, 1.2, ['#f07ac0', '#f4d03a', '#ffffff'][i % 3], '#8a5a6a', 0.3); }
+    x.restore();
   }
 
   art.chibiFrame = function (ch, dir, frame) {

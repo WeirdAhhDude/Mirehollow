@@ -16,6 +16,13 @@ reputations evolve on their own. You're the only human in town.
 Updates install over the previous version and keep your save, character edits and uploaded portraits (all builds
 are signed with the same key) — just open the new APK, no need to uninstall.
 
+**Auto-backup (recommended):** ⚙️ → Settings & AI → 💾 Backups → **Choose auto-backup file…** — pick a file once
+(choose **Google Drive** in the picker for a cloud copy). The game rewrites that same file every few minutes of
+play, when you sleep and when you leave the app, so it's always your latest progress. **Load from it** restores it
+on any phone. **⏪ Restore points** keeps the last 8 automatic snapshots inside the app (every ~15 minutes of play,
+each new day, and right before any import), so an accidental import can be undone. Importing also warns you if the
+file is older than your current game.
+
 **Backups:** ⚙️ → Settings & AI → **Export backup** saves one `.json` file wherever you choose (Downloads, Drive…).
 It holds everything: your game (bonds, memories, money, items, reputation, story log, plans, parties, followers,
 time of day), every character edit, uploaded portraits and your settings. Your API key is never included.
@@ -64,7 +71,7 @@ Settings if you want to save credit.
 | **Jobs** | Ask for work at a shop counter (bakery, gym, General Store, club, lab, town hall, clinic, barbershop) or at the Post Office / Maggie's Stilt House: bread deliveries, litter patrol, restocking shelves, kneading dough and mixing drinks (timing minigames), being Penelope's test subject, and Maggie's very questionable blood drive. Pay depends on how well you do; one job at a time, each once a day. |
 | **Shopping** | Counters at the bakery, General Store and club bar, plus **Mirehollow Mall** (south of the square, by the park) with five kiosks: food, gifts, clothes you actually wear, home decor that appears in your house, and fun stuff (fireworks, energy drinks, lottery tickets, bug spray, party kits). Sable buys what you forage. |
 | **Favours** | Villagers sometimes ask for help (in conversation, or by walking up to you). Accept or decline; bring items with 🎁, deliver packages to the right person, go where they asked. Journal → Favours. |
-| **Health & fights** | The ❤️ bar under the clock is your health. Fights are a reflex minigame: tap each circle when its shrinking ring meets it, drag the blue sliders along their track. Difficulty depends on the opponent, from *Easy* (Lily, Sunny) to *VERY HARD* (Kira, Nimbus, the Darkborn). **⚔️ Fight** in the chat bar challenges someone to a friendly spar or a real fight; villagers start fights too (bandits mug you, people fight back when attacked). Sparring is friendly and builds respect. Weapons: bat & frying pan at the General Store, knives/crowbars/brass knuckles at the bandits' black market — equip one from Journal → Pocket. Heal by eating, at the onsen (♨ 5 coins), the clinic (10 coins) or by sleeping. At 0 HP you black out and are robbed, rescued to the clinic, or (rarely) die — then the day restarts. |
+| **Health & fights** | The ❤️ bar under the clock is your health. Fights are turn-based, right inside the conversation (Undertale-style): on **your turn** type an attack as an action (`*drop kicks Gristle*`, `*gets behind Rook and headlocks him*`) — it hits or misses depending on how tough the target is (weak villagers can go down in one hit) — or just talk, or try to leave. On **their turn** everyone still standing attacks: steer your ❤️ around the box (drag anywhere) to dodge — a few slow shots from weak villagers, a "bad time" from Kira. Group fights give every enemy their own health bar (tap one to target it); friends can land their own hits or drag you out. **⚔️ Fight** in the chat bar challenges someone to a friendly spar or a real fight (inside a fight it inserts an attack); villagers start fights too. Sometimes you can't leave at all — you just got caught, someone is blocking the way, or (playfully) won't let go. Sparring is friendly and builds respect. Weapons: bat & frying pan at the General Store, knives/crowbars/brass knuckles at the bandits' black market — equip one from Journal → Pocket. Heal by eating, at the onsen (♨ 5 coins), the clinic (10 coins) or by sleeping. At 0 HP you black out and are robbed, rescued to the clinic, or (rarely) die — then the day restarts. |
 | **Phones** | Buy a smartphone at the mall (Fun & Phones), then tap 📱 at the top: text villagers who own a phone (invites and plans work by text), and get texts from them. Not everyone has one — buy a spare phone and give it to them. |
 | **Penelope's inventions** | At the lab counter: jetpack (fly over cliffs and rivers for an hour), Black Hole Sniper 3000 (wins any fight, 3 charges), teleporter remote, invisibility cloak (nobody witnesses what you do), Pocket Healer 9000, Rain-B-Gone, gravity boots, translator collar (understand the mute villagers). She can also invent things for you in conversation. |
 | **Characters** | Up to 4 save slots: ⚙️ → 👥 Switch character, or pick on the title screen. Try a saint and a menace. Backups include every slot. |
@@ -109,7 +116,7 @@ keep things PG-13 and to have villagers deflect in character if pushed.
 
 ## Editing characters & portraits (in-game)
 
-Journal → Villagers → tap someone → **✏️ Edit character & portrait**. **✨ Auto-fill with AI**: describe the
+Journal → Villagers → tap someone → **✏️ Edit character & portrait**. (The journal doesn't tell you where people are — ask around, or text them.) **✨ Auto-fill with AI**: describe the
 character in your own words and the AI rewrites every box (title, species, bio, voice, quirks, relationships,
 notes) to match — nothing is saved until you tap Save. You can also change their name, title,
 species, personality/backstory, how they talk, quirks, relationships and extra notes for the AI, and

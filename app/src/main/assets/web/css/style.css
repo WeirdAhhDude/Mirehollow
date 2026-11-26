@@ -476,3 +476,31 @@ body.fighting #btnA, body.fighting #joyZone { display: none; }
 .slot .btn { flex: 1 1 0; }
 .slot .btn.danger { flex: 0 0 auto; }
 .fsides { color: #ffe9a8; font-size: 12px; font-weight: 700; text-align: center; margin-top: 6px; }
+.confirm .cbox p { white-space: pre-line; }
+.autob .row { margin-bottom: 6px; }
+#says .say.ghost { pointer-events: auto; }
+
+/* ---------- v0.7: turn-based fights */
+#combatBar { position: absolute; left: 8px; right: 92px; top: max(10px, env(safe-area-inset-top)); z-index: 7; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; justify-content: center; pointer-events: auto; }
+#combatBar .cbtop { flex: 1 1 100%; text-align: center; color: #ffe9a8; font-size: 12px; font-weight: 800; text-shadow: 0 1px 3px #000; }
+#combatBar .foe { position: relative; min-width: 92px; background: rgba(20,14,26,0.92); border: 1.5px solid #c8402a; border-radius: 10px; color: #fff; padding: 4px 8px 8px; font-size: 12px; font-weight: 800; overflow: hidden; text-align: left; }
+#combatBar .foe small { color: #ffb0a0; font-weight: 700; font-size: 9.5px; }
+#combatBar .foe i { position: absolute; left: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, #f07a4a, #e0403a); transition: width 0.4s; }
+#combatBar .foe.sel { border-color: #ffd640; box-shadow: 0 0 8px rgba(255,214,64,0.6); }
+#combatBar .foe.out { opacity: 0.45; text-decoration: line-through; }
+#combatBar .cbtop { text-align: left; }
+#chat.combat #chatbar { border-top-color: #c8402a; }
+.dmgpop { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-weight: 900; font-size: 26px; color: #fff; -webkit-text-stroke: 1.5px #5a0a0a; text-shadow: 0 3px 0 #5a0a0a; pointer-events: none; animation: dmgpop 1.3s ease-out forwards; z-index: 5; white-space: nowrap; }
+.dmgpop.miss { color: #c8d8ff; -webkit-text-stroke-color: #1a2a5a; text-shadow: 0 3px 0 #1a2a5a; }
+@keyframes dmgpop { 0% { transform: translate(-50%, 10px) scale(0.6); opacity: 0; } 15% { transform: translate(-50%, 0) scale(1.15); opacity: 1; } 100% { transform: translate(-50%, -60px) scale(1); opacity: 0; } }
+#cast .card.struck img { animation: struck 0.35s; }
+@keyframes struck { 20% { transform: translateX(-10px); filter: brightness(1.8) saturate(0.4); } 50% { transform: translateX(8px); } 80% { transform: translateX(-4px); } }
+.dodge { position: absolute; inset: 0; z-index: 45; background: rgba(0,0,0,0.55); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; touch-action: none; user-select: none; }
+.dodge .dcap { color: #fff; font-weight: 800; font-size: 16px; text-align: center; max-width: 88vw; text-shadow: 0 2px 4px #000; font-family: 'Courier New', monospace; }
+.dodge canvas { display: block; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
+.dodge .dinfo { display: flex; gap: 14px; align-items: center; color: #fff; font-weight: 800; font-family: 'Courier New', monospace; }
+.dodge .dtime { width: 120px; height: 8px; background: #331; border: 1px solid #fff; }
+.dodge .dtime i { display: block; height: 100%; background: #f4d03a; }
+.dodge .dhint { color: rgba(255,255,255,0.6); font-size: 12px; }
+.dodge.hurt { animation: fshake 0.28s; }
+.dodge.hurt canvas { box-shadow: 0 0 30px rgba(255,40,40,0.8); }

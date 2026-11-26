@@ -3,7 +3,7 @@
 (function (MH) {
   MH.now = 0;
   MH.titleMode = true;
-  let last = 0, saveT = 0;
+  let last = 0, saveT = 0, autoT = 0, pointT = 0;
 
   MH.save = function () {
     if (!MH.state || MH.titleMode) return;
@@ -11,7 +11,7 @@
     if (st.log.length > 400) st.log = st.log.slice(-400);
     MH.store.set(MH.slotKey('save'), st);
   };
-  MH.onPause = () => MH.save();
+  MH.onPause = () => { MH.save(); if (MH.state && !MH.titleMode) MH.backup.autoSave(true); };
   window.addEventListener('pagehide', () => MH.save());
   document.addEventListener('visibilitychange', () => { if (document.hidden) MH.save(); });
 
@@ -133,6 +133,9 @@
         MH.sim.update(dt);
         saveT += dt;
         if (saveT > 45) { saveT = 0; MH.save(); }
+        autoT += dt; pointT += dt;
+        if (autoT > 300) { autoT = 0; MH.backup.autoSave(); }                     // auto-backup file every ~5 min of play
+        if (pointT > 900) { pointT = 0; MH.backup.snapshot('autosave').catch(() => {}); } // restore point every ~15 min
       }
       MH.render.draw(dt);
       MH.chat.updateBubbles(dt);

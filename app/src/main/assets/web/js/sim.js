@@ -818,6 +818,13 @@
       if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
       return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
     }
+    // fishing: with a rod, at the water's edge
+    if (!MH.roomOf(pl) && MH.state.player.inv.some((x) => x.name === 'Fishing rod')) {
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const g = MH.world.g(t.tx + dx, t.ty + dy);
+        if (g === MH.G.WATER || g === MH.G.DEEP || g === MH.G.SWAMP) { const key = MH.world.placeAt(pl.x + dx * T, pl.y + dy * T).key; return { kind: 'fish', place: key, x: (t.tx + dx) * T + 8, y: (t.ty + dy) * T, label: '🎣 Fish' }; }
+      }
+    }
     let pb = null, pd = 1.3;
     for (const p of MH.world.props) {
       if (!p.pick || MH.isPicked(p)) continue;
@@ -838,9 +845,11 @@
       const e = t.e;
       // someone who's scared of you may just bolt
       if (!e.asleep && MH.social.isAfraid(e.id) && !sim.activePlan(e.id) && Math.random() < 0.45) { sim.flee(e); sim.vibeNow(`${e.ch.name} backs away from you, eyes wide, and hurries off.`); return; }
-      if (e.asleep) { e.asleep = false; if (sim.approaching === e) sim.approaching = null; MH.chat.start([e.id], 'opener', `${P.name} just woke ${e.ch.name} up from a nap. ${e.ch.name} reacts in character (Kira HATES being woken).`); return; }
       if (sim.approaching === e) sim.approaching = null;
       const plan = sim.activePlan(e.id); if (plan) plan.met = true;
+      // asleep, or you came up behind them: they don't speak first — you do
+      const behind = !e.asleep && e.busy !== 'smalltalk' && sim.isBehind(e, MH.player);
+      if (e.asleep || behind) { MH.chat.start([e.id], 'quiet', { asleep: e.asleep, behind }); return; }
       MH.chat.start([e.id], 'greet');
     } else if (t.kind === 'pick') {
       const p = t.p, it = MH.ITEMS[p.pick];
@@ -867,8 +876,15 @@
     else if (t.kind === 'party') MH.ui.openPartyPlanner();
     else if (t.kind === 'fridge') sim.fridge();
     else if (t.kind === 'spring') sim.soak();
+    else if (t.kind === 'fish') MH.games.goFish(t.place);
   };
 
+  // is the player standing behind this villager (outside their field of view)?
+  sim.isBehind = function (e, pl) {
+    const f = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] }[e.dir] || [0, 1];
+    const dx = pl.x - e.x, dy = pl.y - e.y, L = Math.hypot(dx, dy) || 1;
+    return (dx * f[0] + dy * f[1]) / L < -0.35;
+  };
   sim.goInside = function () {
     MH.enterHome();
     setTimeout(() => {

@@ -18,13 +18,16 @@
     { id: 'barber_sweep', at: 'barber', boss: 'sheep', icon: '🧹', title: 'Sweep up the hair', desc: 'So. Much. Hair. Sweep up 4 piles.', pay: 15, mins: 30, make: () => spots('barber', 4, 'Sweep here') },
     { id: 'mayor_litter', at: 'townhall', boss: 'mayor', icon: '🗑️', title: 'Litter patrol', desc: 'The Mayor wants the square and the park tidy (he keeps the shiny bits). Pick up 6 pieces of litter.', pay: 30, mins: 150, make: () => litter(6) },
     { id: 'post_mail', at: 'postoffice', boss: 'mole', icon: '✉️', title: 'Deliver the mail', desc: 'Mailman Mole\'s bag is too heavy today. Deliver 3 letters — to the RIGHT people.', pay: 28, mins: 150, hours: [8, 19], make: () => deliver(3, 'a letter') },
+    { id: 'store_cashier', at: 'store', boss: 'sable', icon: '🧾', title: 'Work the till', desc: 'Sable hisses at the till. Make change for 8 customers — quickly and correctly.', pay: 26, mins: 30, make: () => [game('math', 8, { flavour: 'cashier', level: 2, title: '🧾 Make change' })] },
+    { id: 'post_sort', at: 'postoffice', boss: 'mole', icon: '📮', title: 'Sort the mail', desc: 'Mailman Mole can\'t see the labels. Match up the letters and parcels before they get lost (again).', pay: 24, mins: 30, hours: [8, 19], make: () => [game('memory', 0, { theme: 'mail', limit: 20 })] },
+    { id: 'townhall_forms', at: 'townhall', boss: 'mayor', icon: '📊', title: 'Check the town budget', desc: 'The Mayor\'s budget "may contain arithmetic". Check 8 sums before the council meeting.', pay: 28, mins: 30, make: () => [game('math', 8, { flavour: 'forms', level: 3, title: '📊 Town budget' })] },
     { id: 'maggie_blood', at: 'stilthouse', boss: 'maggie', icon: '🩸', title: 'The Blood Drive', desc: 'Maggie wants "samples". Sneak up on 3 villagers and take a tiny sip with her special straw. Sleeping or distracted ones are easiest; getting caught is… awkward.', pay: 45, mins: 180, hours: [16, 3], shady: true, make: () => sneak(3) },
   ];
   const JOB = {}; MH.JOBS.forEach((j) => (JOB[j.id] = j));
   const placeName = (at) => (MH.world.rooms[at] ? MH.world.rooms[at].name.replace(/^inside /, '') : (MH.world.buildingById[at] || {}).name || at);
 
   // ---------------------------------------------------------------- step makers
-  const game = (kind, rounds) => ({ type: 'game', game: kind, rounds });
+  const game = (kind, rounds, opts) => ({ type: 'game', game: kind, rounds, opts: Object.assign({ n: rounds }, opts || {}) });
   function deliver(n, item) {
     const pl = MH.player;
     const cand = MH.npcs.filter((e) => !e.hidden && !e.ch.visitor && !e.following && e.id !== 'scarecrow' && !MH.roomOf(e) && !e.guest)
@@ -268,6 +271,10 @@
   };
   jobs.playGame = function (step) {
     const job = jobs.active(); if (!job) return;
+    if (MH.games && MH.games.has(step.game)) { // the bigger minigames (math, memory…)
+      MH.games.play(step.game, step.opts || {}).then((r) => { const j = jobs.active(); if (!j) return; step.done = true; j.score = MH.clamp(r.score || 0, 0, 1); checkDone(); });
+      return;
+    }
     const G = GAMES[step.game];
     const h = (html) => { const t2 = document.createElement('template'); t2.innerHTML = html.trim(); return t2.content.firstElementChild; };
     const body = h(`<div class="mg"><p class="mgtip">${G.tip}</p><div class="mgbar"><div class="mgzone"></div><div class="mgneedle"></div></div><div class="mgmsg">&nbsp;</div><div class="mgdots"></div><button class="btn big mgtap">TAP!</button></div>`);

@@ -107,7 +107,10 @@
     I('boots', 'Gravity boots', '👢', 110, 'invention', 'You run 25% faster, forever. Slight humming.', { passive: 'boots' }),
     I('translator', 'Translator collar', '📡', 70, 'invention', 'Understand villagers who don\'t talk (Sable, the Scarecrow…).', { passive: 'translator' }),
     I('healthsnack', 'Energy bar', '🍫', 8, 'food', 'Chewy, nutty, restores a little health.'),
+    I('rod', 'Fishing rod', '🎣', 25, 'tool', 'Fish at the pond, the river, the waterfall or the swamp. Sable buys what you catch.'),
   ];
+  // books (sold at the "bookstore"; read them from your pocket — the seller may quiz you)
+  Object.keys(MH.BOOKS || {}).forEach((k) => { const B = MH.BOOKS[k]; ITEMS.push(I('book_' + k, B.title, B.icon, B.price, 'book', 'By ' + B.by + '. ' + B.pages[0].slice(0, 70) + '…', { use: 'read', book: k })); });
   // what food heals (roughly by price)
   const FOOD_HP = (it) => (it.id === 'healthsnack' ? 25 : MH.clamp(Math.round(it.price * 1.4), 6, 45));
   MH.SHOP_ITEMS = {};
@@ -119,11 +122,11 @@
     mall_fashion: { name: 'Boutique', icon: '👗', items: ITEMS.filter((i) => i.cat === 'wear').map((i) => i.id) },
     mall_home: { name: 'Home & Decor', icon: '🛋️', items: ITEMS.filter((i) => i.cat === 'home').map((i) => i.id) },
     mall_fun: { name: 'Fun & Phones', icon: '🎆', items: ['myphone', 'sparephone', 'firework', 'confetti', 'bubbles', 'glowstick', 'energy', 'lottery', 'partykit', 'healthsnack'] },
-    lab: { name: 'Dr. Penelope\'s Inventions', icon: '🧪', staff: 'lab', items: ['jetpack', 'bhsniper', 'teleporter', 'cloak', 'healer', 'rainbegone', 'boots', 'translator'] },
+    lab: { name: 'The "Bookstore" (and Inventions)', icon: '📚', staff: 'lab', items: Object.keys(MH.BOOKS || {}).map((k) => 'book_' + k).concat(['jetpack', 'bhsniper', 'teleporter', 'cloak', 'healer', 'rainbegone', 'boots', 'translator']) },
     blackmarket: { name: 'Black market', icon: '🗡️', items: ['knife', 'crowbar', 'knuckles', 'baton', 'sparephone', 'healer'] },
     clinic: { name: 'Clinic pharmacy', icon: '💊', staff: 'clinic', items: ['healer', 'healthsnack'] },
     bakery: { name: 'Golden Loaf Bakery', icon: '🥐', staff: 'bakery', items: ['croissant', 'cinnroll', 'cookies', 'cakeslice', 'melonbread', 'sourdough', 'fancycake'] },
-    store: { name: 'General Store', icon: '🏪', staff: 'store', sells: true, items: ['ramune', 'onigiri', 'cookies', 'healthsnack', 'bugspray', 'energy', 'lottery', 'duck', 'candle', 'glowstick', 'firework', 'bat', 'pan', 'sparephone'] },
+    store: { name: 'General Store', icon: '🏪', staff: 'store', sells: true, items: ['ramune', 'onigiri', 'cookies', 'healthsnack', 'rod', 'bugspray', 'energy', 'lottery', 'duck', 'candle', 'glowstick', 'firework', 'bat', 'pan', 'sparephone'] },
     club: { name: 'Velvet Antler bar', icon: '🍹', staff: 'club', items: ['mocktail', 'soda', 'ramune', 'glowstick', 'poppers'] },
   };
   // what Sable pays for things you found
@@ -156,6 +159,7 @@
     return true;
   };
   shop.sellPrice = function (inv) {
+    if (inv.sell) return inv.sell; // fish: Sable pays full value
     if (inv.price) return Math.max(1, Math.floor(inv.price * 0.4));
     const k = Object.keys(MH.ITEMS).find((key) => MH.ITEMS[key].name === inv.name);
     if (k && FORAGE_PRICE[k] != null) return FORAGE_PRICE[k];
@@ -285,6 +289,7 @@
       case 'energy': done(); p.buffUntil = MH.absMinutes() + 180; MH.ui.toast('⚡ You feel ZIPPY — faster for 3 hours!', 3); break;
       case 'bugspray': done(); MH.state.today.bugspray = true; MH.ui.toast('🧴 Sprayed. The mosquitoes will leave you alone tonight.', 3); break;
       case 'partykit': MH.ui.toast('🎈 Keep it in your pocket — it boosts your next party automatically.', 3.5); return;
+      case 'read': MH.games.readBook(it.book); return;
       case 'lottery': {
         done();
         const r = Math.random();
@@ -345,14 +350,27 @@
   MH.ui.openCounter = function (it) {
     const room = it.room || null;
     const jobs = room && MH.jobs ? MH.jobs.listAt(room) : [];
-    if (it.shop && !jobs.length) { MH.ui.openShop(it.shop); return; }
-    if (!it.shop && !it.door && jobs.length) { MH.ui.openJobs(room); return; }
-    const body = h(`<div class="menu">${it.room === 'clinic' ? `<button class="btn" data-a="heal">🩹 Get patched up (10 🪙)</button>` : ''}${it.shop ? `<button class="btn" data-a="shop">🛒 Buy something</button>` : ''}${jobs.length ? `<button class="btn" data-a="work">💼 Ask for work</button>` : ''}${it.door ? `<button class="btn ghost" data-a="knock">✊ Knock on the door</button>` : ''}</div>`);
+    // extra things to do at some counters: talk books, town trivia, the arcade
+    const read = it.room === 'lab' && MH.games ? MH.games.booksBought().filter((k) => (P().booksRead || {})[k]) : [];
+    const extra = (read.length ? `<button class="btn" data-a="book">📚 Talk about a book you read</button>` : '') + (it.room === 'townhall' ? `<button class="btn" data-a="trivia">🧠 Mayor's town trivia</button>` : '') + (it.shop === 'mall_fun' ? `<button class="btn" data-a="arcade">🕹️ Arcade</button>` : '');
+    if (it.shop && !jobs.length && !extra) { MH.ui.openShop(it.shop); return; }
+    if (!it.shop && !it.door && jobs.length && !extra) { MH.ui.openJobs(room); return; }
+    const body = h(`<div class="menu">${extra}${it.room === 'clinic' ? `<button class="btn" data-a="heal">🩹 Get patched up (10 🪙)</button>` : ''}${it.shop ? `<button class="btn" data-a="shop">🛒 Buy something</button>` : ''}${jobs.length ? `<button class="btn" data-a="work">💼 Ask for work</button>` : ''}${it.door ? `<button class="btn ghost" data-a="knock">✊ Knock on the door</button>` : ''}</div>`);
     body.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => {
       const a = b.dataset.a;
       if (a === 'shop') MH.ui.openShop(it.shop, () => MH.ui.openCounter(it));
       if (a === 'work') MH.ui.openJobs(room, () => MH.ui.openCounter(it));
       if (a === 'knock') { MH.ui.closeModal(); MH.sim.knock(it.door); }
+      if (a === 'arcade') MH.games.arcade();
+      if (a === 'trivia') MH.games.trivia();
+      if (a === 'book') {
+        const pen = MH.npcById.penelope;
+        if (!pen || pen.hidden || MH.roomOf(pen) !== 'lab') { MH.ui.toast('Dr. Penelope isn\'t behind the counter right now.'); return; }
+        if (read.length === 1) { MH.games.bookQuiz(read[0]); return; }
+        const pick = h(`<div class="menu">${read.map((k) => `<button class="btn" data-b="${k}">${MH.BOOKS[k].icon} ${MH.esc(MH.BOOKS[k].title)}</button>`).join('')}</div>`);
+        pick.querySelectorAll('[data-b]').forEach((x) => (x.onclick = () => MH.games.bookQuiz(x.dataset.b)));
+        MH.ui.modal('Which book?', pick);
+      }
       if (a === 'heal') {
         if (MH.fight.hp() >= MH.fight.maxHp()) { MH.ui.toast('Doctor Owl: "Hoo. You are perfectly healthy."'); return; }
         if (P().coins < 10) { MH.ui.toast('Not enough coins.'); return; }

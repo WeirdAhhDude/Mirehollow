@@ -252,6 +252,28 @@
     ui.giveOpen = true;
   };
 
+  // ------------------------------------------------------------ challenge someone to a game (from the chat bar)
+  ui.openPlayPicker = function () {
+    const c = MH.chat.convo; if (!c) return;
+    if (c.phone) { ui.toast('Games need you in the same place.'); return; }
+    ui.closeGivePicker();
+    const box = h(`<div id="givePicker" class="picker"><div class="ph">Play a game with…</div><div class="who"></div><div class="ph2">Game</div><div class="opts gamec"></div><div class="ph2">Bet</div><div class="opts betc"></div><div class="row"><button class="btn small" id="gpGo">Challenge them</button></div></div>`);
+    let target = MH.chat.to && c.members.includes(MH.chat.to) ? MH.chat.to : c.members[0], game = 'connect4', bet = 0;
+    const chips = (cont, arr, get, set) => arr.forEach(([v, label]) => { const b = h(`<button class="chip ${get() === v ? 'sel' : ''}">${label}</button>`); b.onclick = () => { set(v); cont.querySelectorAll('.chip').forEach((x) => x.classList.remove('sel')); b.classList.add('sel'); }; cont.appendChild(b); });
+    chips(box.querySelector('.who'), c.members.map((id) => [id, MH.esc(MH.CHAR[id].name)]), () => target, (v) => (target = v));
+    chips(box.querySelector('.gamec'), [['connect4', '🔴 Connect 4'], ['memory', '🃏 Memory'], ['math', '🧮 Math duel'], ['rps', '✊ Rock-paper-scissors'], ['quiz', '❓ Quiz me']], () => game, (v) => (game = v));
+    chips(box.querySelector('.betc'), [[0, 'Just for fun'], [5, '5 🪙'], [20, '20 🪙']], () => bet, (v) => (bet = v));
+    box.querySelector('#gpGo').onclick = () => {
+      if (bet > MH.state.player.coins) { ui.toast('You don\'t have that many coins.'); return; }
+      c.gameChallenge = { with: target, game, stakes: bet };
+      const G2 = { connect4: 'a game of Connect 4', memory: 'a memory card duel', math: 'a math duel', rps: 'rock-paper-scissors', quiz: 'quiz me on something' };
+      MH.chat.insertText(game === 'quiz' ? `*asks ${MH.CHAR[target].name} to ${G2[game]}${bet ? ' (' + bet + ' coins on it)' : ''}* ` : `*challenges ${MH.CHAR[target].name} to ${G2[game]}${bet ? ' — ' + bet + ' coins on it' : ''}* `);
+      ui.closeGivePicker();
+    };
+    document.getElementById('chat').appendChild(box);
+    ui.giveOpen = true;
+  };
+
   // ------------------------------------------------------------ invitations (from the chat bar)
   ui.openInvitePicker = function () {
     const c = MH.chat.convo; if (!c) return;
@@ -510,7 +532,7 @@
     if (!P.inv.length) it.appendChild(h(`<div class="empty">Empty. Pick flowers (🌼), berries, mushrooms, seashells… or charm a villager into giving you something.</div>`));
     P.inv.forEach((x, i) => {
       const use = MH.shop && MH.shop.usable(x), wpn = MH.shop && MH.shop.weaponOf(x);
-      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}${use ? `<button class="use">${use.cat === 'food' ? 'Eat' : 'Use'}</button>` : ''}${wpn ? `<button class="use eq">${P.weapon === wpn ? 'Equipped ✔' : 'Equip'}</button>` : ''}<button class="drop" title="Drop">✕</button></div>`);
+      const b = h(`<div class="item">${x.icon} ${MH.esc(x.name)}${x.from && MH.CHAR[x.from] ? `<small>from ${MH.esc(MH.CHAR[x.from].name)}</small>` : ''}${use ? `<button class="use">${use.cat === 'food' ? 'Eat' : use.cat === 'book' ? ((MH.state.player.booksRead || {})[use.book] ? 'Read again' : 'Read') : 'Use'}</button>` : ''}${wpn ? `<button class="use eq">${P.weapon === wpn ? 'Equipped ✔' : 'Equip'}</button>` : ''}<button class="drop" title="Drop">✕</button></div>`);
       if (wpn) b.querySelector('.eq').onclick = () => { MH.shop.equip(x); ui.openJournal('pocket'); };
       b.querySelector('.drop').onclick = async () => { if (x.quest && !(await ui.confirm(`Throw away ${x.name}? It's for a favour you promised.`, 'Throw away', 'Keep'))) return; P.inv.splice(i, 1); ui.openJournal('pocket'); };
       if (use) b.querySelector('.use').onclick = () => { MH.shop.use(i); if (ui.modalOpen) ui.openJournal('pocket'); };
@@ -646,6 +668,7 @@
       <p><b>Jobs</b>: ask for work at a shop's counter (or at the Post Office / Maggie's Stilt House) for coins. Journal → Jobs lists them all.</p>
       <p><b>Favours</b>: villagers sometimes ask you for help — accept or decline. Journal → Favours tracks them.</p>
       <p><b>Health & fights</b>: the ❤️ bar is your health. Fights are a reflex game — tap the circles when the shrinking ring meets them, drag the sliders — harder against tougher opponents. ⚔️ in the chat bar challenges someone (a friendly spar or a real fight). Buy a bat at the General Store or worse at the bandits' black market, and equip it from your Pocket. Eat, soak in the onsen or visit the clinic to heal. At 0 HP you black out: you might be robbed, rescued — or die and restart the day.</p>
+      <p><b>Games</b>: 🎲 Play in the chat bar challenges someone to Connect 4, memory, a math duel, rock-paper-scissors or a quiz. Books from the "bookstore" can be read from your Pocket — Penelope will quiz you on them. Buy a fishing rod at the General Store and fish at the water's edge.</p>
       <p><b>Phones</b>: buy one at the mall (Fun & Phones), then 📱 at the top to text villagers who have phones. Give a spare phone to anyone who doesn't.</p>
       <p><b>The highlands</b>: south of town — Lookout Hill, Crag Heights with the onsen, the orchard, the waterfall and the bandits' Hollow Crags. Look for stairs cut into the cliffs.</p>
       <p><b>Characters</b>: ⚙️ → 👥 Switch character to play up to 4 different characters (try a saint and a menace).</p>

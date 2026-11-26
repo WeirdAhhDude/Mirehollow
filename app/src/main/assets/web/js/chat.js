@@ -27,6 +27,7 @@
     el.give.onclick = () => MH.ui.openGivePicker();
     el.invite.onclick = () => MH.ui.openInvitePicker();
     const fb = document.getElementById('btnFight'); if (fb) fb.onclick = () => MH.ui.openFightPicker();
+    const pb = document.getElementById('btnPlay'); if (pb) pb.onclick = () => MH.ui.openPlayPicker();
     el.log.onclick = () => MH.ui.toggleLog();
     el.logTop.onclick = () => MH.ui.toggleLog();
     el.toChip.onclick = () => chat.setTarget(null);
@@ -45,6 +46,8 @@
       const entry = !s.classList.contains('ghost') && s.dataset.id ? says.get(s.dataset.id) : null;
       if (entry && entry.full && entry.shown < entry.full.length) { entry.shown = entry.full.length; s.classList.add('expand'); return; }
       s.classList.toggle('expand');
+      const full = s.classList.contains('ghost') ? s.dataset.full : entry && entry.full;
+      if (full) showTail(s, full, !s.classList.contains('expand') && (s.classList.contains('ghost') || s.classList.contains('old')) && full.length > TAIL);
     });
     requestAnimationFrame(layoutLoop);
   };
@@ -173,11 +176,16 @@
     return s;
   }
   const GHOST_HOLD = 2.2, GHOST_FADE = 4.5; // seconds fully visible, then fading
+  // a long line, shortened from the FRONT: "…the last words they said"
+  const TAIL = 110;
+  const tailOf = (text) => { const t = String(text); if (t.length <= TAIL) return t; const cut = t.slice(-TAIL); const sp = cut.indexOf(' '); return '…' + (sp >= 0 && sp < 25 ? cut.slice(sp + 1) : cut); };
+  function showTail(d, full, on) { const txt = d.querySelector('.txt'); if (!txt) return; txt.innerHTML = MH.fmt(on ? tailOf(full) : full); d.dataset.tail = on ? '1' : ''; }
   function ghostOf(s) {
     if (!s.full || !s.d.classList.contains('on')) return;
     const g = s.d.cloneNode(true);
     g.classList.remove('latest', 'thinking', 'expand', 'on'); g.classList.add('ghost');
-    g.querySelector('.txt').innerHTML = MH.fmt(s.full);
+    g.dataset.full = s.full;
+    showTail(g, s.full, true);
     g.style.transform = s.d.style.transform; g.style.zIndex = '1';
     el.says.appendChild(g);
     s.ghosts = s.ghosts || [];
@@ -201,6 +209,11 @@
     });
   }
   const cardTyped = (id) => { const s = says.get(id); return !s || s.shown >= s.full.length; };
+  function typingHint(id) {
+    const s = says.get(id);
+    if (s && s.full && s.d.classList.contains('on') && !s.thinking) { if (!s.txt.querySelector('.typing')) s.txt.insertAdjacentHTML('beforeend', '<span class="typing"><i></i><i></i><i></i></span>'); }
+    else cardThinking([id], true);
+  }
   function updateSays(dt) {
     for (const [id, s] of says) {
       if (s.thinking || !s.full) continue;
@@ -263,6 +276,9 @@
       items.forEach((it, i) => {
         const d = it.s.d;
         d.classList.toggle('old', i >= 2 && it !== newest && !it.s.thinking);
+        // an older bubble shows the END of what they said (tap it for the whole thing)
+        const wantTail = d.classList.contains('old') && !d.classList.contains('expand') && it.s.shown >= it.s.full.length && it.s.full.length > TAIL;
+        if (wantTail !== !!d.dataset.tail && it.s.shown >= it.s.full.length) showTail(d, it.s.full, wantTail);
         d.classList.toggle('latest', it === newest && n > 1);
         d.classList.toggle('named', n > 1);
         d.style.zIndex = 50 - i;
@@ -338,6 +354,15 @@
     MH.social.log({ kind: 'sys', text: '— Conversation with ' + members.map((id) => MH.CHAR[id].name).join(', ') + ' · ' + MH.world.placeAt(c.x, c.y).name + ' —', convo: c.id });
     el.input.value = ''; chat.pendingInvite = null;
     const P = MH.state.player;
+    if (mode === 'quiet') {
+      // you walked up behind them, or they're asleep: nothing happens until YOU say or do something
+      const q = payload || {}, e0 = MH.npcById[members[0]];
+      c.quiet = { id: members[0], asleep: !!q.asleep, behind: !!q.behind };
+      if (q.asleep) { e0.asleep = true; const card = el.cast.querySelector(`.card[data-id="${e0.id}"]`); if (card) card.classList.add('asleep'); }
+      el.input.placeholder = q.asleep ? `${e0.ch.name} is fast asleep… *poke* them, whisper, or let them be` : `${e0.ch.name} hasn't noticed you yet…`;
+      MH.ui.narrate(q.asleep ? `${e0.ch.name} is fast asleep.` : `${e0.ch.name} has their back to you and hasn't noticed you.`);
+      return;
+    }
     if (mode === 'opener') chat.runTurn('opener', payload);
     else {
       const e = MH.npcById[members[0]], n = MH.social.npc(e.id);
@@ -415,6 +440,7 @@
     chat.active = false; chat.convo = null; chat.waiting = false; chat.pendingInvite = null; chat.queued = false; chat.to = null;
     el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone');
     MH.fight && MH.fight.hideOffer();
+    MH.games && MH.games.hideOffer();
     if (MH.fight && c.combat && !c.combat.over) MH.fight.end(c, 'left');
     MH.fight && MH.fight.renderBar(null);
     document.body.classList.remove('chatting');
@@ -442,6 +468,7 @@
     if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
     c.violence = c.phone ? null : chat.detectViolence(text, c, to);
     if (c.lock) c.lock.turns--;
+    if (c.quiet) { c.wake = c.quiet; c.quiet = null; const e0 = MH.npcById[c.wake.id]; if (e0) e0.asleep = false; const card = el.cast.querySelector(`.card[data-id="${c.wake.id}"]`); if (card) card.classList.remove('asleep'); chat.setTarget(chat.to); }
     // ⚔️ "fight for real" from the chat bar counts as starting a fight
     if (c.challenge && !/squares up|sparring/i.test(text)) c.challenge = null;
     if (c.challenge && c.challenge.kind === 'brawl' && !c.violence) c.violence = { victim: c.challenge.with, playful: false, act: 'squares up to fight them for real' };
@@ -541,6 +568,7 @@
 
   chat.runTurn = async function (mode, payload, to) {
     const c = chat.convo; if (!c) return;
+    if (c.quiet && mode === 'continue') return; // nobody talks until you do
     if (!c.members.length) { chat.end(); return; }
     c.nearby = nearbyIds(c);
     c.turn++;
@@ -581,8 +609,11 @@
       cardSay(l.who, l.say);
       reactEmote(e, l.say);
       while (!cardTyped(l.who) && chat.convo === c) await waitFor(0.04);
-      // a short beat before the next line lands (the previous one stays readable, floating above)
-      await waitFor(MH.clamp(0.45 + l.say.length * 0.012, 0.6, 2.2));
+      // someone has more to say: show "…" where their next line will appear
+      const nx = res.lines[res.lines.indexOf(l) + 1];
+      if (nx && nx.who !== 'narrator' && c.members.includes(nx.who)) typingHint(nx.who);
+      // a beat before the next line lands (the previous one stays readable, floating above)
+      await waitFor(MH.clamp(0.8 + l.say.length * 0.018, 1.0, 3.2));
       chat.skipFlag = false;
     }
     if (chat.convo !== c) return;
@@ -656,6 +687,16 @@
       if (MH.fight.inCombat(c)) { if (f.kind !== 'spar' && !c.combat.enemies.some((x) => x.id === f.with)) MH.fight.begin(c, f); } // someone joins in
       else if (f.kind === 'spar' || f.kind === 'mugging') MH.fight.offer(c, f);
       else MH.fight.begin(c, f); // they attack: their turn comes right after these lines
+    }
+    // games: they accept your challenge, or propose one themselves
+    const gc = c.gameChallenge; c.gameChallenge = null;
+    if (MH.games && !c.phone && !MH.fight.inCombat(c)) {
+      let m = res.minigame;
+      if (!m && gc && res.offline && c.members.includes(gc.with) && MH.social.attitude(gc.with) > -20 && Math.random() < 0.85) m = gc;
+      if (m && c.members.includes(m.with)) {
+        if (gc && gc.with === m.with) m = Object.assign({}, gc, { game: m.game || gc.game, topic: m.topic });
+        if (gc && gc.with === m.with) setTimeout(() => chat.convo === c && MH.games.inChat(c, m), 600); else MH.games.offer(c, m);
+      }
     }
     if (res.drag && (!res.fight || MH.fight.inCombat(c))) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to), 700);
     if (MH.quests) {

@@ -47,8 +47,6 @@
       const entry = !s.classList.contains('ghost') && s.dataset.id ? says.get(s.dataset.id) : null;
       if (entry && entry.full && entry.shown < entry.full.length) { entry.shown = entry.full.length; s.classList.add('expand'); return; }
       s.classList.toggle('expand');
-      const full = s.classList.contains('ghost') ? s.dataset.full : entry && entry.full;
-      if (full) showTail(s, full, !s.classList.contains('expand') && (s.classList.contains('ghost') || s.classList.contains('old')) && full.length > TAIL);
     });
     requestAnimationFrame(layoutLoop);
   };
@@ -177,18 +175,23 @@
     return s;
   }
   const GHOST_HOLD = 2.2, GHOST_FADE = 4.5; // seconds fully visible, then fading
-  // a long line, shortened from the FRONT: "…the last words they said"
-  const TAIL = 110;
-  const tailOf = (text) => { const t = String(text); if (t.length <= TAIL) return t; const cut = t.slice(-TAIL); const sp = cut.indexOf(' '); return '…' + (sp >= 0 && sp < 25 ? cut.slice(sp + 1) : cut); };
-  function showTail(d, full, on) { const txt = d.querySelector('.txt'); if (!txt) return; txt.innerHTML = MH.fmt(on ? tailOf(full) : full); d.dataset.tail = on ? '1' : ''; }
+  // Older lines keep exactly the same look (same text size, same line breaks); they're just cut
+  // from the top so their LAST lines show ("…the end of what they said"). Tap one for all of it.
+  const OLD_LINES = 3.2;
+  function clipTo(txt, px) {
+    if (px > 0 && txt.scrollHeight > px + 2) {
+      if (!txt.classList.contains('clip')) txt.classList.add('clip');
+      const v = Math.round(px) + 'px'; if (txt.style.maxHeight !== v) txt.style.maxHeight = v;
+      txt.scrollTop = txt.scrollHeight;
+    } else if (txt.classList.contains('clip')) { txt.classList.remove('clip'); txt.style.maxHeight = ''; }
+  }
   function ghostOf(s) {
     if (!s.full || !s.d.classList.contains('on')) return;
     const g = s.d.cloneNode(true);
     g.classList.remove('latest', 'thinking', 'expand', 'on'); g.classList.add('ghost');
-    g.dataset.full = s.full; g.style.fontSize = '';
+    g.dataset.full = s.full; g.dataset.fs = s.fs || 15;
     g.querySelectorAll('.nexta').forEach((a) => a.remove());
-    const gt = g.querySelector('.txt'); if (gt) { gt.classList.remove('clip'); gt.style.maxHeight = ''; }
-    showTail(g, s.full, true);
+    const gt = g.querySelector('.txt'); if (gt) { gt.innerHTML = MH.fmt(s.full); gt.classList.remove('clip'); gt.style.maxHeight = ''; }
     g.style.transform = s.d.style.transform; g.style.zIndex = '1';
     el.says.appendChild(g);
     s.ghosts = s.ghosts || [];
@@ -201,6 +204,7 @@
     ghostOf(s);
     s.full = text; s.shown = 0; s.born = MH.now; s.thinking = false; s.rendered = null;
     s.d.classList.remove('thinking', 'expand'); s.d.classList.add('on');
+    if (s.fitRoom) fitBubble(s, s.fitRoom, true); // size it now, from the whole line, so it never changes while it types
     const card = el.cast.querySelector(`.card[data-id="${id}"]`);
     if (card) card.classList.add('talking');
     chat.front = id; applyLayers();
@@ -264,9 +268,7 @@
       t.style.zIndex = 20 - Math.max(0, order.indexOf(t.dataset.id));
     });
   }
-  let lastLayout = 0;
   function layoutLoop() {
-    const tNow = performance.now(), dtL = Math.min(0.1, lastLayout ? (tNow - lastLayout) / 1000 : 0.016); lastLayout = tNow;
     if (chat.active) layoutTags();
     if (chat.active && says.size) {
       const W = window.innerWidth;
@@ -278,8 +280,14 @@
         const card = el.cast.querySelector(`.card[data-id="${id}"]`);
         const img = card && card.querySelector('img');
         if (!card || !img) { s.d.classList.remove('on'); continue; }
-        const r = img.getBoundingClientRect();
-        items.push({ s, cx: r.left + r.width / 2 - rootR.left, head: r.top - rootR.top + r.height * (card.classList.contains('art') ? 0.05 : 0.08) });
+        // where the head is when the portrait is at REST (the breathing/talking sway is ignored, so bubbles don't bob or resize)
+        const cr = card.getBoundingClientRect(), ih = img.offsetHeight, iw = img.offsetWidth;
+        const ps = parseFloat(card.style.getPropertyValue('--ps')) || 1, pxp = parseFloat(card.style.getPropertyValue('--px')) || 0, pyp = parseFloat(card.style.getPropertyValue('--py')) || 0;
+        const top0 = cr.top - rootR.top + img.offsetTop + ih * (1 - ps) + ih * pyp / 100;
+        const cx0 = cr.left - rootR.left + img.offsetLeft + iw / 2 + iw * pxp / 100, head0 = top0 + ih * ps * (card.classList.contains('art') ? 0.05 : 0.08);
+        const k = s.anchor && Math.abs(s.anchor.head - head0) < 60 && Math.abs(s.anchor.cx - cx0) < 60 ? 0.06 : s.anchor ? 0.3 : 1;
+        s.anchor = s.anchor ? { cx: s.anchor.cx + (cx0 - s.anchor.cx) * k, head: s.anchor.head + (head0 - s.anchor.head) * k } : { cx: cx0, head: head0 };
+        items.push({ s, cx: s.anchor.cx, head: s.anchor.head });
       }
       const order = layerOrder();
       const newest = items.reduce((m, it) => (it.s.born > (m ? m.s.born : -1) ? it : m), null);
@@ -290,13 +298,15 @@
         const d = it.s.d;
         const front = d.dataset.id === order[0];
         d.classList.toggle('old', i >= 2 && it !== newest && !it.s.thinking);
-        // an older bubble shows the END of what they said (tap it for the whole thing)
-        const wantTail = d.classList.contains('old') && !d.classList.contains('expand') && it.s.shown >= it.s.full.length && it.s.full.length > TAIL;
-        if (wantTail !== !!d.dataset.tail && it.s.shown >= it.s.full.length) showTail(d, it.s.full, wantTail);
         d.classList.toggle('latest', it === newest && n > 1);
         d.classList.toggle('named', n > 1);
         d.style.zIndex = front ? 36 : Math.max(21, 29 - i);
-        if (!it.s.thinking) fitBubble(it.s, it.head - 10 - topMin, dtL);
+        if (!it.s.thinking && it.s.full) {
+          fitBubble(it.s, it.head - 10 - topMin);
+          const lineH = (it.s.fs || 15) * 1.36;
+          const cap = d.classList.contains('expand') ? 0 : d.classList.contains('old') && it.s.shown >= it.s.full.length ? Math.min(it.s.clipH || 1e9, lineH * OLD_LINES) : it.s.clipH || 0;
+          clipTo(it.s.txt, cap);
+        }
         const w = d.offsetWidth, h = d.offsetHeight;
         const x = MH.clamp(it.cx - w / 2, 8, Math.max(8, W - w - 8));
         let y = it.head - h - 10;
@@ -312,6 +322,7 @@
           const age = MH.now - g.born;
           const op = age < GHOST_HOLD ? 0.9 : 0.9 * (1 - (age - GHOST_HOLD) / GHOST_FADE);
           if (op <= 0) { g.d.remove(); it.s.ghosts.splice(it.s.ghosts.indexOf(g), 1); return; }
+          const gt = g.d.querySelector('.txt'); if (gt) clipTo(gt, g.d.classList.contains('expand') ? 0 : (+g.d.dataset.fs || 15) * 1.36 * OLD_LINES);
           const gw = g.d.offsetWidth, gh = g.d.offsetHeight;
           gy = gy - gh * 0.94 - 4 - Math.min(10, age * 2);
           const gx = MH.clamp(x + w / 2 - gw / 2, 8, Math.max(8, W - gw - 8));
@@ -323,22 +334,28 @@
     }
     requestAnimationFrame(layoutLoop);
   }
-  // A long line shrinks smoothly (smaller text, a bit wider) so it stays above the portraits' heads;
-  // if it still doesn't fit, only its newest words stay visible (tap the bubble for all of it).
-  function fitBubble(s, room, dt) {
-    const d = s.d, txt = s.txt; if (!txt) return;
-    const base = d.classList.contains('old') ? 13.5 : 15, min = 11;
-    room = Math.max(64, room);
-    const chrome = d.offsetHeight - txt.clientHeight;
-    const fs = s.fs || base;
-    const natural = (chrome + txt.scrollHeight) * (base / fs) * (base / fs); // ≈ its height at full size
-    const want = MH.clamp(base * Math.sqrt(room / Math.max(1, natural)), min, base);
-    const nfs = fs + (want - fs) * Math.min(1, dt * 6);
-    if (Math.abs(nfs - (s.fsShown || 0)) > 0.04) { d.style.fontSize = nfs.toFixed(2) + 'px'; s.fsShown = nfs; }
-    s.fs = nfs;
-    const tooTall = chrome + txt.scrollHeight > room + 2 && nfs <= min + 0.3 && !d.classList.contains('expand');
-    if (tooTall) { txt.classList.add('clip'); txt.style.maxHeight = Math.max(36, room - chrome) + 'px'; txt.scrollTop = txt.scrollHeight; }
-    else if (txt.classList.contains('clip')) { txt.classList.remove('clip'); txt.style.maxHeight = ''; }
+  // Each line is sized ONCE, from its whole text: the biggest text size (15px down to 11px) at which it fits
+  // above the speaker's head. If it doesn't fit even at 11px it's capped and shows its newest words.
+  // Nothing is re-measured while it types (that was the flicker), only if the space really changes.
+  function fitBubble(s, room, force) {
+    const d = s.d, txt = s.txt; if (!txt || !s.full) return;
+    room = Math.max(64, Math.round(room));
+    const key = s.full + '|' + (d.classList.contains('named') ? 1 : 0);
+    if (!force && s.fitKey === key && Math.abs(room - (s.fitRoom || 0)) < 36) return;
+    s.fitKey = key; s.fitRoom = room;
+    const probe = d.cloneNode(true);
+    probe.classList.remove('expand', 'ghost', 'thinking');
+    probe.style.cssText = 'position:absolute;left:0;top:0;transform:none;visibility:hidden;opacity:0;transition:none;pointer-events:none;';
+    probe.querySelectorAll('.nexta').forEach((a) => a.remove());
+    const pt = probe.querySelector('.txt'); pt.classList.remove('clip'); pt.style.maxHeight = ''; pt.innerHTML = MH.fmt(s.full);
+    el.says.appendChild(probe);
+    let fs = 15;
+    for (; fs > 11; fs -= 0.5) { probe.style.fontSize = fs + 'px'; if (probe.offsetHeight <= room) break; }
+    probe.style.fontSize = fs + 'px';
+    const fullH = probe.offsetHeight, chrome = fullH - pt.offsetHeight;
+    probe.remove();
+    s.fs = fs; d.style.fontSize = fs + 'px';
+    s.clipH = fullH > room ? Math.max(36, room - chrome) : 0;
   }
   function dropGhosts(s) { (s.ghosts || []).forEach((g) => g.d.remove()); s.ghosts = []; }
   function clearSays() { for (const [, s] of says) { s.d.remove(); dropGhosts(s); } says.clear(); el.says && el.says.querySelectorAll('.ghost').forEach((g) => g.remove()); }

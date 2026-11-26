@@ -157,8 +157,8 @@
       '',
       'HOW TO WRITE',
       '- Write only villagers (and rare narration). NEVER write the player\'s words, actions, thoughts or feelings.',
-      '- Lines are short and chat-like: 1-3 sentences each. Put physical actions in *asterisks*, e.g. "*wipes flour on her apron* Oh! Hi, sweetie!".',
-      '- 1-4 lines per turn in total. In a group, NOT everyone speaks: usually only the one the player addressed (or the one it concerns most) answers, plus at most one or two others who have a real reason to (they were named, they care strongly, they have a reaction that matters). Everyone else stays silent this turn — that is normal and good. Never go around the circle giving each villager a line. A silent villager may at most do a tiny *action*. Villagers may talk to each other, interrupt, tease, and gossip about absent villagers.',
+      '- Every line is SHORT and chat-like: 1-2 sentences, under about 180 characters. When a villager has more to say, give them 2-3 separate short lines in a row (like sending several texts) instead of one long block. Put physical actions in *asterisks*, e.g. "*wipes flour on her apron* Oh! Hi, sweetie!".',
+      '- 1-5 short lines per turn in total. In a group, NOT everyone speaks (fewer SPEAKERS, not fewer or longer lines): usually only the one the player addressed (or the one it concerns most) answers, plus at most one or two others who have a real reason to (they were named, they care strongly, they have a reaction that matters). Everyone else stays silent this turn — that is normal and good. Never go around the circle giving each villager a line. A silent villager may at most do a tiny *action*. Villagers may talk to each other, interrupt, tease, and gossip about absent villagers.',
       '- NEVER mix villagers up. Each villager\'s species, looks, personality, voice and history come ONLY from their own card below. Don\'t give one villager another\'s traits, species or catchphrases, and when a villager mentions someone else, describe them as that person\'s own card says (see WHO IS WHO). If any other text disagrees with a villager\'s own card, their card wins.',
       '- Keep every villager\'s unique voice. MUTE villagers only ever write *actions*.',
       '- React to the player\'s *actions* physically and emotionally. Villagers may perform their own actions toward the player (offer a handshake, a hug, hand over a pastry) which the player can answer next turn.',
@@ -370,6 +370,29 @@
   };
 
   // Normalise a raw AI result so the game can apply it safely.
+  // A long reply becomes 2-3 bubbles from the same speaker, cut at sentence ends (never inside an *action*).
+  AI.splitLine = function (say) {
+    const t = String(say).trim();
+    if (t.length <= 230) return [t];
+    const parts = []; let cur = '', act = false;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i], nx = t[i + 1] || '';
+      cur += c;
+      if (c === '*') { act = !act; if (!act && /\s/.test(nx)) { parts.push(cur); cur = ''; } continue; }
+      if (!act && /[.!?…]/.test(c) && (/\s/.test(nx) || (/["”’)]/.test(nx) && /\s/.test(t[i + 2] || '')))) {
+        if (/["”’)]/.test(nx)) { cur += nx; i++; }
+        parts.push(cur); cur = '';
+      }
+    }
+    if (cur.trim()) parts.push(cur);
+    if (parts.length < 2) return [t];
+    const target = Math.max(120, Math.ceil(t.length / 3) + 10);
+    const out = []; let acc = '';
+    parts.forEach((p) => { if (acc.trim() && (acc + p).trim().length > target && out.length < 2) { out.push(acc.trim()); acc = p; } else acc += p; });
+    if (acc.trim()) out.push(acc.trim());
+    return out.filter(Boolean);
+  };
+
   AI.normalize = function (raw, convo) {
     const out = { lines: [], bond: {}, mood: {}, memory: {}, reputation: {}, witness: '', join: [], leave: [], give: [], take: [], coins: 0, relations: [], label: {}, invite: {}, plans: [], follow: {}, quest: null, questDone: [], end: false };
     if (!raw || typeof raw !== 'object') return out;
@@ -388,8 +411,9 @@
         if (nearby.has(id)) out.join.push(id); else return; // ignore villagers who aren't around
       }
       if (id !== 'narrator' && MH.CHAR[id].mute && !/^\*.*\*$/.test(say)) say = '*' + say.replace(/\*/g, '') + '*';
-      out.lines.push({ who: id, say: say.slice(0, 600) });
+      AI.splitLine(say.slice(0, 700)).forEach((part) => out.lines.push({ who: id, say: part }));
     });
+    out.lines = out.lines.slice(0, 9);
     mapObj(raw.bond, (id, v) => { const n = Number(v); if (n) out.bond[id] = MH.clamp(Math.round(n), -10, 10); });
     mapObj(raw.mood, (id, v) => { if (v) out.mood[id] = String(v).slice(0, 30); });
     mapObj(raw.memory || raw.memories, (id, v) => { if (v) out.memory[id] = String(Array.isArray(v) ? v.join(' ') : v).slice(0, 220); });

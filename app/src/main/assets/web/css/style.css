@@ -569,3 +569,5 @@ body.fighting #btnA, body.fighting #joyZone { display: none; }
 .picker { z-index: 44; }
 #chat .dmgpop { z-index: 46; }
 #chat .fightui { z-index: 50; }
+/* v0.9.1: the text box is a block so long lines can be cut from the top (older lines show their end) */
+#says .say .txt { display: block; }

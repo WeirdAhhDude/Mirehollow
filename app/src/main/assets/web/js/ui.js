@@ -65,6 +65,12 @@
     $('#hudDay').textContent = `Day ${MH.state.time.day + 1} ${WEATHER_ICON[MH.state.weather] || ''}`;
     $('#hudPlace').textContent = MH.cap(MH.world.placeAt(MH.player.x, MH.player.y).name.replace(/^the player's/i, 'your').replace(/^the /, ''));
     $('#hudCoins').textContent = '🪙 ' + MH.state.player.coins;
+    // sneaking: a reminder that you're somewhere you shouldn't be
+    const sn = MH.state.player.sneak, sneaking = sn && !sn.invited && MH.roomOf(MH.player) === sn.room && !MH.chat.active;
+    let sp = $('#sneakPill');
+    if (!sp) { sp = document.createElement('div'); sp.id = 'sneakPill'; sp.className = 'pill sneak hidden'; $('#jobPill').after(sp); }
+    sp.textContent = sn && sn.caught ? '🚨 Caught sneaking!' : '🤫 Sneaking — walk, don\'t run';
+    sp.classList.toggle('hidden', !sneaking && !(sn && sn.caught && MH.roomOf(MH.player) === sn.room && !MH.chat.active));
     $('#hudAi').classList.toggle('off', !MH.ai.hasKey());
     $('#hudAi').title = MH.ai.hasKey() ? 'AI connected: ' + MH.settings.model : 'Offline mode (add an OpenRouter key in Settings)';
   }
@@ -682,7 +688,7 @@
       <p><b>Games</b>: 🎲 Play in the chat bar challenges someone to Connect 4, memory, a math duel, rock-paper-scissors or a quiz. Books from the "bookstore" can be read from your Pocket — Penelope will quiz you on them. Buy a fishing rod at the General Store and fish at the water's edge.</p>
       <p><b>Phones</b>: buy one at the mall (Fun & Phones), then 📱 at the top to text villagers who have phones. Give a spare phone to anyone who doesn't.</p>
       <p><b>Hold A</b> (or Q): act or shout on your own — <i>*dances on the bench*</i>, "free cake for the first one here!". The narrator answers and anyone around may come over.</p>
-      <p><b>Homes</b>: villagers' houses (Lily's cottage, the Honeycomb, the Coop, the Gator Grove, Kira's den, Maggie's stilt house, Juniper's cabin, the bandits' cave) can be entered: knock, or sneak in. At night most people are asleep — walk, don't run. Night owls are awake.</p>
+      <p><b>Homes</b>: villagers' houses (Lily's cottage, the Honeycomb, the Coop, the Gator Grove, Kira's den, Maggie's stilt house, Juniper's cabin, the bandits' cave) can be entered: knock, or sneak in (closed shops at night too — many villagers live in theirs). At night most people are asleep — walk, don't run. Night owls are awake.</p>
       <p><b>Sleep</b> skips to the next part of the day: morning → noon → late afternoon → late evening → next morning.</p>
       <p><b>Fighters</b>: Roxy the boxing champ coaches at the Burrow Gym; Sensei Jade runs the Jade Dojo south-west of town, past the bamboo. Take a lesson at the dojo counter to land your hits more often.</p>
       <p><b>The highlands</b>: south of town — Lookout Hill, Crag Heights with the onsen, the orchard, the waterfall and the bandits' Hollow Crags. Look for stairs cut into the cliffs.</p>

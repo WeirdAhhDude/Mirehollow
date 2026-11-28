@@ -929,7 +929,7 @@
       const it = door;
       let label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : (MH.jobs && MH.jobs.listAt(it.b.id).length ? '💼 ' : 'Knock: ') + it.b.name) : it.label;
       if (it.type === 'enter' && MH.world.rooms[it.room].private) label = '🏠 ' + it.b.name;
-      else if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
+      else if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = '🔒 ' + it.b.name + ' (closed: knock or sneak in)';
       return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
     }
     // fishing: with a rod, at the water's edge
@@ -986,7 +986,7 @@
       if (R.id === 'home') sim.goInside();
       else if (R.private) sim.homeDoor(t.it);
       else if (MH.world.isOpen(R)) { MH.enterRoom(R.id); setTimeout(() => sim.vibeNow(R.id === 'club' && MH.hour() < 21 ? 'The Velvet Antler is just warming up.' : 'You step ' + R.name.replace(/^inside /, 'into ') + '.'), 600); }
-      else sim.knock(t.it.b);
+      else sim.homeDoor(t.it);
     }
     else if (t.kind === 'exit') { if (t.it.room === 'home') sim.goOutside(); else MH.exitRoom(t.it.room); }
     else if (t.kind === 'party') MH.ui.openPartyPlanner();
@@ -1081,7 +1081,8 @@
     sim.curRoom = id;
     if (!id) return;
     const b = R.building;
-    if (R.private) { homeTick(R); return; }
+    const snuck = MH.state.player.sneak && MH.state.player.sneak.room === id;
+    if (R.private || snuck) { homeTick(R); return; }
     for (const e of MH.npcs) {
       if (e.inRoom || e.hidden || e.busy || e.guest || e.following || e.seek || !e.plan || sim.approaching === e) continue;
       if (e.plan.loc !== b || (e.plan.mode !== 'out' && e.plan.mode !== 'nap')) continue;
@@ -1096,7 +1097,7 @@
 
   // ------------------------------------------------------------ villagers' homes: residents, sleepers, sneaking in
   // when each villager sleeps (default 22:00-7:00); night owls are up while everyone else snores
-  const SLEEP = { brenda: [3, 11], maggie: [5, 13], rook: [5, 12], gristle: [4, 12], snitch: [4, 11], vesper: [2, 10], kira: [20, 10], patty: [0, 24], juniper: [21, 6], clucky: [21, 6], snap: [7, 15], sukuna: [6, 9], gojo: [3, 9] };
+  const SLEEP = { owl: [6, 14], dionne: [4, 11], chuckles: [3, 9], brenda: [3, 11], maggie: [5, 13], rook: [5, 12], gristle: [4, 12], snitch: [4, 11], vesper: [2, 10], kira: [20, 10], patty: [0, 24], juniper: [21, 6], clucky: [21, 6], snap: [7, 15], sukuna: [6, 9], gojo: [3, 9] };
   sim.sleepsNow = function (id) { const [a, b] = SLEEP[id] || [22, 7]; if (a === 0 && b === 24) return true; const h = MH.hour(); return a <= b ? h >= a && h < b : h >= a || h < b; };
   sim.residentsOf = (b) => MH.npcs.filter((e) => e.hidden && !e.busy && e.insideLoc === b && !e.ch.visitor && e.plan && e.plan.mode === 'inside');
   function homeTick(R) {
@@ -1106,9 +1107,12 @@
       const sleeping = sim.sleepsNow(e.id);
       const usedBeds = new Set(MH.npcs.filter((o) => o.inRoom === R.id && o.asleep).map((o) => o.tile().tx + ',' + o.tile().ty));
       let spot = null;
-      if (sleeping) { while (bed < R.beds.length && usedBeds.has(R.beds[bed].join())) bed++; spot = R.beds[bed] || null; }
-      if (!spot) { const r = MH.world.randomSpot('in_' + R.id); spot = [r.tx, r.ty]; }
-      e.setTile(spot[0], spot[1]); e.hidden = false; e.inRoom = R.id; e.homeIn = true; e.asleep = !!sleeping && !!R.beds.length; e.path = null; e.state = 'idle'; e.dir = 'down'; e.noticeT = 0;
+      const beds = R.beds || [];
+      if (sleeping) { while (bed < beds.length && usedBeds.has(beds[bed].join())) bed++; spot = beds[bed] || null; }
+      if (!spot) { // somewhere in the room, but not right by the door (you'd trip over them coming in)
+        for (let k = 0; k < 30 && !spot; k++) { const r = MH.world.randomSpot('in_' + R.id); if (Math.hypot(r.tx - R.doorX, r.ty - R.y1) > 3.5 || k === 29) spot = [r.tx, r.ty]; }
+      }
+      e.setTile(spot[0], spot[1]); e.hidden = false; e.inRoom = R.id; e.homeIn = true; e.asleep = !!sleeping; e.path = null; e.state = 'idle'; e.dir = 'down'; e.noticeT = 0;
     }
   }
   sim.sneakTick = function (dt) {
@@ -1140,8 +1144,9 @@
     const R = MH.world.rooms[it.room], b = it.b, inside = sim.residentsOf(b.id);
     const awake = inside.filter((e) => !sim.sleepsNow(e.id));
     const night = MH.hour() >= 22 || MH.hour() < 6;
-    const friend = !night && awake.find((e) => MH.social.attitude(e.id) >= 35);
-    const hint = !inside.length ? 'Nobody seems to be home. The door isn\'t locked…' : awake.length ? 'You can hear someone moving around inside.' : 'All dark and quiet. Someone is snoring.';
+    const friend = !night && !closed && awake.find((e) => MH.social.attitude(e.id) >= 35);
+    const closed = !R.private && !MH.world.isOpen(R);
+    const hint = (closed ? `Closed (opens ${R.open[0]}:00). ` : '') + (!inside.length ? 'Nobody seems to be inside. The door isn\'t locked…' : awake.length ? 'You can hear someone moving around inside.' : 'All dark and quiet. Someone is snoring.');
     const h = (html) => { const t2 = document.createElement('template'); t2.innerHTML = html.trim(); return t2.content.firstElementChild; };
     const body = h(`<div class="menu"><p class="muted">${hint}</p>${inside.length ? '<button class="btn" data-a="knock">🚪 Knock</button>' : ''}${friend ? `<button class="btn" data-a="go">🏠 Go in — ${MH.esc(friend.ch.name)} won't mind</button>` : ''}<button class="btn ghost" data-a="sneak">🤫 ${inside.length ? 'Sneak in' : 'Let yourself in'}</button></div>`);
     body.querySelectorAll('[data-a]').forEach((x) => (x.onclick = () => {
@@ -1149,7 +1154,7 @@
       if (x.dataset.a === 'knock') { sim.knock(b); return; }
       MH.state.player.sneak = { room: R.id, at: MH.absMinutes(), invited: x.dataset.a === 'go' };
       MH.enterRoom(R.id);
-      setTimeout(() => sim.vibeNow(x.dataset.a === 'go' ? `You let yourself into ${b.name}. "It's me!"` : inside.length ? `You ease the door open and slip into ${b.name}. ${awake.length ? 'Careful…' : 'Somebody is snoring. Walk, don\'t run.'}` : `You let yourself into ${b.name}. Nobody's home… for now.`), 600);
+      setTimeout(() => sim.vibeNow(x.dataset.a === 'go' ? `You let yourself into ${b.name}. "It's me!"` : inside.length ? `🤫 You ease the door open and slip into ${b.name}. ${awake.length ? 'Someone is awake in here — careful…' : 'Somebody is snoring. Walk, don\'t run.'}` : `🤫 You let yourself into ${b.name}. Nobody's here… for now.`), 600);
     }));
     MH.ui.modal(MH.esc(b.name), body);
   };

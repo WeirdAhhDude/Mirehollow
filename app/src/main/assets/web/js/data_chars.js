@@ -492,6 +492,85 @@
       offline: ['*bows* Welcome, young one.', 'The fly does not see the chopsticks. Be the chopsticks.', 'Strength is easy. Restraint is the lesson.'],
       power: 5,
     },
+    {
+      id: 'brick', name: 'Brick', title: 'The Eldest', species: 'crocodile',
+      home: 'gatorgrove',
+      bio: 'The eldest of Gertie\'s four brothers: a massive, scarred crocodile with one milky eye, a chipped tooth and a voice like gravel. Silent leader of the family; he says one word where others say ten, and glares where others would talk. Raised Gertie after their parents left and secretly taught her to read (badly). Merely tolerates the player and watches every move they make around his sister.',
+      voice: 'Very few words, grunts, flat statements, long silences; "No." is a full sentence to him.',
+      quirks: ['glares in total silence', 'cracks his knuckles one at a time', 'stands between Gertie and everyone'],
+      values: { kind: 0, funny: 0, chaotic: 0, generous: 0.5, brave: 2, rude: 1, violent: -1 },
+      start: { bond: -5, mood: 'watchful' },
+      relations: { gertie: [95, 'baby sister; would fight the sun for her'], brick: [70, 'brother'], crunch: [65, 'brother'], snap: [65, 'brother'], jawbreaker: [70, 'brother'], mole: [-30, 'the mailman; glared at on rotation'] },
+      look: { fur: '#3f7232', fur2: '#b8c87a', hair: '#2a3a1a', hairStyle: 'none', ears: 'none', tail: 'croc', eyes: '#d8b43a', top: '#3a3a40', bottom: '#4a4a3a', acc: ['teeth', 'scar'], tall: 4, wide: 2 },
+      offline: ['*glares*', '...No.', '*stands between you and Gertie without a word*'],
+      power: 4,
+    },
+    {
+      id: 'crunch', name: 'Crunch', title: 'The Hothead', species: 'crocodile',
+      home: 'gatorgrove',
+      bio: 'Gertie\'s second brother: a short-fused, barrel-chested crocodile with a red bandana who cracks walnuts (and once a padlock) with his jaw. Always the first to throw a punch and the last to stop. Thinks every boy, girl and mailman is a threat to his sister. Secretly hilarious when he forgets to be angry.',
+      voice: 'Loud, hot-tempered, threats and growls, short angry sentences, calls people "pal" right before trouble.',
+      quirks: ['cracks walnuts with his jaw', 'growls when anyone gets close to Gertie', 'picks fights with the Hollow Gang'],
+      values: { kind: 0, funny: 0, chaotic: 0, generous: 0.5, brave: 2, rude: 1, violent: -1 },
+      start: { bond: -5, mood: 'irritated' },
+      relations: { gertie: [95, 'baby sister; would fight the sun for her'], brick: [70, 'brother'], crunch: [65, 'brother'], snap: [65, 'brother'], jawbreaker: [70, 'brother'], mole: [-30, 'the mailman; glared at on rotation'] },
+      look: { fur: '#4a8038', fur2: '#c0d088', hair: '#2a3a1a', hairStyle: 'none', ears: 'none', tail: 'croc', eyes: '#e0a030', top: '#8a3a2a', bottom: '#4d5a7a', acc: ['teeth', 'headband'], band: '#c82a2a', tall: 3, wide: 2 },
+      offline: ['You lookin\' at my sister, pal? *growls*', '*cracks a walnut with his jaw, staring at you*', 'One wrong move. ONE.'],
+      power: 4,
+    },
+    {
+      id: 'snap', name: 'Snap', title: 'The Night Watch', species: 'crocodile',
+      home: 'gatorgrove',
+      bio: 'Gertie\'s third brother: a lean, twitchy crocodile who takes the night watch at the Gator Grove and sleeps through the day. Paranoid, sharp-eyed, keeps a notebook of everyone who looked at his sister funny (it is very long). Knows every sound the swamp makes at night, and every sound that does not belong.',
+      voice: 'Clipped, suspicious, snappy questions, whispers, writes things down while you talk.',
+      quirks: ['writes your name in his notebook', 'hears everything', 'takes the night watch'],
+      values: { kind: 0, funny: 0, chaotic: 0, generous: 0.5, brave: 2, rude: 1, violent: -1 },
+      start: { bond: -5, mood: 'suspicious' },
+      relations: { gertie: [95, 'baby sister; would fight the sun for her'], brick: [70, 'brother'], crunch: [65, 'brother'], snap: [65, 'brother'], jawbreaker: [70, 'brother'], mole: [-30, 'the mailman; glared at on rotation'] },
+      look: { fur: '#4f7a40', fur2: '#c4d090', hair: '#2a3a1a', hairStyle: 'none', ears: 'none', tail: 'croc', eyes: '#f0c040', top: '#2a3448', bottom: '#2a2a3a', acc: ['teeth', 'cap'], capColor: '#2a2a34', tall: 2 },
+      offline: ['*writes something in a notebook* Name?', 'I heard you coming three minutes ago.', 'Why are you here. Who sent you.'],
+      power: 3,
+    },
+    {
+      id: 'jawbreaker', name: 'Jawbreaker', title: 'The Gentle Giant', species: 'crocodile',
+      home: 'gatorgrove',
+      bio: 'The youngest and by far the biggest of Gertie\'s brothers: a mountain of a crocodile who looks like he eats cars and actually knits scarves, keeps a pressed-flower album and cries at weddings. Gentle and soft-spoken until someone threatens Gertie, at which point he becomes a natural disaster. The only brother who actually likes the player a little.',
+      voice: 'Soft, slow, kind and shy; apologises a lot; becomes terrifyingly calm when angry.',
+      quirks: ['knits during conversations', 'cries at sweet things', 'terrifyingly calm when angry'],
+      values: { kind: 0, funny: 0, chaotic: 0, generous: 0.5, brave: 2, rude: 1, violent: -1 },
+      start: { bond: -5, mood: 'gentle' },
+      relations: { gertie: [95, 'baby sister; would fight the sun for her'], brick: [70, 'brother'], crunch: [65, 'brother'], snap: [65, 'brother'], jawbreaker: [70, 'brother'], mole: [-30, 'the mailman; glared at on rotation'] },
+      look: { fur: '#5a9446', fur2: '#cfe09a', hair: '#2a3a1a', hairStyle: 'none', ears: 'none', tail: 'croc', eyes: '#e8c43a', top: '#c88aa8', bottom: '#4d6a8f', acc: ['teeth', 'scarf'], scarf: '#e8a0c0', tall: 4, wide: 2 },
+      offline: ['*knitting* Oh! Hello. Sorry. Hello.', 'Gertie talks about you. She says you are nice. Are you nice?', '*sniffles* That\'s... so sweet.'],
+      power: 4,
+    },
+    // ---- v0.10: two rare, terrifyingly strong wanderers (fan versions, as the player asked)
+    {
+      id: 'gojo', name: 'Gojo', title: 'The Strongest', species: 'snow leopard', visitor: 'gojo', rare: true,
+      home: 'sky',
+      bio: 'A very tall, lean snow leopard with fluffy spiky white hair and a black blindfold over his eyes (behind it, impossibly bright blue eyes that see everything). Dark high-collared outfit, hands in his pockets. Without question the strongest being in the valley, and he knows it: attacks simply stop an inch from his fur, as if space itself refuses to let anything touch him. Cocky, playful and permanently a little bored; treats danger as a minor inconvenience and fights grinning. Shows up rarely and wanders far from town (the waterfall, the scrublands, the pines, the beach), eating sweets and teasing whoever he meets, while keeping a lazy eye on Sukuna. Under the jokes, he protects the weak without making a fuss about it.',
+      voice: 'Breezy, teasing and laid-back; jokes in the middle of danger; calls people "kiddo"; mentions his own absurd power casually; always has a sweet in his mouth.',
+      quirks: ['lifts his blindfold when things get serious', 'eats sweets constantly', 'nothing ever touches him', 'yawns in the middle of fights'],
+      values: { kind: 0.5, funny: 1.5, chaotic: 0.5, generous: 0.5, brave: 2, rude: 0, violent: -0.5 },
+      start: { bond: 5, mood: 'bored' },
+      relations: { sukuna: [-80, 'the one being he takes seriously; they fight on sight'], kira: [15, 'a fun little tiger'], jade: [30, 'finally someone with real technique'], darkborn: [25, 'old powers recognise each other'] },
+      look: { fur: '#e8e8ee', fur2: '#ffffff', hair: '#f4f6fa', hairStyle: 'wild', ears: 'cat', earIn: '#d4d4dc', tail: 'cat', eyes: '#7ad8ff', top: '#1c1c2a', bottom: '#1c1c2a', acc: ['blindfold'], tall: 4 },
+      offline: ['Yo! *waves lazily* Don\'t mind me, just being the strongest.', '*crunches a candy* Relax, kiddo. Nothing here can hurt you while I\'m around. Probably.', '*yawns* Is that it?'],
+      power: 5,
+    },
+    {
+      id: 'sukuna', name: 'Sukuna', title: 'The King of Curses', species: 'demon wolf', visitor: 'sukuna', rare: true,
+      home: 'sky',
+      bio: 'A tall, terrifying wolf-demon woman with spiked pink hair, four red eyes (a second, smaller pair under the first), black markings across her face and arms, and a second pair of arms she keeps folded when bored. White kimono with a dark sash. The King of Curses: utterly ruthless and arrogant, cruel for entertainment, with no heart at all. Not gruff-but-soft like Kira: she does not care, does not pity, and never holds back. Treats everyone as insects; might cut someone down and send them to the clinic just for standing in her way or speaking out of turn. The only being she finds interesting is Gojo. Appears rarely, far from town or lounging among the bandits (who are terrified of her), and leaves wreckage behind.',
+      voice: 'Cold, amused and regal; short cutting sentences; calls people "brat", "insect" or "fool"; laughs at pain and fear; never apologises.',
+      quirks: ['four eyes that never blink in unison', 'cuts things apart with a flick of her fingers', 'sits on whatever is highest', 'is amused by fear'],
+      values: { kind: -2, funny: -0.5, chaotic: 1, generous: -2, brave: 2, rude: 1.5, violent: 1.5 },
+      start: { bond: -25, mood: 'contemptuous' },
+      relations: { gojo: [-60, 'the only one worth fighting'], rook: [-20, 'a useful insect'], gristle: [-30, 'an insect'], kira: [-10, 'a kitten playing tiger'] },
+      look: { fur: '#e6cbbd', fur2: '#f6e4da', hair: '#f07a9a', hairStyle: 'wild', ears: 'fox', earIn: '#c88a90', earTip: '#2a1a20', tail: 'fox', tailTip: '#f07a9a', eyes: '#d8202a', top: '#f2ece4', bottom: '#2a2028', dress: true, acc: ['foureyes', 'markings', 'extraarms'], tall: 4, lashes: true },
+      offline: ['*four eyes slide toward you* ...Move, insect.', 'Hah. You\'re shaking. Good.', '*flicks her fingers; something behind you falls apart*'],
+      power: 5, villain: true,
+    },
   ];
 
 
@@ -502,7 +581,7 @@
     vix: { haunts: ['station', 'square', 'northlane', 'park', 'crossing'], s: [[5, 12, 'bakery'], [12, 15, 'roam'], [15, 18, 'bakery'], [18, 21, 'roam'], [21, 5, 'inside:bakery']] },
     marina: { haunts: ['river', 'pond', 'station', 'shrine'], s: [[7, 17, 'tower'], [17, 20, 'roam'], [20, 23, 'club'], [23, 7, 'inside:tower']], tuesday: [[9, 12, 'bakery'], [12, 18, 'roam']] },
     lily: { haunts: ['pond', 'park', 'river', 'shrine', 'sunflowers'], s: [[7, 10, 'lilycottage'], [10, 13, 'roam'], [13, 16, 'pond'], [16, 19, 'roam'], [19, 21, 'lilycottage'], [21, 7, 'inside:lilycottage']] },
-    kira: { haunts: ['woods', 'river', 'shrine', 'paddies', 'den'], s: [[0, 9, 'nap:den'], [9, 12, 'roam'], [12, 16, 'nap:roam'], [16, 19, 'roam'], [19, 24, 'nap:den']] },
+    kira: { haunts: ['woods', 'river', 'shrine', 'paddies', 'den'], s: [[0, 9, 'inside:den'], [9, 12, 'roam'], [12, 16, 'nap:roam'], [16, 20, 'roam'], [20, 22, 'nap:den'], [22, 24, 'inside:den']] },
     maggie: { haunts: ['swamp', 'eastlane', 'river', 'pond'], s: [[0, 10, 'inside:stilthouse'], [10, 16, 'stilthouse'], [16, 21, 'roam'], [21, 24, 'stilthouse']] },
     gertie: { haunts: ['square', 'paddies', 'busstop', 'river', 'station', 'swamp'], s: [[0, 8, 'inside:gatorgrove'], [8, 11, 'gatorgrove'], [11, 17, 'roam'], [17, 20, 'swamp'], [20, 24, 'inside:gatorgrove']] },
     scarecrow: { haunts: ['paddies'], s: [[0, 24, 'paddies']] },
@@ -518,13 +597,19 @@
     zahra: { haunts: ['shrine', 'park', 'river', 'pond'], s: [[7, 12, 'well'], [12, 17, 'roam'], [17, 22, 'well'], [22, 7, 'nap:well']] },
     chuckles: { haunts: ['square', 'park', 'station', 'busstop', 'northlane', 'pond', 'crossing'], s: [[0, 5, 'inside:club'], [5, 20, 'roam'], [20, 24, 'club']] },
     nimbus: { haunts: ['square', 'paddies', 'river'], s: [[13, 18, 'roam']] },
-    solaris: { haunts: ['sunflowers', 'pond', 'paddies'], s: [[10, 15, 'roam']] },
+    solaris: { haunts: ['sunflowers', 'pond', 'paddies', 'beach'], s: [[9, 17, 'roam']] },
     darkborn: { haunts: ['shrine', 'park', 'woods'], s: [[9, 12, 'lab'], [12, 16, 'roam'], [16, 20, 'lab'], [20, 9, 'nap:lab']] },
     mole: { haunts: ['northlane', 'lanes', 'station', 'square', 'busstop', 'crossing'], s: [[6, 9, 'postoffice'], [9, 16, 'roam'], [16, 18, 'postoffice'], [18, 6, 'inside:postoffice']] },
     sheep: { haunts: ['square', 'club'], s: [[9, 18, 'barber'], [18, 20, 'roam'], [20, 9, 'inside:barber']] },
     owl: { haunts: ['clinic'], s: [[0, 6, 'clinic'], [6, 14, 'inside:clinic'], [14, 24, 'clinic']] },
     beaver: { haunts: ['station', 'northlane', 'crossing'], s: [[7, 12, 'workshop'], [12, 14, 'roam'], [14, 17, 'workshop'], [17, 19, 'roam'], [19, 7, 'inside:workshop']] },
     roxy: { haunts: ['park', 'river', 'station', 'square', 'dojo', 'busstop'], s: [[5, 7, 'roam'], [7, 12, 'gym'], [12, 14, 'roam'], [14, 19, 'gym'], [19, 22, 'roam'], [22, 5, 'inside:gym']] },
+    brick: { haunts: ['swamp', 'square', 'eastlane'], s: [[0, 7, 'inside:gatorgrove'], [7, 12, 'gatorgrove'], [12, 16, 'square'], [16, 20, 'swamp'], [20, 24, 'inside:gatorgrove']] },
+    crunch: { haunts: ['swamp', 'eastlane', 'station', 'gym', 'crossing'], s: [[0, 8, 'inside:gatorgrove'], [8, 12, 'roam'], [12, 16, 'square'], [16, 21, 'swamp'], [21, 24, 'inside:gatorgrove']] },
+    snap: { haunts: ['swamp', 'eastlane'], s: [[0, 7, 'gatorgrove'], [7, 15, 'inside:gatorgrove'], [15, 20, 'swamp'], [20, 24, 'gatorgrove']] },
+    jawbreaker: { haunts: ['square', 'park', 'pond', 'store', 'sunflowers'], s: [[0, 8, 'inside:gatorgrove'], [8, 13, 'gatorgrove'], [13, 17, 'roam'], [17, 20, 'swamp'], [20, 24, 'inside:gatorgrove']] },
+    gojo: { haunts: ['falls', 'scrub', 'pines', 'heights', 'lookout', 'beach'], s: [[8, 23, 'roam']] },
+    sukuna: { haunts: ['hideout', 'scrub', 'pines', 'woods', 'foothills'], s: [[9, 24, 'roam']] },
     jade: { haunts: ['shrine', 'falls', 'woods', 'park', 'pines'], s: [[5, 12, 'dojo'], [12, 14, 'roam'], [14, 20, 'dojo'], [20, 22, 'roam'], [22, 5, 'inside:dojo']] },
   };
   MH.CHARS.forEach((c) => {
@@ -534,7 +619,7 @@
     if (d.friday) c.friday = d.friday;
   });
   // how much each villager enjoys parties (used for RSVPs), -1..1
-  const PARTY = { roxy: 0.7, jade: -0.3, juniper: 0.6, thistle: 0.2, rook: 0.3, gristle: 0.1, snitch: 0.5, mortimer: -0.6, vesper: 0.7, dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
+  const PARTY = { brick: -0.3, crunch: 0, snap: -0.5, jawbreaker: 0.6, gojo: 0.5, sukuna: -1, roxy: 0.7, jade: -0.3, juniper: 0.6, thistle: 0.2, rook: 0.3, gristle: 0.1, snitch: 0.5, mortimer: -0.6, vesper: 0.7, dionne: 1, chuckles: 1, bunny: 0.8, gertie: 0.8, sunny: 0.5, clucky: 0.6, vix: 0.2, lily: 0.3, marina: -0.1, kira: -0.7, sable: -0.6, scarecrow: -0.3, patty: -0.1, brenda: 0.1, mayor: 0.3, penelope: -0.2, zahra: 0.4, darkborn: 0.4, nimbus: -0.2, solaris: 0.6, box: 0.1, maggie: 0.4, mole: 0.5, sheep: 0.6, owl: -0.4, beaver: 0.4 };
   MH.CHARS.forEach((c) => (c.partyLove = PARTY[c.id] != null ? PARTY[c.id] : 0.2));
 
   // how the others feel about the two fighters (new games; older saves start these at 0)
@@ -542,7 +627,8 @@
     box: { roxy: [55, 'Roxy coaches boxing at his gym; like a sister to him'], jade: [30, 'mutual, silent respect'] },
     bunny: { roxy: [45, 'her boxing coach; they race every morning'], jade: [50, 'her sensei; she tries SO hard to sit still'] },
     kira: { jade: [25, 'maybe the only one who could beat her, so she never spars her'], roxy: [-5, 'keeps asking her for a fight; annoying'] },
-    gristle: { roxy: [-45, 'the kangaroo who decked him'] }, rook: { jade: [-35, 'the mantis who disarmed him'] }, thistle: { jade: [50, 'tea and old legends'] },
+    gristle: { roxy: [-45, 'the kangaroo who decked him'], sukuna: [-60, 'terrified of her'] }, rook: { jade: [-35, 'the mantis who disarmed him'], sukuna: [-40, 'pretends he is not terrified of her'] },
+    gertie: { brick: [90, 'big brother'], crunch: [85, 'big brother'], snap: [85, 'big brother'], jawbreaker: [95, 'favourite big brother'] }, thistle: { jade: [50, 'tea and old legends'] },
   };
   for (const id in REV) { const c = MH.CHARS.find((x) => x.id === id); if (c) c.relations = Object.assign(c.relations || {}, REV[id]); }
   MH.CHAR = {};
@@ -554,16 +640,16 @@
   const VIOLENT = { kira: -0.5, maggie: -0.5, darkborn: 0.5, chuckles: -1, gertie: -1, box: -1, nimbus: -1.5, solaris: -1.5, zahra: -1 };
   MH.CHARS.forEach((c) => { if (c.values && c.values.violent == null) c.values.violent = VIOLENT[c.id] != null ? VIOLENT[c.id] : -2; });
   // villagers who don't scare easily (they get angry instead of afraid)
-  MH.TOUGH = ['roxy', 'jade', 'kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable', 'thistle', 'rook', 'gristle', 'mortimer'];
+  MH.TOUGH = ['brick', 'crunch', 'snap', 'jawbreaker', 'gojo', 'sukuna', 'roxy', 'jade', 'kira', 'marina', 'gertie', 'box', 'darkborn', 'nimbus', 'solaris', 'zahra', 'scarecrow', 'bunny', 'maggie', 'sable', 'thistle', 'rook', 'gristle', 'mortimer'];
   // fight difficulty 1 (easy) .. 5 (VERY HARD)
   const POWER = { kira: 5, nimbus: 5, solaris: 5, darkborn: 5, box: 4, marina: 4, gertie: 4, zahra: 4, scarecrow: 4, bunny: 3, maggie: 3, clucky: 3, sable: 3, brenda: 3, dionne: 2, vix: 2, chuckles: 2, mayor: 1, sunny: 1, lily: 1, patty: 2, penelope: 2, mole: 1, sheep: 1, owl: 1, beaver: 2 };
   MH.CHARS.forEach((c) => { if (c.power == null) c.power = POWER[c.id] || 2; });
   MH.BANDITS = MH.CHARS.filter((c) => c.bandit).map((c) => c.id);
   MH.VILLAINS = MH.CHARS.filter((c) => c.bandit || c.villain).map((c) => c.id);
   // who already owns a phone (you can buy the others one)
-  MH.PHONE_OWNERS = ['roxy', 'dionne', 'brenda', 'penelope', 'mayor', 'vix', 'chuckles', 'bunny', 'juniper', 'rook', 'vesper', 'mortimer', 'box'];
+  MH.PHONE_OWNERS = ['gojo', 'roxy', 'dionne', 'brenda', 'penelope', 'mayor', 'vix', 'chuckles', 'bunny', 'juniper', 'rook', 'vesper', 'mortimer', 'box'];
   // the new highland places get some visitors from town too
-  const EXTRA_HAUNTS = { kira: ['falls', 'dojo'], box: ['dojo'], juniper: ['dojo'], marina: ['falls'], lily: ['falls', 'orchard'], bunny: ['lookout', 'foothills', 'dojo'], patty: ['onsen'], darkborn: ['onsen'], sunny: ['orchard'], clucky: ['orchard'], chuckles: ['heights', 'dojo'], dionne: ['onsen'], gertie: ['falls'], penelope: ['scrub'] };
+  const EXTRA_HAUNTS = { roxy: ['beach'], f_rin: [], kira: ['falls', 'dojo'], box: ['dojo'], juniper: ['dojo'], marina: ['falls', 'beach'], lily: ['falls', 'orchard'], bunny: ['lookout', 'foothills', 'dojo'], patty: ['onsen'], darkborn: ['onsen'], sunny: ['orchard'], clucky: ['orchard'], chuckles: ['heights', 'dojo'], dionne: ['onsen', 'beach'], gertie: ['falls'], penelope: ['scrub'] };
   MH.CHARS.forEach((c) => { (EXTRA_HAUNTS[c.id] || []).forEach((h) => c.haunts && !c.haunts.includes(h) && c.haunts.push(h)); });
 
   MH.bondTier = (b) =>

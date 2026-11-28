@@ -571,3 +571,29 @@ body.fighting #btnA, body.fighting #joyZone { display: none; }
 #chat .fightui { z-index: 50; }
 /* v0.9.1: the text box is a block so long lines can be cut from the top (older lines show their end) */
 #says .say .txt { display: block; }
+.form .row.wrap { flex-wrap: wrap; }
+
+/* ---------- v0.10: texting looks like a phone */
+#chat.phone #cast, #chat.phone #says, #chat.phone #castShelf, #chat.phone #castTags, #chat.phone #meBubble, #chat.phone #btnPlay { display: none !important; }
+#chat:not(.phone) #phoneView { display: none; }
+#phoneView { position: absolute; left: 50%; transform: translateX(-50%); top: max(56px, calc(env(safe-area-inset-top) + 50px)); bottom: calc(var(--barH) + 10px); width: min(420px, calc(100% - 24px)); z-index: 30; display: flex; flex-direction: column; border-radius: 30px; border: 7px solid #15131a; box-shadow: 0 16px 44px rgba(0,0,0,0.55), inset 0 0 0 1px #3a3644; overflow: hidden; background: linear-gradient(160deg, #f3ecff 0%, #e4f2ff 55%, #fdf0e6 100%); }
+#phoneView::before { content: ""; position: absolute; top: 7px; left: 50%; transform: translateX(-50%); width: 84px; height: 18px; border-radius: 12px; background: #15131a; z-index: 2; }
+#phoneView .pvhead { display: flex; align-items: center; gap: 10px; padding: 30px 14px 10px; background: rgba(255,255,255,0.82); border-bottom: 1px solid #e0d8ec; backdrop-filter: blur(6px); }
+#phoneView .pvhead img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; object-position: 50% 8%; background: #e8dcc4; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
+#phoneView .pvhead b { display: block; color: #2a2236; font-size: 15px; }
+#phoneView .pvhead small { color: #3aa86a; font-size: 11.5px; font-weight: 700; }
+#phoneView .pvlist { flex: 1; overflow-y: auto; padding: 12px 12px 16px; display: flex; flex-direction: column; gap: 6px; -webkit-overflow-scrolling: touch; }
+#phoneView .pvday { align-self: center; font-size: 11px; color: #8a80a0; background: rgba(255,255,255,0.7); border-radius: 999px; padding: 2px 10px; margin: 6px 0; }
+#phoneView .pm { max-width: 80%; padding: 8px 12px; border-radius: 18px; font-size: 14.5px; line-height: 1.35; word-wrap: break-word; animation: pmIn 0.18s ease-out; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+#phoneView .pm.me { align-self: flex-end; background: linear-gradient(#4a9af8, #2f80ea); color: #fff; border-bottom-right-radius: 5px; }
+#phoneView .pm.them { align-self: flex-start; background: #ffffff; color: #22202a; border-bottom-left-radius: 5px; }
+#phoneView .pm.old { animation: none; opacity: 0.85; }
+#phoneView .pm .act { color: inherit; opacity: 0.8; }
+#phoneView .pm.typing { padding: 10px 14px; }
+@keyframes pmIn { from { transform: translateY(6px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.phoneui .msg .ub { font-style: normal; background: #e0403a; color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px; font-weight: 800; }
+/* hold A: a ring fills up, then you're "on your own" */
+#btnA.holding { opacity: 1; transform: scale(0.94); }
+#btnA.holding::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 4px solid #fff4d0; clip-path: inset(0 0 0 0); animation: holdA 0.6s linear forwards; }
+@keyframes holdA { from { transform: scale(0.75); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
+#chat.solo #chatbar { border-top: 2px solid #b89ae8; }

@@ -195,7 +195,8 @@
       F.renderBar(c); return;
     }
     const chance = HIT[p] + (pw !== 'fists' ? 0.06 : 0) + (cb.allies.length ? 0.05 : 0) + Math.min(5, MH.state.player.training || 0) * 0.03; // dojo lessons help
-    const hit = Math.random() < chance, crit = hit && Math.random() < 0.12;
+    // Gojo: space itself stops your fist an inch from his fur (almost always)
+    const hit = Math.random() < (tgt.id === 'gojo' ? chance * 0.2 : chance), crit = hit && Math.random() < 0.12;
     let dmg = 0;
     if (hit) { dmg = Math.round(26 * W.dmg * MH.rand(0.85, 1.15) * (crit ? 1.6 : 1) * (cb.spar ? 0.75 : 1)); tgt.hp = Math.max(0, tgt.hp - dmg); }
     const down = tgt.hp <= 0 || (cb.spar && tgt.hp <= tgt.max * 0.2);
@@ -308,7 +309,7 @@
   };
 
   // ---------------------------------------------------------------- the dodge box (your ❤️ vs their attacks)
-  const STYLE = { jade: ['storm', 'aimed', 'bars', 'slam'], roxy: ['side', 'aimed', 'side', 'slam'], f_rin: ['aimed', 'side'], kira: ['bars', 'aimed', 'slam'], rook: ['aimed', 'aimed', 'side'], gristle: ['slam', 'rain'], snitch: ['pebbles'], mortimer: ['bars', 'aimed'], vesper: ['homing'], box: ['bouncers', 'slam'], bunny: ['side', 'side', 'aimed'], marina: ['waves', 'side'], gertie: ['slam', 'bouncers'], nimbus: ['storm', 'rain'], darkborn: ['ring', 'homing', 'bars'], solaris: ['ring', 'rain'], zahra: ['ring', 'homing'], thistle: ['slam', 'aimed'], maggie: ['swarm', 'homing'], clucky: ['aimed', 'rain'], sable: ['homing', 'bars'], scarecrow: ['ring', 'homing'], dionne: ['waves', 'rain'], chuckles: ['bouncers', 'rain'], brenda: ['slam', 'bouncers'] };
+  const STYLE = { gojo: ['homing', 'ring', 'storm', 'bars'], sukuna: ['storm', 'slam', 'bars', 'aimed'], brick: ['slam', 'bouncers'], crunch: ['side', 'aimed', 'slam'], snap: ['aimed', 'aimed'], jawbreaker: ['slam', 'bouncers', 'bars'], jade: ['storm', 'aimed', 'bars', 'slam'], roxy: ['side', 'aimed', 'side', 'slam'], f_rin: ['aimed', 'side'], kira: ['bars', 'aimed', 'slam'], rook: ['aimed', 'aimed', 'side'], gristle: ['slam', 'rain'], snitch: ['pebbles'], mortimer: ['bars', 'aimed'], vesper: ['homing'], box: ['bouncers', 'slam'], bunny: ['side', 'side', 'aimed'], marina: ['waves', 'side'], gertie: ['slam', 'bouncers'], nimbus: ['storm', 'rain'], darkborn: ['ring', 'homing', 'bars'], solaris: ['ring', 'rain'], zahra: ['ring', 'homing'], thistle: ['slam', 'aimed'], maggie: ['swarm', 'homing'], clucky: ['aimed', 'rain'], sable: ['homing', 'bars'], scarecrow: ['ring', 'homing'], dionne: ['waves', 'rain'], chuckles: ['bouncers', 'rain'], brenda: ['slam', 'bouncers'] };
   F.dodge = function (o, done) {
     const pows = o.enemies.map((id) => o.power || pw5(id)), maxP = Math.max(...pows);
     const dur = 3 + maxP * 0.95 + (o.enemies.length - 1) * 1.3;
@@ -321,7 +322,7 @@
     const x = cv.getContext('2d'); x.scale(dpr, dpr);
     const heart = { x: W / 2, y: H * 0.62, r: 7 };
     const bullets = [], rects = [];
-    let t = 0, inv = 0, taken = 0, over = false, last = performance.now();
+    let t = 0, inv = 0, taken = 0, over = false, last = performance.now(), pre = 3; // 3-2-1 before anything flies
     const ow = (id) => MH.WEAPONS[F.weaponOf(id)].dmg;
     const dmgOf = (id) => Math.max(2, Math.round((2 + pw5(id) * 1.8) * ow(id) * (o.spar ? 0.5 : 1) * o.guard));
     // --- primitives
@@ -374,10 +375,11 @@
     const owner = (b) => b.owner || o.enemies[0];
     function frame(now) {
       if (over) return;
-      const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt; inv = Math.max(0, inv - dt);
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (pre > 0) pre -= dt; else { t += dt; inv = Math.max(0, inv - dt); }
       const ks = 150 * dt; if (keys.ArrowLeft) heart.x -= ks; if (keys.ArrowRight) heart.x += ks; if (keys.ArrowUp) heart.y -= ks; if (keys.ArrowDown) heart.y += ks;
       heart.x = MH.clamp(heart.x, heart.r, W - heart.r); heart.y = MH.clamp(heart.y, heart.r, H - heart.r);
-      if (t < dur - 0.6) spawners.forEach((s) => { const n0 = bullets.length, r0 = rects.length; s.run(dt); for (let i = n0; i < bullets.length; i++) bullets[i].owner = s.id; for (let i = r0; i < rects.length; i++) rects[i].owner = s.id; });
+      if (pre <= 0 && t < dur - 0.6) spawners.forEach((s) => { const n0 = bullets.length, r0 = rects.length; s.run(dt); for (let i = n0; i < bullets.length; i++) bullets[i].owner = s.id; for (let i = r0; i < rects.length; i++) rects[i].owner = s.id; });
       for (const b of bullets) {
         b.life -= dt;
         if (b.home) { const d = toward(b.x, b.y, 1); b.vx += d.vx * b.home * dt; b.vy += d.vy * b.home * dt; const sp = Math.hypot(b.vx, b.vy), mx = 150; if (sp > mx) { b.vx *= mx / sp; b.vy *= mx / sp; } }
@@ -407,6 +409,12 @@
         x.beginPath(); x.moveTo(hx, hy + s); x.bezierCurveTo(hx - s * 1.6, hy - s * 0.1, hx - s * 0.7, hy - s * 1.3, hx, hy - s * 0.35); x.bezierCurveTo(hx + s * 0.7, hy - s * 1.3, hx + s * 1.6, hy - s * 0.1, hx, hy + s); x.fill();
       }
       x.strokeStyle = '#fff'; x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
+      if (pre > 0) { // the countdown: get your heart in position
+        const n = Math.ceil(pre), f = pre - Math.floor(pre);
+        x.save(); x.globalAlpha = 0.35 + 0.65 * f; x.fillStyle = '#ffffff'; x.font = `900 ${Math.round(58 + 26 * f)}px sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(String(n), W / 2, H * 0.4); x.restore();
+        x.fillStyle = 'rgba(255,255,255,0.7)'; x.font = '700 12px sans-serif'; x.textAlign = 'center'; x.fillText('get ready…', W / 2, H * 0.4 + 46);
+      }
       ui.querySelector('.dtime i').style.width = Math.max(0, 100 - t / dur * 100) + '%';
       if (t >= dur) { finish(); return; }
       requestAnimationFrame(frame);

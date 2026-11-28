@@ -42,6 +42,15 @@
     townhall: { x0: 188, y0: 18, x1: 201, y1: 27, floor: G.FLOOR, wall: '#e4dccb', building: 'townhall', open: [8, 18], name: 'inside Town Hall', desc: 'inside the crooked Town Hall: the Mayor\'s cluttered desk, rows of meeting chairs, flags and overflowing notice boards' },
     clinic: { x0: 204, y0: 18, x1: 215, y1: 26, floor: G.TILEF, wall: '#eef2f0', building: 'clinic', open: [0, 24], name: 'inside the clinic', desc: 'inside Doctor Owl\'s clinic: two patient beds, a cabinet of remedies, a desk with immaculate notes' },
     mall: { x0: 154, y0: 43, x1: 175, y1: 55, floor: G.TILEF, wall: '#f0e6dc', building: 'mall', open: [9, 21], name: 'inside Mirehollow Mall', desc: 'inside Mirehollow Mall: a bright little shopping arcade with striped kiosks (food court, gift corner, fashion boutique, home & decor, fun zone), café tables and soft muzak' },
+    // villagers' homes (private: you knock, or sneak in)
+    lilycottage: { x0: 154, y0: 60, x1: 165, y1: 68, floor: G.FLOOR, wall: '#e6f4d4', building: 'lilycottage', private: true, name: 'inside Lily Pad Cottage', desc: 'inside Lily Pad Cottage: tiny and tidy, a teapot shelf, lily-pad rugs, potted ferns and a little bed with a frog quilt' },
+    honeycomb: { x0: 168, y0: 60, x1: 181, y1: 69, floor: G.CARPET, wall: '#f2cf6a', building: 'honeycomb', private: true, name: 'inside the Honeycomb', desc: 'inside the Honeycomb (Brenda and Patty\'s place): a huge glowing gaming setup, beanbags, snack wrappers everywhere and a bed Patty never leaves' },
+    coop: { x0: 184, y0: 60, x1: 199, y1: 70, floor: G.FLOOR, wall: '#f6eedc', building: 'coop', private: true, name: 'inside the Coop', desc: 'inside the Coop: Clucky\'s big chaotic family home, nests and tiny beds, a long dinner table, crayon drawings on every wall and absolutely no peace' },
+    gatorgrove: { x0: 202, y0: 60, x1: 215, y1: 69, floor: G.BOARD, wall: '#7a6a4a', building: 'gatorgrove', private: true, name: 'inside the Gator Grove', desc: 'inside the Gator Grove: a damp mossy hut with a mud pool, five hammocks, log weights and a shrine of Gertie\'s macaroni art' },
+    den: { x0: 154, y0: 74, x1: 165, y1: 82, floor: G.STONE, wall: '#3a3438', building: 'den', private: true, name: 'inside Kira\'s Den', desc: 'inside Kira\'s den: a dim cave with a nest of blankets and stolen pillows, claw marks on the walls' },
+    stilthouse: { x0: 168, y0: 74, x1: 179, y1: 82, floor: G.BOARD, wall: '#4e4656', building: 'stilthouse', private: true, name: 'inside the Stilt House', desc: 'inside Maggie\'s Stilt House: dark and humid, jars of "samples" on every shelf, a red velvet chaise, a faint buzzing' },
+    cabin: { x0: 182, y0: 74, x1: 193, y1: 82, floor: G.FLOOR, wall: '#c8a070', building: 'cabin', private: true, name: 'inside Juniper\'s Cabin', desc: 'inside Juniper\'s log cabin: maps and sighting logs pinned everywhere, a crackling radio, binoculars on hooks, a bunk bed' },
+    hideout: { x0: 196, y0: 74, x1: 211, y1: 84, floor: G.STONE, wall: '#3a3438', building: 'hideout', private: true, name: 'inside the Hollow', desc: 'inside the bandits\' cave: piles of stolen goods, a crate table, lanterns, hammocks and a hand-painted TOLL BOOTH sign' },
     dojo: { x0: 178, y0: 32, x1: 193, y1: 42, floor: G.TATAMI, wall: '#efe6d0', building: 'dojo', open: [6, 21], name: 'inside the Jade Dojo', desc: 'inside the Jade Dojo: tatami mats, a rack of practice weapons (bokken, bo staffs, kendo shinai), hanging calligraphy scrolls, a wooden training dummy and a little shrine shelf' },
     barber: { x0: 154, y0: 32, x1: 163, y1: 39, floor: G.TILEF, wall: '#f2e8f2', building: 'barber', open: [9, 18], name: 'inside the barbershop', desc: 'inside the barbershop: three barber chairs, mirrors, a waiting sofa and a lot of questionable hair on the floor' },
   };
@@ -149,6 +158,7 @@
     hideout: { name: 'the Hollow Crags', r: [54, 174, 74, 184], desc: 'up on the Hollow Crags, a barren rocky plateau around the bandits\' cave — not a nice place to be alone' },
     scrub: { name: 'the scrublands', r: [90, 162, 146, 192], desc: 'in the dry rocky scrublands at the southern edge of the valley' },
     dojo: { name: 'the Jade Dojo', r: [14, 94, 29, 100], desc: 'in the sandy training yard of the Jade Dojo, students shouting "HAI!" in unison' },
+    beach: { name: 'the beach', r: [6, 168, 44, 196], desc: 'on the sandy beach in the far south-west, waves rolling in from the open sea, gulls overhead' },
     pines: { name: 'the Pine Forest', r: [2, 156, 48, 197], desc: 'in the dark, quiet Pine Forest at the south-west of the valley' },
   };
   // Public places townsfolk wander between.
@@ -232,6 +242,13 @@
       else if (x > 88 && y > 160 && n < 0.55) setG(x, y, G.ROCK);
       else if (n < 0.16) setG(x, y, G.ROCK);
     });
+    // the beach: the valley opens onto the sea in the far south-west corner
+    rect(0, 150, 60, H - 1, (x, y) => {
+      const k = x * 0.8 + (H - 3 - y) * 1.0 + (MH.art.vnoise(x, y, 6, 91) - 0.5) * 5;
+      if (k < 22) setG(x, y, G.DEEP);
+      else if (k < 30) setG(x, y, G.WATER);
+      else if (k < 40) setG(x, y, G.SAND);
+    });
     // Lookout Hill: two levels, a summit with a lookout tower
     plateau(8, 129, 36, 149, 1, G.HIGH, 31);
     plateau(14, 131, 30, 139, 2, G.ROCK, 32);
@@ -260,6 +277,7 @@
     paintPath([[42, 100], [42, 160]], 2);              // west road down to the hills
     paintPath([[42, 160], [120, 160]], 2);             // valley road
     paintPath([[22, 152], [22, 160], [42, 160]], 2, G.PATH);
+    paintPath([[42, 160], [42, 168], [36, 176], [30, 181]], 2, G.PATH); // down to the beach
     paintPath([[100, 154], [100, 160]], 2, G.PATH);
     paintPath([[133, 154], [133, 160], [120, 160]], 2, G.PATH);
     paintPath([[63, 188], [63, 191], [79, 191]], 2, G.PATH);
@@ -271,6 +289,16 @@
     paintPath([[48, 141], [70, 141]], 1, G.PATH);       // orchard lane
   }
   function highlandProps() {
+    // the beach: a little wooden dock, parasols, rocks, shells (and whatever the tide brings)
+    for (let x = 8; x < 50; x++) for (let y = 160; y < H - 1; y++) {
+      if (world.g(x, y) !== G.SAND || world.isSolid(x, y)) continue;
+      const r = MH.hash2(x, y, 92);
+      if (r < 0.03) prop('rock', x, y, { small: true }); else if (r < 0.07) flat('shell', x, y, { pick: 'seashell' }); else if (r < 0.075) prop('parasol', x, y, { solid: false });
+    }
+    world.beachShore = [];
+    for (let x = 4; x < 56; x++) for (let y = 150; y < H - 1; y++) if (world.g(x, y) === G.SAND && (world.isWater(x - 1, y + 1) || world.isWater(x, y + 1) || world.isWater(x - 1, y))) world.beachShore.push([x, y]);
+    { const s0 = world.beachShore[Math.floor(world.beachShore.length * 0.45)]; if (s0) flat('dock', s0[0] - 1, s0[1] + 1); }
+    { const L = LOCS.beach.r, fx = Math.round((L[0] + L[2]) / 2) + 4, fy = L[1] + 6; const f = world.nearestWalkable(fx, fy); world.firepit = prop('firepit', f.tx, f.ty); }
     const rng = MH.seeded(777);
     // Lookout tower on the summit, lanterns on Crag Heights
     prop('lookout', 22, 135, { w: 2 }); setSolid(23, 135); setSolid(22, 134); setSolid(23, 134);
@@ -493,6 +521,16 @@
     // clinic
     fur('clinicbed', 205, 21, 1, 2); fur('clinicbed', 213, 21, 1, 2); fur('desk', 208, 21, 2); fur('cabinet', 211, 20); fur('plant', 214, 25); deco('chair', 207, 24); deco('chair', 208, 24);
     ROOMS.clinic.staff = [[208, 20], [209, 20]];
+    // --- villagers' homes: beds are flat bedrolls (sleepers lie on them), the rest is furniture
+    const homeRoom = (id, beds, stuff) => { ROOMS[id].beds = beds; beds.forEach(([x, y]) => deco('bedroll', x, y)); stuff(); };
+    homeRoom('lilycottage', [[156, 63]], () => { fur('shelf', 162, 62, 1, 1, { v: 1 }); fur('lowtable', 160, 65, 2); deco('cushion', 159, 65); deco('cushion', 162, 66); fur('plant', 155, 66); fur('plant', 164, 66); deco('rug', 159, 66); });
+    homeRoom('honeycomb', [[170, 63], [176, 66]], () => { fur('tv', 172, 62); fur('tv', 174, 62); fur('desk', 172, 63, 3); deco('cushion', 173, 65); deco('cushion', 178, 65); fur('drinkfridge', 180, 62); fur('plant', 169, 68); deco('rug', 177, 67); });
+    homeRoom('coop', [[186, 63], [190, 63], [194, 63], [186, 68]], () => { fur('cafetable', 191, 66); fur('cafetable', 194, 66); deco('chair', 190, 66); deco('chair', 193, 66); deco('chair', 195, 66); fur('kitchen', 197, 62, 2); fur('plant', 198, 69); deco('poster', 189, 61); deco('poster', 193, 61); });
+    homeRoom('gatorgrove', [[204, 63], [208, 63], [212, 63], [204, 67], [212, 67]], () => { fur('weightrack', 208, 66); fur('shelf', 214, 66, 1, 1, { v: 3 }); deco('rug', 208, 68); });
+    homeRoom('den', [[157, 77]], () => { deco('rug', 161, 79); fur('plant', 164, 81); });
+    homeRoom('stilthouse', [[170, 77]], () => { fur('shelf', 175, 76, 1, 1, { v: 5 }); fur('shelf', 176, 76, 1, 1, { v: 6 }); fur('sofa', 173, 80, 2); fur('plant', 178, 81); });
+    homeRoom('cabin', [[184, 77]], () => { fur('desk', 188, 76, 2); deco('poster', 187, 75); deco('poster', 190, 75); fur('shelf', 191, 76, 1, 1, { v: 7 }); deco('rug', 188, 80); });
+    homeRoom('hideout', [[198, 77], [202, 77], [206, 77]], () => { fur('cafetable', 203, 81); deco('chair', 202, 81); deco('chair', 204, 81); fur('shelf', 209, 77, 1, 1, { v: 8 }); fur('drinkfridge', 210, 79); });
     // the Jade Dojo
     fur('punchbag', 180, 35); fur('punchbag', 191, 35); fur('weaponrack', 186, 34); fur('weaponrack', 187, 34);
     deco('scroll', 181, 33); deco('scroll', 184, 33); deco('scroll', 189, 33); deco('mat', 185, 37); deco('mat', 186, 39); fur('plant', 179, 41); fur('plant', 192, 41);

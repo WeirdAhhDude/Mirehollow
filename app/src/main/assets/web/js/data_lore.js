@@ -15,7 +15,7 @@
       'Market Square (Golden Loaf Bakery, the bookstore that is secretly Dr. Penelope\'s lab, crooked Town Hall, General Store, Velvet Antler club, barber, clinic, wishing well); ' +
       'a river into the duck pond (Lily Pad Cottage, Marina\'s lifeguard tower); residential lanes (the Coop, the Honeycomb, Burrow Gym, post office, workshop, the player\'s house by the west crossing); the Jade Dojo (martial arts school) past the bamboo in the south-west; ' +
       'park, sunflower field, rice paddies (the Scarecrow), cornfield, bus stop; the Old Shrine and Kira\'s den in the Deep Woods; the swamp (Maggie\'s Stilt House, the Gator Grove) past the last lamp post. ' +
-      'Lots of animal townsfolk; the player is the only human. Weekly gatherings: Sunday Potluck at the Coop, Saturday brunch at the club, Gym Day, Friday LAN Night, Thursday swamp cookout, Saturday picnic in the park, Wednesday lantern evening at the shrine.',
+      'Lots of animal townsfolk; the player is the only human. The beach and the open sea are in the far south-west, past the pines. Weekly gatherings: Saturday Sunset Bonfire at the beach, Sunday Potluck at the Coop, Saturday brunch at the club, Gym Day, Friday LAN Night, Thursday swamp cookout, Saturday picnic in the park, Wednesday lantern evening at the shrine.',
     groups:
       'Loose groups: Nap rotation (Patty, Brenda, Kira). Mom Collective (Clucky, Sunny, Lily, plus Vix). Party Crew (Dionne, Bunny, Marina, Chuckles). Lab Rats (Penelope plus anyone she talks into a sample). Sky/Size Club (Nimbus, Zahra, the Darkborn, Solaris — they duck under doorways and accidentally wreck roofs). The Unholy Trinity (Gertie unaware, Scarecrow unbothered, Mayor trying to escape). The Fighters: Box, Roxy and Bunny at the gym; Sensei Jade and her students (Rin, Tobi, Bo) at the dojo.',
     drama:
@@ -34,6 +34,7 @@
     { day: 1, from: 9, to: 11, at: 'bakery', name: 'Shark-Cookie Tuesday', who: ['marina', 'sunny', 'vix'] },
     { day: 5, from: 15, to: 18, at: 'park', name: 'Picnic in the Park', who: ['lily', 'clucky', 'sunny', 'patty', 'zahra', 'darkborn', 'bunny', 'gertie'] },
     { day: 2, from: 19, to: 22, at: 'shrine', name: 'Lantern Evening at the Shrine', who: ['lily', 'darkborn', 'zahra', 'penelope', 'mayor', 'marina'] },
+    { day: 5, from: 18, to: 23, at: 'beach', name: 'Sunset Bonfire at the Beach', who: ['marina', 'dionne', 'bunny', 'chuckles', 'roxy', 'sunny', 'vix', 'gertie', 'jawbreaker', 'lily', 'juniper'] },
   ];
 
   // Little friend-group outings: each day a couple of these happen at a random spot & time.
@@ -55,7 +56,8 @@
     rose: { name: 'Climbing Rose', icon: '🌹', desc: 'Snipped from a fence. Romantic, slightly thorny.' },
     mushroom: { name: 'Glowcap Mushroom', icon: '🍄', desc: 'Faintly glowing. Penelope would want this.' },
     berries: { name: 'Bramble Berries', icon: '🫐', desc: 'Sweet berries from the woods.' },
-    seashell: { name: 'Pond Seashell', icon: '🐚', desc: 'Somehow in a pond. Marina collects these.' },
+    seashell: { name: 'Seashell', icon: '🐚', desc: 'A pretty shell. Marina collects these.' },
+    bottle: { name: 'Message in a bottle', icon: '🍾', desc: 'Washed up on the beach. Someone, somewhere, wrote this.' },
     corn: { name: 'Ear of Corn', icon: '🌽', desc: 'From the Scarecrow\'s field. She saw you take it.' },
     sunflower: { name: 'Sunflower', icon: '🌻', desc: 'Tall and cheerful. Sunny would love it.' },
     feather: { name: 'Crow Feather', icon: '🪶', desc: 'Left behind by one of the Scarecrow\'s crows.' },

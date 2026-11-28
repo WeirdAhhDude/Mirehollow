@@ -92,7 +92,7 @@
   };
   function updateFx(dt) {
     R.fx = R.fx.filter((f) => (f.t += dt) < f.life);
-    for (const f of R.fx) { f.x += f.vx * dt; f.y += f.vy * dt; if (f.kind === 'heart' || f.kind === 'sparkle' || f.kind === 'note') f.vy -= 10 * dt; }
+    for (const f of R.fx) { f.x += f.vx * dt; f.y += f.vy * dt; if (f.kind === 'heart' || f.kind === 'sparkle' || f.kind === 'note') f.vy -= 10 * dt; else if (f.kind === 'fire') { f.vy -= 60 * dt; f.vx *= 0.9; } }
   }
   function drawFx() {
     for (const f of R.fx) {
@@ -101,6 +101,7 @@
       if (f.kind === 'crow') { ctx.strokeStyle = '#1a1420'; ctx.lineWidth = 1.2; ctx.beginPath(); const w = 3 + Math.sin(f.t * 20) * 1.5; ctx.moveTo(f.x - 4, f.y - w * 0.5); ctx.quadraticCurveTo(f.x - 2, f.y, f.x, f.y); ctx.quadraticCurveTo(f.x + 2, f.y, f.x + 4, f.y - w * 0.5); ctx.stroke(); }
       else if (f.kind === 'heart') { ctx.fillStyle = '#ff5a8a'; ctx.beginPath(); ctx.moveTo(f.x, f.y + 2); ctx.bezierCurveTo(f.x - 3, f.y - 0.5, f.x - 1.5, f.y - 3, f.x, f.y - 1.2); ctx.bezierCurveTo(f.x + 1.5, f.y - 3, f.x + 3, f.y - 0.5, f.x, f.y + 2); ctx.fill(); }
       else if (f.kind === 'sparkle') { ctx.fillStyle = '#fff6a0'; ctx.beginPath(); for (let i = 0; i < 4; i++) { const ang = (i / 4) * Math.PI * 2 + f.r; ctx.lineTo(f.x + Math.cos(ang) * 2.2, f.y + Math.sin(ang) * 2.2); ctx.lineTo(f.x + Math.cos(ang + 0.785) * 0.7, f.y + Math.sin(ang + 0.785) * 0.7); } ctx.fill(); }
+      else if (f.kind === 'fire') { const k = Math.max(0, 1 - f.t / f.life); ctx.fillStyle = `rgba(255,${Math.round(120 + 100 * k)},40,${0.85 * k})`; ctx.beginPath(); ctx.arc(f.x, f.y, 1.2 + 2.4 * k, 0, 7); ctx.fill(); }
       else if (f.kind === 'note') { ctx.fillStyle = '#8a5ae8'; ctx.beginPath(); ctx.ellipse(f.x, f.y, 1.4, 1, -0.3, 0, 7); ctx.fill(); ctx.fillRect(f.x + 1, f.y - 5, 0.6, 5); }
       else if (f.kind === 'petal') { ctx.fillStyle = '#f8c4d4'; ctx.beginPath(); ctx.ellipse(f.x, f.y, 1.2, 0.6, f.r + f.t * 3, 0, 7); ctx.fill(); }
       else { ctx.fillStyle = '#ffffff'; ctx.fillRect(f.x, f.y, 1, 1); }
@@ -134,6 +135,21 @@
   function tallOf(e) { return (e.ch && e.ch.look && e.ch.look.tall) || 0; }
   R.headTop = function (e) { const sc = MH.art.chibiScale(e.ch || e); return e.y - (36 + tallOf(e) * 1.9) * sc; };
 
+  // one of Clucky's chicks: a tiny yellow puff that hops
+  function drawChick(c) {
+    const hop = c.moving ? Math.abs(Math.sin(MH.now * 14 + c.i)) * 2.2 : 0, x = c.x, y = c.y - hop;
+    ctx.fillStyle = 'rgba(20,30,20,0.2)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 0.5, 3.2, 1.2, 0, 0, 7); ctx.fill();
+    ctx.save(); ctx.translate(x, y); if (c.dir < 0) ctx.scale(-1, 1);
+    if (c.asleep) { ctx.fillStyle = '#f8d850'; ctx.beginPath(); ctx.ellipse(0, -2.4, 3.6, 2.6, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(0.6, -2.8); ctx.lineTo(2, -2.8); ctx.stroke(); ctx.restore(); return; }
+    ctx.strokeStyle = '#e08a20'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(-1, -1); ctx.lineTo(-1.2, 0.4); ctx.moveTo(1, -1); ctx.lineTo(1.3, 0.4); ctx.stroke();
+    ctx.fillStyle = '#f8d850'; ctx.strokeStyle = '#c89a20'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.ellipse(0, -3, 3.2, 2.7, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(1.6, -6, 2.1, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f09a20'; ctx.beginPath(); ctx.moveTo(3.4, -6.4); ctx.lineTo(5, -5.8); ctx.lineTo(3.4, -5.2); ctx.fill();
+    ctx.fillStyle = '#1a1410'; ctx.beginPath(); ctx.arc(2.4, -6.5, 0.5, 0, 7); ctx.fill();
+    ctx.restore();
+    if (c.peep > 0) { ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('peep!', x, y - 11 - (1.1 - c.peep) * 4); }
+  }
   function drawEntity(e) {
     const ch = e.ch || e.chr;
     if (!ch) return;
@@ -238,12 +254,14 @@
     }
     for (const e of MH.npcs) if (!e.hidden && e.x > cx - 60 && e.x < cx + vw + 60 && e.y > cy - 20 && e.y < cy + vh + 90) list.push({ y: e.y, e });
     if (!MH.titleMode) list.push({ y: MH.player.y, e: MH.player });
+    for (const c of MH.chicks || []) if (c.placed && c.x > cx - 20 && c.x < cx + vw + 20 && c.y > cy - 10 && c.y < cy + vh + 30) list.push({ y: c.y, chick: c });
     if (MH.train && MH.train.active && !RM) list.push({ y: 37 * T + 10, train: MH.train });
     list.sort((a, b) => a.y - b.y);
     for (const it of list) {
       if (it.p) { const s = MH.art.prop(it.p); ctx.drawImage(s.img, it.p.x + s.ox + (it.p.w === 2 ? 8 : 0), it.p.y + s.oy, s.w, s.h); }
       else if (it.b) { const s = MH.art.building(it.b), a = MH.art.buildingAnchor(it.b); ctx.drawImage(s.img, a.x + s.ox, a.y + s.oy, s.w, s.h); it.b._spr = s; }
       else if (it.train) drawTrain(it.train);
+      else if (it.chick) drawChick(it.chick);
       else drawEntity(it.e);
     }
 

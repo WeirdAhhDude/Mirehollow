@@ -19,10 +19,17 @@
       const from = MH.randi(10, 17);
       return { who: o.who, loc: MH.pick(o.locs), from, to: from + MH.randi(2, 3), name: o.name };
     });
-    st.today = { nimbus: Math.random() < 0.3, solaris: st.weather === 'sunny' && Math.random() < 0.45, scarecrowSpot: 'paddies', outings, fridge: false, announced: {} };
+    const gojo = Math.random() < 0.2, sukuna = Math.random() < 0.16;
+    const clash = gojo && sukuna && Math.random() < 0.5 ? (() => { const from = MH.randi(11, 19); return { loc: MH.pick(['scrub', 'pines', 'falls', 'foothills']), from, to: from + 2 }; })() : null;
+    st.today = { gojo, sukuna, clash, nimbus: Math.random() < 0.3, solaris: (st.weather === 'sunny' && Math.random() < 0.5) || (st.weather === 'cloudy' && Math.random() < 0.12), scarecrowSpot: 'paddies', outings, fridge: false, announced: {} };
     MH.ALL.forEach((c) => { const n = st.npcs[c.id]; if (n && Math.random() < 0.6) n.mood = c.start.mood; });
     for (const k in st.picked) if (st.picked[k] < st.time.day) delete st.picked[k];
     st.plans = (st.plans || []).filter((p) => p.until > MH.absMinutes());
+    // the tide brings a message in a bottle (sometimes two)
+    if (MH.world.beachShore && MH.world.beachShore.length) {
+      MH.world.props.filter((p) => p.type === 'bottle').forEach((p) => { MH.world.props.splice(MH.world.props.indexOf(p), 1); MH.render.removeProp && MH.render.removeProp(p); });
+      for (let i = 0; i < (Math.random() < 0.35 ? 2 : 1); i++) { const [bx, by] = MH.pick(MH.world.beachShore); const p = MH.world.prop('bottle', bx, by, { flat: true, solid: false, pick: 'bottle', temp: true }); MH.render.addProp && MH.render.addProp(p); }
+    }
     if (!silent) MH.emit('newday', { gatherings: MH.GATHERINGS.filter((x) => x.day === MH.weekday()) });
   };
 
@@ -38,21 +45,41 @@
   }
   sim.advance = function (dtReal) {
     const st = MH.state;
-    const chatting = MH.chat && MH.chat.active;
-    st.time.minutes += dtReal * (MH.settings.timeScale || 1) * (chatting ? 0.35 : 1);
+    st.time.minutes += dtReal * (MH.settings.timeScale || 1) * sim.timeFactor();
     if (st.time.minutes >= 1440) { st.time.minutes -= 1440; st.time.day++; sim.newDay(); dayChores(); }
     if (st.stormUntil && MH.absMinutes() > st.stormUntil) { st.weather = 'cloudy'; st.stormUntil = 0; }
   };
 
-  sim.sleepUntilMorning = function () {
-    const st = MH.state;
-    (st.companions || []).slice().forEach((id) => sim.stopFollow(id, 'goes home for the night'));
-    const newDay = st.time.minutes >= 7 * 60;
-    if (newDay) { st.time.day++; sim.newDay(); }
-    st.time.minutes = 7 * 60;
-    sim.placeEveryone();
-    if (newDay) dayChores(); else MH.daySnapshot();
+  // How fast the clock runs right now: it crawls while you talk, play a game or fight, and slows down at
+  // parties and town gatherings so they actually last.
+  sim.timeFactor = function () {
+    let f = 1;
+    const party = (MH.state.parties || []).find((x) => x.status === 'active');
+    if (party && (party.loc === 'home' ? MH.isInside(MH.player) : MH.world.placeAt(MH.player.x, MH.player.y).key === party.loc)) f = Math.min(f, 0.45);
+    const g = sim.currentGathering();
+    if (g && MH.world.placeAt(MH.player.x, MH.player.y).key === g.at) f = Math.min(f, 0.55);
+    if (MH.chat && MH.chat.active) f = Math.min(f, MH.chat.convo && MH.chat.convo.phone ? 0.4 : 0.25);
+    if ((MH.games && MH.games.busy) || document.body.classList.contains('fighting') || document.querySelector('.mg, .book')) f = Math.min(f, 0.15);
+    return f;
   };
+
+  // Sleeping skips to the next part of the day: morning → noon → late afternoon → late evening → next morning.
+  sim.SLEEP_STOPS = [[7, 'morning'], [12, 'noon'], [17, 'late afternoon'], [21, 'late evening']];
+  sim.nextWake = function () {
+    const m = MH.state.time.minutes;
+    const stop = sim.SLEEP_STOPS.find(([h]) => h * 60 > m + 20);
+    return stop ? { min: stop[0] * 60, label: stop[1], nextDay: false } : { min: 7 * 60, label: 'morning', nextDay: true };
+  };
+  sim.sleepUntil = function (toMorning) {
+    const st = MH.state, w = toMorning ? (st.time.minutes < 7 * 60 - 20 ? { min: 7 * 60, label: 'morning', nextDay: false } : { min: 7 * 60, label: 'morning', nextDay: true }) : sim.nextWake();
+    if (w.nextDay || w.label === 'morning') (st.companions || []).slice().forEach((id) => sim.stopFollow(id, 'goes home for the night'));
+    if (w.nextDay) { st.time.day++; sim.newDay(); }
+    st.time.minutes = w.min;
+    sim.placeEveryone();
+    if (w.nextDay) dayChores(); else MH.daySnapshot();
+    return w;
+  };
+  sim.sleepUntilMorning = () => sim.sleepUntil(true);
 
   // ------------------------------------------------------------ plans (visits, meetups, parties)
   sim.addPlan = function (p) {
@@ -79,6 +106,7 @@
     if (MH.fight && MH.fight.isHurt(MH.npcById[id]) && id !== 'owl') return { mode: 'out', loc: 'clinic', hurt: true };
     if (ch.visitor && !MH.state.today[ch.visitor]) return { mode: 'away', loc: 'sky' };
     if (id === 'scarecrow') return { mode: 'out', loc: MH.state.today.scarecrowSpot || 'paddies' };
+    if (id === 'gojo' || id === 'sukuna') { const cl = MH.state.today.clash; if (cl && h >= cl.from && h < cl.to) return { mode: 'out', loc: cl.loc, clash: true }; }
     const g = MH.GATHERINGS.find((x) => x.day === d && h >= x.from && h < x.to && x.who.includes(id));
     if (g) return { mode: 'out', loc: g.at, gathering: g.name };
     let sched = ch.schedule;
@@ -106,6 +134,7 @@
     const name = L ? L.name : 'somewhere';
     if (plan.mode === 'plan') return plan.plan.kind === 'party' ? 'heading to the player\'s party' : plan.plan.kind === 'visit' ? 'visiting the player\'s house as arranged' : 'waiting at ' + name + ' for the player, as arranged (' + (plan.plan.what || 'a meetup') + ')';
     if (plan.hurt) return 'limping to the clinic after a fight, bruised and sore';
+    if (plan.clash) return `in the middle of a cataclysmic fight with ${e.id === 'gojo' ? 'Sukuna' : 'Gojo'} at ${name} — the ground is cracking and the air is splitting`;
     if (plan.gathering) return 'at the ' + plan.gathering;
     if (plan.outing) return 'out with friends (' + plan.outing + ') at ' + name;
     if (plan.mode === 'nap') return 'napping at ' + name;
@@ -162,13 +191,29 @@
       if (p.mode === 'away') { if (!e.hidden) { MH.render.burst(e.x, e.y - 20, 'sparkle', 10); hide(e); } return; }
       if (e.hidden) {
         if (p.mode === 'inside') { e.insideLoc = p.loc; return; }
-        if (e.ch.visitor) { const s = MH.world.randomSpot(p.loc); e.setTile(s.tx, s.ty); e.hidden = false; MH.render.burst(e.x, e.y - 20, 'sparkle', 14); if (MH.distTiles(e, MH.player) < 30) sim.vibeNow(e.id === 'nimbus' ? 'A huge cloud drifts down over town. Nimbus is visiting.' : 'The air turns golden. Solaris has come down to visit.'); }
+        if (e.ch.visitor) {
+          const s = MH.world.randomSpot(p.loc); e.setTile(s.tx, s.ty); e.hidden = false; MH.render.burst(e.x, e.y - 20, 'sparkle', 14);
+          const where = MH.world.locations[p.loc] ? MH.world.locations[p.loc].name : 'town';
+          if (e.ch.rare) { if (MH.distTiles(e, MH.player) < 30 && !MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(e.id === 'gojo' ? 'The air goes very still. Somewhere close, someone is humming and crunching a candy.' : 'Every bird in the area goes silent at once. Something terrible is nearby.'); } }
+          else {
+          const msg = e.id === 'nimbus' ? `A huge cloud drifts down over ${where}. Nimbus is visiting!` : e.id === 'solaris' ? `The whole sky turns golden — Solaris has come down to visit, near ${where}!` : `${e.ch.name} has shown up near ${where}.`;
+          if (!MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(msg); MH.social.log({ kind: 'sys', text: '✨ ' + msg }); }
+          }
+        }
         else unhideAt(e, e.insideLoc || e.ch.home);
       }
       const dest = destFor(p);
       e.dest = dest;
       if (farFromPlayer && Math.hypot(dest.tx * T - MH.player.x, dest.ty * T - MH.player.y) / T > 50) { e.setTile(dest.tx, dest.ty); e.path = []; }
-      else MH.npcGoTo(e, dest.tx, dest.ty);
+      else {
+        MH.npcGoTo(e, dest.tx, dest.ty);
+        // going to a party / visit / meetup from far away: skip ahead (off-screen) so they arrive in minutes, not hours
+        if (p.mode === 'plan' && e.path && e.path.length > 30 && MH.distTiles(e, MH.player) > 20) {
+          let k = e.path.length - 24;
+          while (k > 0 && Math.hypot(e.path[k].tx * T - MH.player.x, e.path[k].ty * T - MH.player.y) / T < 18) k--;
+          if (k > 0) { const n0 = e.path[k]; e.setTile(n0.tx, n0.ty); e.path = e.path.slice(k + 1); }
+        }
+      }
       e.state = 'travel';
       return;
     }
@@ -373,6 +418,17 @@
       MH.npcWalk(e, dt);
     } else { e.path = null; e.hurry = false; MH.animate(e, dt, false); if (Math.random() < dt * 0.5) e.face(pl.x, pl.y); }
   }
+  // texted to come over: they head to wherever the player is right now
+  sim.summon = function (id) {
+    const ch = MH.CHAR[id], e = MH.npcById[id]; if (!ch || !e) return;
+    const R = MH.roomOf(MH.player);
+    const loc = R === 'home' ? 'home' : R ? 'in_' + R : MH.world.placeAt(MH.player.x, MH.player.y).key;
+    const now = MH.absMinutes();
+    sim.addPlan({ id, kind: loc === 'home' ? 'visit' : 'meet', loc: MH.world.locations[loc] || loc === 'home' ? loc : 'square', at: now, until: now + 150, what: 'came over because the player texted them' });
+    e.planKey = null; if (e.hidden && e.plan && e.plan.mode === 'inside') e.planDelay = 0;
+    MH.ui.toast(`📱 ${ch.name} is on their way!`, 3.5);
+    MH.social.addMemory(id, `${MH.state.player.name} texted me to come over to ${loc === 'home' ? 'their house' : (MH.world.locations[loc] || {}).name || 'them'}. I'm going.`, { imp: 2 });
+  };
   sim.startFollow = function (id) {
     const e = MH.npcById[id]; if (!e || e.following) return;
     MH.state.companions = MH.state.companions || [];
@@ -623,6 +679,61 @@
     return false;
   }
 
+  // ------------------------------------------------------------ Clucky's chicks: not characters, just tiny chaos
+  // They stick near Clucky (or the Coop), swarm the player's feet when they get close, peep a lot, and one
+  // occasionally tags along across town until Clucky notices.
+  const CHICK_NAMES = ['Pippa', 'Nugget', 'Peep', 'Omelette', 'Sprout', 'Bean'];
+  MH.chicks = [];
+  function chickAnchor() {
+    const cl = MH.npcById.clucky, R = MH.world.rooms.coop;
+    if (cl && !cl.hidden && !cl.busy && MH.roomOf(cl) !== 'coop') return { x: cl.x, y: cl.y, inside: false };
+    const night = MH.hour() >= 21 || MH.hour() < 6;
+    if (night || (cl && (cl.hidden || MH.roomOf(cl) === 'coop'))) return { x: (R.x0 + R.x1) / 2 * T, y: (R.y0 + 5) * T, inside: true, asleep: night };
+    const f = MH.world.doorFront('coop'); return { x: f.tx * T + 8, y: (f.ty + 1) * T, inside: false };
+  }
+  function chickTick(dt) {
+    if (!MH.chicks.length) MH.chicks = CHICK_NAMES.map((name, i) => ({ name, x: 0, y: 0, vx: 0, vy: 0, t: MH.rand(0, 3), peep: 0, i, placed: false }));
+    const A = chickAnchor(), pl = MH.player, now = MH.now;
+    for (const c of MH.chicks) {
+      if (c.tag && (now > c.tag || MH.distTiles(c, pl) > 30)) { c.tag = 0; if (MH.distTiles(c, pl) < 16) { MH.ui.toast(`🐔 Clucky (somewhere): "${c.name.toUpperCase()}! GET BACK HERE!"`, 3); } c.placed = false; }
+      const anchorFar = Math.hypot(c.x - A.x, c.y - A.y) > 26 * T;
+      if (!c.placed || (anchorFar && !c.tag)) { c.x = A.x + MH.rand(-28, 28); c.y = A.y + MH.rand(-16, 16); c.placed = true; }
+      c.asleep = A.asleep && !c.tag;
+      if (c.asleep) { c.vx = c.vy = 0; continue; }
+      const dp = MH.distTiles(c, pl);
+      let tx, ty, sp = 34;
+      if (c.tag || (dp < 4.5 && !MH.chat.active && MH.roomOf(pl) === MH.roomOf({ x: c.x, y: c.y + 2 }))) {
+        // swarm the player's feet: little circles around them
+        const a = now * (1.6 + c.i * 0.13) + c.i * 1.1; tx = pl.x + Math.cos(a) * (10 + c.i % 3 * 4); ty = pl.y + 2 + Math.sin(a) * 5; sp = c.tag ? 70 : 52;
+        if (!c.tag && dp < 3 && Math.random() < dt * 0.012 && !MH.chicks.some((o) => o.tag)) { c.tag = now + MH.rand(60, 150); }
+      } else {
+        c.t -= dt; if (c.t <= 0 || c.tx == null) { c.t = MH.rand(1, 3.5); c.tx = A.x + MH.rand(-34, 34); c.ty = A.y + MH.rand(-14, 18); }
+        tx = c.tx; ty = c.ty;
+      }
+      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy);
+      if (d > 2) { const nx = c.x + dx / d * Math.min(d, sp * dt), ny = c.y + dy / d * Math.min(d, sp * dt); if (MH.world.walkable(Math.floor(nx / T), Math.floor((ny - 2) / T)) || c.tag) { c.x = nx; c.y = ny; } c.moving = true; c.dir = dx < 0 ? -1 : 1; } else c.moving = false;
+      c.peep = Math.max(0, c.peep - dt);
+      if (dp < 6 && Math.random() < dt * 0.25) c.peep = 1.1;
+    }
+  }
+  sim.chicksAroundPlayer = () => MH.chicks.filter((c) => !c.asleep && MH.distTiles(c, MH.player) < 4).length;
+
+  // ------------------------------------------------------------ Gojo vs Sukuna (rare): a fight you can stumble upon
+  function clashTick(dt) {
+    const cl = MH.state.today.clash, g = MH.npcById.gojo, k = MH.npcById.sukuna;
+    if (!cl || !g || !k || g.hidden || k.hidden || g.busy || k.busy || !(g.plan && g.plan.clash) || !(k.plan && k.plan.clash)) return;
+    sim.clashT = (sim.clashT || 0) - dt;
+    if (MH.distTiles(g, k) > 3 && !(g.path && g.path.length) && !(k.path && k.path.length)) { const s2 = MH.world.nearestWalkable(Math.round(g.x / T) + 2, Math.round(g.y / T)); MH.npcGoTo(k, s2.tx, s2.ty); }
+    g.face(k.x, k.y); k.face(g.x, g.y);
+    const d = MH.distTiles(MH.player, g);
+    if (sim.clashT <= 0) {
+      sim.clashT = MH.rand(0.6, 1.4);
+      if (d < 30) { MH.render.burst((g.x + k.x) / 2 + MH.rand(-20, 20), (g.y + k.y) / 2 - 20, MH.pick(['sparkle', 'crow']), 8); MH.render.shake && MH.render.shake(d < 12 ? 4 : 2); }
+      if (d < 26 && !cl.seen) { cl.seen = true; sim.vibeNow('The ground shakes. Gojo and Sukuna are FIGHTING — the air itself is tearing apart around them.'); MH.social.grapevine(`Gojo and Sukuna fought near ${MH.world.locations[cl.loc].name}. Half the area is rubble.`, []); }
+      if (d < 4 && !MH.chat.active && Math.random() < 0.3 && MH.fight) { MH.fight.damage(MH.randi(8, 16), { by: 'sukuna' }); sim.vibeNow(MH.pick(['A stray slash grazes you. You were standing too close.', 'The shockwave knocks you off your feet.'])); }
+    }
+  }
+
   // ------------------------------------------------------------ the Scarecrow
   function scarecrowTick(dt) {
     const e = MH.npcById.scarecrow;
@@ -630,7 +741,9 @@
     sim.scareT = (sim.scareT || 40) - dt;
     const pl = MH.player, d = MH.distTiles(e, pl);
     const bond = MH.social.npc('scarecrow').bond;
-    if (!e.hidden && d < 2.6 && !e.dodged && bond < 25) { e.dodged = true; if (Math.random() < 0.45) { vanishScarecrow(e); return; } }
+    // she only rarely bursts into crows when you walk up (never twice in a day, almost never once you've talked)
+    const met = MH.social.npc('scarecrow').met, today = MH.state.today;
+    if (!e.hidden && d < 2.6 && !e.dodged && bond < 15 && !today.scareVanished && !MH.chat.active) { e.dodged = true; if (Math.random() < (met ? 0.08 : 0.2)) { today.scareVanished = true; vanishScarecrow(e); return; } }
     if (d > 3.5) e.dodged = false;
     if (sim.scareT <= 0) {
       sim.scareT = MH.rand(60, 160);
@@ -716,7 +829,7 @@
   sim.hostParty = function ({ dayOffset, hour, loc, theme, invited }) {
     const st = MH.state;
     const at = (st.time.day + dayOffset) * 1440 + hour * 60;
-    const party = { id: MH.uid(), at, until: at + 180, loc, theme, invited: invited.slice(), rsvp: {}, status: 'planned', arrived: [], kit: MH.shop ? MH.shop.usePartyKit() : 0 };
+    const party = { id: MH.uid(), at, until: at + 300, loc, theme, invited: invited.slice(), rsvp: {}, status: 'planned', arrived: [], kit: MH.shop ? MH.shop.usePartyKit() : 0 };
     // Mole mixes up an address now and then
     if (invited.length && Math.random() < 0.15) {
       const others = MH.CHARS.filter((c) => !invited.includes(c.id) && !c.mute && !c.visitor);
@@ -741,7 +854,7 @@
           const themeHit = party.theme && ch.bio && party.theme.split(/\s+/).some((w) => w.length > 3 && ch.bio.toLowerCase().includes(w.toLowerCase())) ? 0.2 : 0;
           const p = 0.45 + att / 120 + (ch.partyLove || 0) * 0.35 + themeHit + (party.kit || 0) - (MH.social.isAfraid(id) ? 0.4 : 0);
           party.rsvp[id] = Math.random() < p ? 'yes' : 'no';
-          if (party.rsvp[id] === 'yes') sim.addPlan({ id, kind: 'party', loc: party.loc, at: party.at + MH.randi(0, 40), until: party.until, partyId: party.id, what: 'the player\'s party' });
+          if (party.rsvp[id] === 'yes') sim.addPlan({ id, kind: 'party', loc: party.loc, at: party.at - 10 + MH.randi(0, 25), until: party.until, partyId: party.id, what: 'the player\'s party' });
           MH.social.addMemory(id, `${st.player.name} invited me to a ${party.theme || ''} party ${party.loc === 'home' ? 'at their house' : 'at ' + MH.world.locations[party.loc].name}. I said ${party.rsvp[id]}.`, { imp: 2, kind: 'self' });
         }
         const notes = await MH.ai.rsvpNotes(party, due).catch(() => null);
@@ -815,7 +928,8 @@
     if (door) {
       const it = door;
       let label = it.type === 'door' ? (it.b.generic ? 'Knock on the door' : (MH.jobs && MH.jobs.listAt(it.b.id).length ? '💼 ' : 'Knock: ') + it.b.name) : it.label;
-      if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
+      if (it.type === 'enter' && MH.world.rooms[it.room].private) label = '🏠 ' + it.b.name;
+      else if (it.type === 'enter' && it.room !== 'home' && !MH.world.isOpen(MH.world.rooms[it.room])) label = 'Knock: ' + it.b.name + ' (closed, opens ' + MH.world.rooms[it.room].open[0] + ':00)';
       return { kind: it.type, it, x: it.tx * T + 8, y: it.ty * T, label };
     }
     // fishing: with a rod, at the water's edge
@@ -857,6 +971,7 @@
       MH.social.giveItem(it.name, null);
       MH.render.burst(p.x, p.y - 6, 'sparkle', 6);
       if (p.temp) { MH.world.props.splice(MH.world.props.indexOf(p), 1); MH.render.removeProp(p); }
+      if (p.pick === 'bottle') sim.readBottle();
       if (p.pick === 'corn' || p.pick === 'rose') {
         const owner = p.pick === 'corn' ? 'the Scarecrow\'s field' : 'someone\'s garden';
         MH.social.witness(`${P.name} helped themselves to a ${it.name.toLowerCase()} from ${owner}.`, p.x, p.y, [], { chaotic: 1 }, 6);
@@ -869,6 +984,7 @@
     else if (t.kind === 'enter') {
       const R = MH.world.rooms[t.it.room];
       if (R.id === 'home') sim.goInside();
+      else if (R.private) sim.homeDoor(t.it);
       else if (MH.world.isOpen(R)) { MH.enterRoom(R.id); setTimeout(() => sim.vibeNow(R.id === 'club' && MH.hour() < 21 ? 'The Velvet Antler is just warming up.' : 'You step ' + R.name.replace(/^inside /, 'into ') + '.'), 600); }
       else sim.knock(t.it.b);
     }
@@ -877,6 +993,31 @@
     else if (t.kind === 'fridge') sim.fridge();
     else if (t.kind === 'spring') sim.soak();
     else if (t.kind === 'fish') MH.games.goFish(t.place);
+  };
+
+  // what's inside a bottle from the sea
+  const BOTTLES = [
+    ['"To whoever finds this: I buried something shiny under the third parasol. — R." (You dig. Coins!)', 25],
+    ['"Day 41 on this island. The coconuts are unionising." No signature. Worrying.', 0],
+    ['A child\'s drawing of a giant shark wearing a lifeguard whistle. Very accurate.', 0],
+    ['"If you are reading this, Mirehollow still exists. Good. Stay weird." — the Darkborn (probably)', 0],
+    ['A soggy coupon: "ONE FREE CINNAMON ROLL — Golden Loaf". Sunny might honour it.', 0],
+    ['A tiny treasure map. X marks... the spot right where you\'re standing. You find a few coins in the sand.', 12],
+    ['"I\'m sorry I ate your sandwich. — the seagull." Seagulls can write now?', 0],
+    ['A love letter, smudged by seawater: "...and every Tuesday I bake you a shark..." The signature is gone.', 0],
+  ];
+  sim.readBottle = function () {
+    const [text, coins] = MH.pick(BOTTLES);
+    MH.ui.vibe('🍾 You uncork the bottle. ' + text);
+    if (coins) MH.social.addCoins(coins);
+    MH.social.log({ kind: 'sys', text: '🍾 Message in a bottle: ' + text });
+  };
+  // the Saturday bonfire glows on the beach
+  sim.bonfireTick = function (dt) {
+    const g = sim.currentGathering(), f = MH.world.firepit;
+    if (!f || !g || g.at !== 'beach') return;
+    sim.fireT = (sim.fireT || 0) - dt;
+    if (sim.fireT <= 0 && Math.hypot(f.x - MH.player.x, f.y - MH.player.y) / T < 30) { sim.fireT = 0.35; MH.render.burst(f.x + MH.rand(-4, 4), f.y - 8, Math.random() < 0.7 ? 'fire' : 'sparkle', 3); }
   };
 
   // is the player standing behind this villager (outside their field of view)?
@@ -930,11 +1071,17 @@
     const id = R && R.id !== 'home' ? R.id : null;
     if (sim.curRoom && sim.curRoom !== id) {
       const left = MH.world.rooms[sim.curRoom];
-      MH.npcs.forEach((e) => { if (e.inRoom === left.id && !e.busy) { e.inRoom = null; e.staffSpot = null; const sp = MH.world.randomSpot(left.building); e.setTile(sp.tx, sp.ty); e.path = null; } });
+      MH.npcs.forEach((e) => {
+        if (e.inRoom !== left.id || e.busy) return;
+        if (e.homeIn) { e.inRoom = null; e.homeIn = false; e.staffSpot = null; hide(e); e.insideLoc = left.building; return; }
+        e.inRoom = null; e.staffSpot = null; const sp = MH.world.randomSpot(left.building); e.setTile(sp.tx, sp.ty); e.path = null;
+      });
+      if (MH.state.player.sneak && MH.state.player.sneak.room === left.id) MH.state.player.sneak = null;
     }
     sim.curRoom = id;
     if (!id) return;
     const b = R.building;
+    if (R.private) { homeTick(R); return; }
     for (const e of MH.npcs) {
       if (e.inRoom || e.hidden || e.busy || e.guest || e.following || e.seek || !e.plan || sim.approaching === e) continue;
       if (e.plan.loc !== b || (e.plan.mode !== 'out' && e.plan.mode !== 'nap')) continue;
@@ -946,6 +1093,66 @@
       e.setTile(spot[0], spot[1]); e.inRoom = id; e.staffSpot = staff ? spot : null; e.asleep = false; e.path = null; e.state = 'idle'; e.dir = 'down';
     }
   }
+
+  // ------------------------------------------------------------ villagers' homes: residents, sleepers, sneaking in
+  // when each villager sleeps (default 22:00-7:00); night owls are up while everyone else snores
+  const SLEEP = { brenda: [3, 11], maggie: [5, 13], rook: [5, 12], gristle: [4, 12], snitch: [4, 11], vesper: [2, 10], kira: [20, 10], patty: [0, 24], juniper: [21, 6], clucky: [21, 6], snap: [7, 15], sukuna: [6, 9], gojo: [3, 9] };
+  sim.sleepsNow = function (id) { const [a, b] = SLEEP[id] || [22, 7]; if (a === 0 && b === 24) return true; const h = MH.hour(); return a <= b ? h >= a && h < b : h >= a || h < b; };
+  sim.residentsOf = (b) => MH.npcs.filter((e) => e.hidden && !e.busy && e.insideLoc === b && !e.ch.visitor && e.plan && e.plan.mode === 'inside');
+  function homeTick(R) {
+    // whoever is "inside" this home is actually in here: asleep in bed, or up and about
+    let bed = 0;
+    for (const e of sim.residentsOf(R.building)) {
+      const sleeping = sim.sleepsNow(e.id);
+      const usedBeds = new Set(MH.npcs.filter((o) => o.inRoom === R.id && o.asleep).map((o) => o.tile().tx + ',' + o.tile().ty));
+      let spot = null;
+      if (sleeping) { while (bed < R.beds.length && usedBeds.has(R.beds[bed].join())) bed++; spot = R.beds[bed] || null; }
+      if (!spot) { const r = MH.world.randomSpot('in_' + R.id); spot = [r.tx, r.ty]; }
+      e.setTile(spot[0], spot[1]); e.hidden = false; e.inRoom = R.id; e.homeIn = true; e.asleep = !!sleeping && !!R.beds.length; e.path = null; e.state = 'idle'; e.dir = 'down'; e.noticeT = 0;
+    }
+  }
+  sim.sneakTick = function (dt) {
+    const P = MH.state.player, sn = P.sneak;
+    if (!sn || sn.invited || sn.caught || MH.chat.active || MH.fading || MH.ui.modalOpen || sim.curRoom !== sn.room) return;
+    const pl = MH.player, moved = sim._lastPos ? Math.hypot(pl.x - sim._lastPos.x, pl.y - sim._lastPos.y) : 0;
+    sim._lastPos = { x: pl.x, y: pl.y };
+    const late = MH.hour() >= 22 || MH.hour() < 6, R = MH.world.rooms[sn.room], house = R.name.replace(/^inside /, '');
+    for (const e of MH.npcs) {
+      if (e.inRoom !== sn.room || e.hidden || e.busy) continue;
+      const d = MH.distTiles(e, pl);
+      if (e.asleep) {
+        // creaky floorboards: running near a sleeper is a bad idea
+        const p = moved < 0.2 ? 0 : d < 3 ? (pl.running ? 0.35 : 0.035) : d < 5 && pl.running ? 0.1 : 0;
+        if (p && Math.random() < p * dt) { e.asleep = false; caught(e, `${e.ch.name} wakes up${late ? ' in the middle of the night' : ''} to find ${P.name} creeping around ${house} — nobody let them in.`); return; }
+      } else if (d < 8) {
+        e.noticeT = (e.noticeT || 0) + dt;
+        if (e.noticeT > 1.3) { caught(e, `${e.ch.name} catches ${P.name} sneaking into ${house}${late ? ' in the middle of the night' : ''}. Nobody let them in.`); return; }
+      }
+    }
+    function caught(e, why) {
+      sn.caught = true; e.face(pl.x, pl.y); e.showEmote('!', 2.5);
+      MH.social.addMemory(e.id, `${P.name} snuck into ${house}${late ? ' in the middle of the night' : ''} without asking.`, { imp: 3, kind: 'self' });
+      MH.chat.start([e.id], 'opener', why);
+    }
+  };
+  // the front door of someone's home: knock, sneak in, or (best friends, daytime) just go in
+  sim.homeDoor = function (it) {
+    const R = MH.world.rooms[it.room], b = it.b, inside = sim.residentsOf(b.id);
+    const awake = inside.filter((e) => !sim.sleepsNow(e.id));
+    const night = MH.hour() >= 22 || MH.hour() < 6;
+    const friend = !night && awake.find((e) => MH.social.attitude(e.id) >= 35);
+    const hint = !inside.length ? 'Nobody seems to be home. The door isn\'t locked…' : awake.length ? 'You can hear someone moving around inside.' : 'All dark and quiet. Someone is snoring.';
+    const h = (html) => { const t2 = document.createElement('template'); t2.innerHTML = html.trim(); return t2.content.firstElementChild; };
+    const body = h(`<div class="menu"><p class="muted">${hint}</p>${inside.length ? '<button class="btn" data-a="knock">🚪 Knock</button>' : ''}${friend ? `<button class="btn" data-a="go">🏠 Go in — ${MH.esc(friend.ch.name)} won't mind</button>` : ''}<button class="btn ghost" data-a="sneak">🤫 ${inside.length ? 'Sneak in' : 'Let yourself in'}</button></div>`);
+    body.querySelectorAll('[data-a]').forEach((x) => (x.onclick = () => {
+      MH.ui.closeModal();
+      if (x.dataset.a === 'knock') { sim.knock(b); return; }
+      MH.state.player.sneak = { room: R.id, at: MH.absMinutes(), invited: x.dataset.a === 'go' };
+      MH.enterRoom(R.id);
+      setTimeout(() => sim.vibeNow(x.dataset.a === 'go' ? `You let yourself into ${b.name}. "It's me!"` : inside.length ? `You ease the door open and slip into ${b.name}. ${awake.length ? 'Careful…' : 'Somebody is snoring. Walk, don\'t run.'}` : `You let yourself into ${b.name}. Nobody's home… for now.`), 600);
+    }));
+    MH.ui.modal(MH.esc(b.name), body);
+  };
 
   // Does this villager have somewhere else to be? (used so they can leave conversations on their own)
   sim.mustGo = function (e) {
@@ -979,7 +1186,7 @@
   sim.update = function (dt) {
     sim.advance(dt);
     for (const e of MH.npcs) updateNpc(e, dt);
-    scarecrowTick(dt);
+    scarecrowTick(dt); clashTick(dt); chickTick(dt); sim.bonfireTick(dt);
     trainTick(dt);
     slow += dt;
     if (slow > 1) { slow = 0; gatheringTick(); partyTick(); MH.jobs && MH.jobs.tick(); MH.quests && MH.quests.tick(); MH.fight && MH.fight.tick(); MH.phone && (MH.phone.tick(), MH.phone.updateHud()); pickpocketTick(); }
@@ -989,7 +1196,7 @@
     if (PS.flyUntil && PS.flyUntil <= nowA) { PS.flyUntil = 0; const t = MH.player.tile(); if (!MH.world.walkable(t.tx, t.ty)) { const s = MH.world.nearestWalkable(t.tx, t.ty); MH.player.setTile(s.tx, s.ty); } MH.ui.toast('🚀 The jetpack sputters out. You land with a thud.', 3); }
     sim.harassTimer = (sim.harassTimer == null ? 90 : sim.harassTimer) - dt;
     if (sim.harassTimer <= 0) { sim.harassTimer = MH.rand(90, 200); if (Math.random() < 0.55) sim.considerHarass(); }
-    roomTick();
+    roomTick(); sim.sneakTick(dt);
     if (MH.ui.modalOpen) { sim.target = null; MH.emit('target', null); return; }
     sim.target = findTarget();
     MH.emit('target', sim.target);

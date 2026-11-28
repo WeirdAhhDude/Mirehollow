@@ -271,22 +271,29 @@
       const roll = Math.random();
       const f = roll < (night ? 0.12 : 0.06) ? pool[pool.length - 1] : roll < 0.45 ? pool[Math.min(1, pool.length - 1)] : pool[0];
       const lvl = f[3];
-      const T = table('🎣 Fishing', 'Hold to raise the green bar · keep the fish inside it');
+      const T = table('🎣 Fishing', 'Hold to raise the green bar (or drag it on the water) · keep the fish inside it');
       const box = h(`<div class="fishg"><div class="fwater"><div class="fbar"></div><div class="ffish">🐟</div></div><div class="fprog"><i></i></div></div>`);
       const btn = h('<button class="btn big fhold">HOLD</button>');
       T.area.appendChild(box); T.area.appendChild(btn);
       const H = 240, barH = 76 - lvl * 7;
-      let bar = H - barH, vel = 0, fish = H / 2, ft = H / 2, prog = 32, holding = false, over = false, last = performance.now();
+      let bar = H - barH, vel = 0, fish = H / 2, ft = H / 2, prog = 32, holding = false, over = false, last = performance.now(), dragY = null;
       const set = (v) => (holding = v);
       btn.addEventListener('pointerdown', (e) => { e.preventDefault(); set(true); }); btn.addEventListener('pointerup', () => set(false)); btn.addEventListener('pointerleave', () => set(false));
-      box.addEventListener('pointerdown', () => set(true)); box.addEventListener('pointerup', () => set(false));
+      // drag directly on the water: the bar follows your finger
+      const water = box.querySelector('.fwater');
+      const ptY = (e) => e.clientY - water.getBoundingClientRect().top;
+      water.addEventListener('pointerdown', (e) => { e.preventDefault(); dragY = ptY(e); try { water.setPointerCapture(e.pointerId); } catch (er) { /* fine */ } });
+      water.addEventListener('pointermove', (e) => { if (dragY != null) dragY = ptY(e); });
+      water.addEventListener('pointerup', () => (dragY = null)); water.addEventListener('pointercancel', () => (dragY = null));
       T.status('Something nibbles…');
       const loop = (now) => {
         if (over) return;
         if (!document.body.contains(box)) { over = true; done({ win: false, gaveUp: true, score: 0 }); return; }
         const dt = Math.min(0.05, (now - last) / 1000); last = now;
-        vel += (holding ? -620 : 520) * dt; vel = MH.clamp(vel, -260, 260); bar += vel * dt;
-        if (bar < 0) { bar = 0; vel = 0; } if (bar > H - barH) { bar = H - barH; vel *= -0.3; }
+        // snappy: the bar reaches its speed almost at once and stops almost at once (no long slide after you let go)
+        if (dragY != null) { vel = 0; bar += (MH.clamp(dragY - barH / 2, 0, H - barH) - bar) * Math.min(1, dt * 16); }
+        else { vel += ((holding ? -230 : 200) - vel) * Math.min(1, dt * 11); bar += vel * dt; }
+        if (bar < 0) { bar = 0; vel = Math.max(0, vel); } if (bar > H - barH) { bar = H - barH; vel = Math.min(0, vel); }
         if (Math.random() < dt * (0.8 + lvl * 0.6)) ft = MH.rand(10, H - 10);
         fish += (ft - fish) * Math.min(1, dt * (1.2 + lvl * 0.7));
         const inside = fish > bar && fish < bar + barH;
@@ -309,7 +316,8 @@
   }
 
   const GAMES = { connect4, memory, math, quiz, rps, fishing };
-  G.play = (game, opts = {}) => (GAMES[game] ? GAMES[game](opts) : Promise.resolve({ win: false, score: 0 }));
+  G.busy = 0; // while a minigame is open, time crawls (see sim.timeFactor)
+  G.play = (game, opts = {}) => { if (!GAMES[game]) return Promise.resolve({ win: false, score: 0 }); G.busy++; return GAMES[game](opts).finally(() => { G.busy = Math.max(0, G.busy - 1); }); };
 
   // ================================================================ BOOKS (sold at the bookstore; the seller quizzes you)
   MH.BOOKS = {

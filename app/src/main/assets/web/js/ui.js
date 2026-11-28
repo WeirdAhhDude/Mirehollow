@@ -7,7 +7,13 @@
   const WEATHER_ICON = { sunny: '☀️', cloudy: '⛅', rain: '🌧️', storm: '⛈️' };
 
   ui.init = function () {
-    $('#btnA').addEventListener('click', () => MH.sim.interact());
+    // tap A: interact · hold A: act/shout to the world on your own (the narrator answers, people may come over)
+    const btnA = $('#btnA'); let holdT = null, held = false;
+    btnA.addEventListener('pointerdown', () => { held = false; btnA.classList.add('holding'); clearTimeout(holdT); holdT = setTimeout(() => { held = true; btnA.classList.remove('holding'); if (!MH.chat.active) MH.chat.startSolo(); }, 600); });
+    const release = () => { clearTimeout(holdT); btnA.classList.remove('holding'); };
+    btnA.addEventListener('pointerup', release); btnA.addEventListener('pointerleave', release); btnA.addEventListener('pointercancel', release);
+    btnA.addEventListener('click', () => { if (held) { held = false; return; } MH.sim.interact(); });
+    btnA.addEventListener('contextmenu', (e) => e.preventDefault());
     $('#btnJournal').onclick = () => ui.openJournal();
     $('#btnLog').onclick = () => ui.toggleLog();
     $('#btnMenu').onclick = () => ui.openMenu();
@@ -32,6 +38,7 @@
       if (ui.modalOpen || MH.chat.active) { if (e.key === 'Escape') ui.back(); return; }
       const k = e.key.toLowerCase();
       if (k === 'e' || k === ' ' || k === 'enter') MH.sim.interact();
+      else if (k === 'q') MH.chat.startSolo();
       else if (k === 'j') ui.openJournal();
       else if (k === 'l') ui.toggleLog();
       else if (k === 'escape') ui.openMenu();
@@ -612,14 +619,18 @@
     };
   };
   ui.sleepPrompt = function () {
-    const hr = MH.hour();
-    const body = h(`<div class="form"><p>Your futon. It smells like fresh tatami and someone else's cinnamon rolls.</p><div class="row"><button class="btn" id="sleepGo">${hr >= 18 || hr < 6 ? 'Sleep until morning' : 'Nap until tomorrow morning'}</button><button class="btn ghost" id="saveGo">Just save</button></div></div>`);
+    const w = MH.sim.nextWake();
+    const morningToo = w.label !== 'morning';
+    const body = h(`<div class="form"><p>Your futon. It smells like fresh tatami and someone else's cinnamon rolls.</p><div class="row wrap"><button class="btn" id="sleepGo">${w.label === 'morning' ? 'Sleep until morning' : 'Nap until ' + w.label} (${MH.clockStr(w.min)})</button>${morningToo ? '<button class="btn ghost" id="sleepMorning">Sleep until tomorrow morning</button>' : ''}<button class="btn ghost" id="saveGo">Just save</button></div></div>`);
     ui.modal('Your House', body);
-    body.querySelector('#sleepGo').onclick = () => {
+    const WAKE = { morning: 'Morning light slides across the tatami. A train rattles past outside.', noon: 'You wake up around noon. Somewhere, a bakery bell rings for lunch.', 'late afternoon': 'You wake up to long golden shadows across the floor. Late afternoon.', 'late evening': 'You wake up after dark. Lamps are coming on all over town.' };
+    const go = (toMorning) => {
       ui.closeModal();
       const f = $('#fade'); f.classList.add('on');
-      setTimeout(() => { MH.sim.sleepUntilMorning(); MH.render.snap(); MH.save(); f.classList.remove('on'); MH.sim.vibeNow('Morning light slides across the tatami. A train rattles past outside.'); }, 900);
+      setTimeout(() => { const r = MH.sim.sleepUntil(toMorning); MH.render.snap(); MH.save(); f.classList.remove('on'); MH.sim.vibeNow(WAKE[r.label] || WAKE.morning); }, 900);
     };
+    body.querySelector('#sleepGo').onclick = () => go(false);
+    if (morningToo) body.querySelector('#sleepMorning').onclick = () => go(true);
     body.querySelector('#saveGo').onclick = () => { MH.save(); ui.toast('Saved.'); ui.closeModal(); };
   };
 
@@ -670,6 +681,9 @@
       <p><b>Health & fights</b>: the ❤️ bar is your health. Fights are turn-based inside the chat: type an attack as an *action* on your turn, then steer your ❤️ to dodge theirs — harder against tougher opponents. ⚔️ in the chat bar challenges someone (a friendly spar or a real fight). Buy a bat at the General Store or worse at the bandits' black market, and equip it from your Pocket. Eat, soak in the onsen or visit the clinic to heal. At 0 HP you black out: you might be robbed, rescued — or die and restart the day.</p>
       <p><b>Games</b>: 🎲 Play in the chat bar challenges someone to Connect 4, memory, a math duel, rock-paper-scissors or a quiz. Books from the "bookstore" can be read from your Pocket — Penelope will quiz you on them. Buy a fishing rod at the General Store and fish at the water's edge.</p>
       <p><b>Phones</b>: buy one at the mall (Fun & Phones), then 📱 at the top to text villagers who have phones. Give a spare phone to anyone who doesn't.</p>
+      <p><b>Hold A</b> (or Q): act or shout on your own — <i>*dances on the bench*</i>, "free cake for the first one here!". The narrator answers and anyone around may come over.</p>
+      <p><b>Homes</b>: villagers' houses (Lily's cottage, the Honeycomb, the Coop, the Gator Grove, Kira's den, Maggie's stilt house, Juniper's cabin, the bandits' cave) can be entered: knock, or sneak in. At night most people are asleep — walk, don't run. Night owls are awake.</p>
+      <p><b>Sleep</b> skips to the next part of the day: morning → noon → late afternoon → late evening → next morning.</p>
       <p><b>Fighters</b>: Roxy the boxing champ coaches at the Burrow Gym; Sensei Jade runs the Jade Dojo south-west of town, past the bamboo. Take a lesson at the dojo counter to land your hits more often.</p>
       <p><b>The highlands</b>: south of town — Lookout Hill, Crag Heights with the onsen, the orchard, the waterfall and the bandits' Hollow Crags. Look for stairs cut into the cliffs.</p>
       <p><b>Characters</b>: ⚙️ → 👥 Switch character to play up to 4 different characters (try a saint and a menace).</p>

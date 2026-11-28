@@ -200,6 +200,7 @@
   }
   function cardSay(id, text) {
     clearArrows();
+    if (chat.convo && chat.convo.phone) { phoneTyping(false); const b = phoneBubble(id, text); if (b) b.dataset.id = id; MH.phone.log(id, id, text); return; }
     const s = sayFor(id);
     ghostOf(s);
     s.full = text; s.shown = 0; s.born = MH.now; s.thinking = false; s.rendered = null;
@@ -210,6 +211,7 @@
     chat.front = id; applyLayers();
   }
   function cardThinking(ids, on) {
+    if (chat.convo && chat.convo.phone) { phoneTyping(on); return; }
     ids.forEach((id) => {
       const s = sayFor(id);
       if (on) { s.thinking = true; s.prevBorn = s.born; s.born = MH.now + 100; s.txt.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>'; s.d.classList.add('on', 'thinking'); }
@@ -220,6 +222,7 @@
   // "there's more": a glowing arrow after the last word of the line you're reading; tap it to hear the next one now
   function clearArrows() { el.says && el.says.querySelectorAll('.nexta').forEach((a) => a.remove()); }
   function nextArrow(id) {
+    if (chat.convo && chat.convo.phone) { phoneTyping(true); return; }
     const s = says.get(id);
     if (!s || !s.full || s.thinking || !s.d.classList.contains('on')) return;
     if (!s.txt.querySelector('.nexta')) s.txt.insertAdjacentHTML('beforeend', '<span class="nexta" title="Next">➤</span>');
@@ -364,7 +367,8 @@
   function nearbyIds(c) {
     if (c.phone) return [];
     const room = MH.roomOf(MH.player);
-    return MH.npcs.filter((e) => !e.hidden && !c.members.includes(e.id) && MH.roomOf(e) === room && Math.hypot(e.x - c.x, e.y - c.y) / T < 9 && e.busy !== 'talking').map((e) => e.id);
+    const r = c.solo && !c.members.length ? 26 : 9; // on your own, a much wider audience can notice (and come over)
+    return MH.npcs.filter((e) => !e.hidden && !c.members.includes(e.id) && MH.roomOf(e) === room && Math.hypot(e.x - c.x, e.y - c.y) / T < r && e.busy !== 'talking').sort((a, b) => MH.distTiles(a, MH.player) - MH.distTiles(b, MH.player)).slice(0, 14).map((e) => e.id);
   }
   function center(c) {
     if (c.phone) { MH.render.focus(MH.player.x, MH.player.y); return; }
@@ -438,6 +442,54 @@
 
   chat.gapStr = (g) => (g < 2 ? 'a moment' : g < 60 ? Math.round(g) + ' minutes' : Math.round(g / 60) === 1 ? 'an hour' : Math.round(g / 60) + ' hours');
 
+  // ------------------------------------------------------------ hold A: a scene with nobody (yet)
+  // You act or shout to the world; the narrator answers, and anyone around who notices may come over.
+  chat.startSolo = function () {
+    if (chat.active || MH.fading || MH.ui.modalOpen) return;
+    const c = { id: MH.uid(), members: [], nearby: [], lines: [], x: MH.player.x, y: MH.player.y, started: MH.absMinutes(), turn: 0, spoke: {}, joinedTurn: {}, solo: true };
+    chat.convo = c; chat.active = true; chat.to = null; chat.front = null;
+    el.root.classList.remove('hidden', 'phone'); el.root.classList.add('solo');
+    document.body.classList.add('chatting');
+    el.cast.innerHTML = ''; el.tags.innerHTML = ''; clearSays(); el.me.classList.remove('on'); chat.meB = null;
+    renderCast(); chat.setTarget(null);
+    MH.render.focus(MH.player.x, MH.player.y - 20);
+    MH.social.log({ kind: 'sys', text: '— On your own · ' + MH.world.placeAt(c.x, c.y).name + ' —', convo: c.id });
+    el.input.value = ''; chat.pendingInvite = null;
+    el.input.placeholder = 'Do or shout something… e.g. *dances on the bench*';
+    MH.ui.narrate('Nobody is talking to you. Whatever you do or say, anyone around might notice.');
+    setTimeout(() => el.input.focus({ preventScroll: true }), 50);
+  };
+
+  // ------------------------------------------------------------ texting: a real messaging screen
+  const pv = { root: null, list: null };
+  function phoneView(id) {
+    const ch = MH.CHAR[id];
+    if (!pv.root) { pv.root = document.createElement('div'); pv.root.id = 'phoneView'; el.root.insertBefore(pv.root, el.root.querySelector('#chatbar')); }
+    pv.root.innerHTML = `<div class="pvhead"><img src="${ch.portrait || MH.art.portraitURL(ch)}"><div><b>${MH.esc(ch.name)}</b><small class="pvstat">online</small></div></div><div class="pvlist"></div>`;
+    pv.list = pv.root.querySelector('.pvlist'); pv.id = id;
+    pv.list.addEventListener('pointerdown', (e) => { if (e.target.closest('.nexta')) { e.preventDefault(); clearArrows(); chat.skipFlag = true; } });
+    const hist = MH.phone.thread(id).slice(-14);
+    let lastDay = null;
+    hist.forEach((m) => { const d = Math.floor(m.t / 1440); if (d !== lastDay) { lastDay = d; pv.list.insertAdjacentHTML('beforeend', `<div class="pvday">Day ${d + 1}</div>`); } phoneBubble(m.from === 'player' ? 'player' : id, m.text, true); });
+    pv.list.scrollTop = pv.list.scrollHeight;
+  }
+  function phoneBubble(who, text, old) {
+    if (!pv.list) return;
+    pv.list.querySelectorAll('.pm.typing').forEach((t) => t.remove());
+    const b = document.createElement('div');
+    b.className = 'pm ' + (who === 'player' ? 'me' : 'them') + (old ? ' old' : '');
+    b.innerHTML = MH.fmt(text);
+    pv.list.appendChild(b); pv.list.scrollTop = pv.list.scrollHeight;
+    return b;
+  }
+  function phoneTyping(on) {
+    if (!pv.list) return;
+    pv.list.querySelectorAll('.pm.typing').forEach((t) => t.remove());
+    const st = pv.root && pv.root.querySelector('.pvstat'); if (st) st.textContent = on ? 'typing…' : 'online';
+    if (on) { pv.list.insertAdjacentHTML('beforeend', '<div class="pm them typing"><span class="dots"><i></i><i></i><i></i></span></div>'); pv.list.scrollTop = pv.list.scrollHeight; }
+  }
+  chat.phoneTyping = phoneTyping;
+
   // texting: the villager stays wherever they are
   function startPhone(id, incoming) {
     const e = MH.npcById[id]; if (!e) return;
@@ -453,11 +505,16 @@
     MH.social.log({ kind: 'sys', text: '— 📱 Texting ' + e.ch.name + ' —', convo: c.id });
     el.input.value = ''; chat.pendingInvite = null;
     el.input.placeholder = `Text ${e.ch.name}…`;
-    if (incoming) { c.lines.push({ who: id, text: incoming }); MH.social.log({ kind: 'line', who: id, text: incoming, convo: c.id }); cardSay(id, incoming); }
+    // the conversation so far: earlier texts are part of the transcript the storyteller reads
+    const hist = MH.phone.thread(id).slice(-10);
+    if (hist.length) { c.lines.push({ who: 'system', text: 'earlier texts in this thread' }); hist.forEach((m) => c.lines.push({ who: m.from === 'player' ? 'player' : id, text: m.text })); c.lines.push({ who: 'system', text: `now (${MH.clockStr()})` }); }
+    phoneView(id);
+    if (incoming && !(hist.length && hist[hist.length - 1].text === incoming)) { c.lines.push({ who: id, text: incoming }); MH.social.log({ kind: 'line', who: id, text: incoming, convo: c.id }); MH.phone.log(id, id, incoming); phoneBubble(id, incoming); }
   }
 
   chat.addMember = function (id, how, initial) {
     const c = chat.convo; if (!c || c.members.includes(id) || c.phone) return;
+    if (c.solo) el.root.classList.remove('solo');
     const e = MH.npcById[id]; if (!e) return;
     if (MH.sim.approaching === e) MH.sim.approaching = null;
     c.members.push(id);
@@ -504,6 +561,11 @@
       if (e) { e.busy = null; e.walkToChat = null; e.planKey = e.guest || e.inRoom ? e.planKey : null; e.idleT = MH.rand(2, 5); }
       const n = MH.social.npc(id); n.met = true; n.lastTalk = MH.absMinutes(); n.mustGo = null;
     });
+    if (c.phone && c.members[0]) {
+      const id = c.members[0], mine = c.lines.filter((l) => l.who === 'player').slice(-1)[0], theirs = c.lines.filter((l) => l.who === id).slice(-1)[0];
+      if (mine || theirs) MH.social.addMemory(id, `Texted with ${MH.state.player.name} (${MH.clockStr()})${mine ? `. They wrote: "${String(mine.text).slice(0, 90)}"` : ''}${theirs ? `. I answered: "${String(theirs.text).slice(0, 90)}"` : ''}`, { imp: 2, kind: 'self' });
+      if (pv.root) { pv.root.innerHTML = ''; pv.list = null; }
+    }
     // remember how (and when) this chat ended, so walking straight back picks up where it left off
     if (!c.phone && c.lines.length) {
       const was = Object.keys(c.joinedTurn || {}).concat(c.members).filter((id, i, a) => a.indexOf(id) === i && MH.CHAR[id]);
@@ -511,7 +573,7 @@
       MH.state.lastConvo = { ids: was, at: MH.absMinutes(), lines: c.lines.filter((l) => l.who !== 'system' || !/walked away and came back/.test(l.text)).slice(-8).map((l) => ({ who: l.who, text: String(l.text).slice(0, 400), to: l.to })) };
     }
     chat.active = false; chat.convo = null; chat.waiting = false; chat.pendingInvite = null; chat.queued = false; chat.to = null;
-    el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone');
+    el.root.classList.add('hidden'); el.root.classList.remove('waiting', 'phone', 'solo');
     MH.fight && MH.fight.hideOffer();
     MH.games && MH.games.hideOffer();
     if (MH.fight && c.combat && !c.combat.over) MH.fight.end(c, 'left');
@@ -538,8 +600,9 @@
     MH.social.log({ kind: 'line', who: 'player', text: (to ? '(to ' + MH.CHAR[to].name + ') ' : '') + text, convo: c.id });
     chat.meB = { full: (to ? '→ ' + MH.CHAR[to].name + ': ' : '') + text, shown: 0 };
     el.me.innerHTML = ''; el.me.classList.add('on');
+    if (c.phone) { phoneBubble('player', text); MH.phone.log(c.members[0], 'player', text); }
     if (chat.pendingInvite && /\*[^*]*(invit|come along|come with)/i.test(text)) c.invite = chat.pendingInvite;
-    c.violence = c.phone ? null : chat.detectViolence(text, c, to);
+    c.violence = c.phone || !c.members.length ? null : chat.detectViolence(text, c, to);
     if (c.lock) c.lock.turns--;
     if (c.quiet) { c.wake = c.quiet; c.quiet = null; const e0 = MH.npcById[c.wake.id]; if (e0) e0.asleep = false; const card = el.cast.querySelector(`.card[data-id="${c.wake.id}"]`); if (card) card.classList.remove('asleep'); chat.setTarget(chat.to); }
     // ⚔️ "fight for real" from the chat bar counts as starting a fight
@@ -557,23 +620,34 @@
     chat.runTurn('player', text, to);
   };
   // a villager drags the player somewhere: fade, move both, carry on talking there
-  chat.drag = function (c, by, to) {
+  chat.drag = function (c, by, to, inside) {
     const e = MH.npcById[by]; if (!e || !c.members.includes(by)) return;
     const L = to === 'home' ? MH.world.locations.home : MH.world.locations[to]; if (!L) return;
+    // a building with an inside: they pull you IN, opening hours or not
+    const R = inside !== false ? MH.world.rooms[to] : null;
     const fade = document.getElementById('fade'); fade.classList.add('on');
     setTimeout(() => {
-      if (MH.roomOf(MH.player)) { const R = MH.world.rooms[MH.roomOf(MH.player)]; if (R.id === 'home') MH.exitHome(); else MH.exitRoom(R.id); }
-      const sp = to === 'home' ? MH.world.doorFront('home') : MH.world.randomSpot(to);
-      MH.player.setTile(sp.tx, sp.ty);
+      const here = MH.roomOf(MH.player);
+      let sp;
+      if (R) {
+        sp = MH.world.nearestWalkable(R.doorX, R.y1 - 2);
+        if (here !== R.id) MH.emit('room', { id: R.id, inside: true });
+        if (R.private) MH.state.player.sneak = { room: R.id, at: MH.absMinutes(), invited: true };
+      } else {
+        if (here) { const R0 = MH.world.rooms[here], b0 = MH.world.buildingById[R0.building]; const f0 = MH.world.nearestWalkable(b0.doorX, b0.doorY + 1); MH.player.setTile(f0.tx, f0.ty); MH.emit('room', { id: here, inside: false }); }
+        sp = to === 'home' ? MH.world.doorFront('home') : MH.world.randomSpot(to);
+      }
+      MH.player.setTile(sp.tx, sp.ty); MH.player.dir = 'up';
       const n2 = MH.world.nearestWalkable(sp.tx + 1, sp.ty); e.setTile(n2.tx, n2.ty); e.hidden = false; e.path = null;
+      if (R) { e.inRoom = R.id; e.homeIn = false; e.staffSpot = null; }
       (MH.state.companions || []).forEach((id) => { const f = MH.npcById[id]; if (f && f !== e) { const s2 = MH.world.nearestWalkable(sp.tx - 1, sp.ty); f.setTile(s2.tx, s2.ty); } });
       c.members.filter((id) => id !== by && !(MH.state.companions || []).includes(id)).forEach((id) => chat.removeMember(id, 'is left behind'));
-      const txt = `${e.ch.name} dragged ${MH.state.player.name} to ${L.name}`;
+      const txt = `${e.ch.name} dragged ${MH.state.player.name} ${R ? 'into ' + R.name.replace(/^inside /, '') : 'to ' + L.name}`;
       c.lines.push({ who: 'system', text: txt });
       MH.social.log({ kind: 'sys', text: '🫳 ' + txt + '.', convo: c.id });
       MH.social.addMemory(by, `Dragged ${MH.state.player.name} to ${L.name}.`, { imp: 2 });
       center(c); MH.render.snap(); fade.classList.remove('on');
-      MH.ui.toast(`🫳 ${e.ch.name} drags you to ${L.name}!`, 3);
+      MH.ui.toast(`🫳 ${e.ch.name} drags you ${R ? 'into ' + R.name.replace(/^inside /, '') : 'to ' + L.name}!`, 3);
     }, 650);
   };
 
@@ -644,12 +718,12 @@
   chat.runTurn = async function (mode, payload, to) {
     const c = chat.convo; if (!c) return;
     if (c.quiet && mode === 'continue') return; // nobody talks until you do
-    if (!c.members.length) { chat.end(); return; }
+    if (!c.members.length && !c.solo) { chat.end(); return; }
     c.nearby = nearbyIds(c);
     c.turn++;
     updateMustGo(c);
     setWaiting(true);
-    const thinkers = [to && c.members.includes(to) ? to : chat.front && c.members.includes(chat.front) ? chat.front : c.members[0]];
+    const thinkers = [to && c.members.includes(to) ? to : chat.front && c.members.includes(chat.front) ? chat.front : c.members[0]].filter(Boolean);
     const thinkTimer = setTimeout(() => chat.convo === c && cardThinking(thinkers, true), 200);
     let res;
     try { res = await MH.ai.turn(c, mode, payload, to); }
@@ -774,7 +848,7 @@
         if (gc && gc.with === m.with) setTimeout(() => chat.convo === c && MH.games.inChat(c, m), 600); else MH.games.offer(c, m);
       }
     }
-    if (res.drag && (!res.fight || MH.fight.inCombat(c))) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to), 700);
+    if (res.drag && (!res.fight || MH.fight.inCombat(c))) setTimeout(() => chat.convo === c && chat.drag(c, res.drag.by, res.drag.to, res.drag.inside), 700);
     if (MH.quests) {
       (res.questDone || []).forEach((qid) => MH.quests.complete(qid, c.members));
       MH.quests.onTalk(c);
@@ -797,12 +871,15 @@
       MH.sim.addPlan({ id: p.id, kind: p.where === 'home' ? 'visit' : 'meet', loc: p.where, at, until: at + 120, what: p.what });
       MH.ui.toast(`📅 ${MH.CHAR[p.id].name}: ${p.what} — ${p.where === 'home' ? 'your house' : MH.world.locations[p.where].name}, ${Math.floor(at / 1440) > MH.state.time.day ? 'tomorrow ' : ''}${MH.clockStr(at % 1440)}`, 4.5);
     });
+    if (c.phone && res.come && c.members[0]) MH.sim.summon(c.members[0]);
     for (const id in res.follow || {}) {
       if (!MH.npcById[id]) continue;
       if (res.follow[id] === 'start' && !(inv && inv.follow && inv.to.includes(id))) MH.sim.startFollow(id);
       else if (res.follow[id] === 'stop') MH.sim.stopFollow(id, 'stops following you');
     }
-    res.leave.forEach((id) => { if (MH.npcById[id] && MH.npcById[id].following) MH.sim.stopFollow(id, 'goes their own way'); chat.removeMember(id, 'walks off'); });
+    // "leaving the scene" WITH the player (they just agreed to follow, or they're dragging the player off) is not walking away
+    const goingWithYou = (id) => (res.follow && res.follow[id] === 'start') || (res.drag && res.drag.by === id) || (inv && inv.follow && inv.to.includes(id) && res.invite[id] === 'yes');
+    res.leave.filter((id) => !goingWithYou(id)).forEach((id) => { if (MH.npcById[id] && MH.npcById[id].following) MH.sim.stopFollow(id, 'goes their own way'); chat.removeMember(id, 'walks off'); });
     if (rep && Object.keys(rep).length) MH.emit('rep', rep);
   }
 

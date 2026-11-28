@@ -10,6 +10,25 @@
   ph.has = (id) => (id === 'player' ? !!P().phone : !!ph.owners()[id]);
   ph.contacts = () => MH.CHARS.filter((c) => ph.has(c.id) && MH.social.npc(c.id).met && !c.mute);
   ph.unread = () => (MH.state.texts || []).filter((x) => !x.read).length;
+  // every contact's message history (both directions), so texts are remembered
+  ph.thread = (id) => {
+    if (!MH.state.threads) { // older saves: turn the inbox into conversation threads
+      MH.state.threads = {};
+      (MH.state.texts || []).forEach((m) => { if (MH.CHAR[m.from]) (MH.state.threads[m.from] = MH.state.threads[m.from] || []).push({ from: m.from, text: m.text, t: m.t }); });
+    }
+    return (MH.state.threads[id] = MH.state.threads[id] || []);
+  };
+  ph.log = function (id, from, text) {
+    const t = ph.thread(id); t.push({ from, text: String(text).slice(0, 400), t: MH.absMinutes() });
+    if (t.length > 40) t.splice(0, t.length - 40);
+  };
+  // recent texts, written for the storyteller (used when you text again AND when you meet them in person)
+  ph.recentText = function (id, maxAgeMin = 2160, n = 6) {
+    const now = MH.absMinutes(), t = ph.thread(id).filter((m) => now - m.t <= maxAgeMin).slice(-n);
+    if (!t.length) return '';
+    const nm = MH.CHAR[id].name, pn = P().name;
+    return t.map((m) => `[${MH.agoStr(m.t)}] ${m.from === 'player' ? pn : nm}: ${m.text}`).join('\n');
+  };
 
   // a villager accepted a spare phone (from the chat's take_from_player)
   ph.give = function (id) {
@@ -48,6 +67,7 @@
   ph.receive = function (from, text) {
     MH.state.texts = MH.state.texts || [];
     MH.state.texts.push({ id: MH.uid(), from, text: String(text).slice(0, 300), t: MH.absMinutes(), read: false });
+    ph.log(from, from, text);
     if (MH.state.texts.length > 60) MH.state.texts.splice(0, MH.state.texts.length - 60);
     MH.social.log({ kind: 'sys', text: `📱 Text from ${MH.CHAR[from].name}: “${text}”` });
     MH.ui.toast(`📱 ${MH.CHAR[from].name}: ${String(text).slice(0, 60)}${text.length > 60 ? '…' : ''}`, 4.5);
@@ -80,12 +100,13 @@
       body.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('sel', b.dataset.t === t));
       tb.innerHTML = '';
       if (t === 'msgs') {
-        const list = (MH.state.texts || []).slice().reverse();
-        if (!list.length) tb.appendChild(h('<p class="muted small">No messages yet. Villagers with phones text you now and then — or text them first from Contacts.</p>'));
-        list.forEach((m) => {
-          const ch = MH.CHAR[m.from]; if (!ch) return;
-          const row = h(`<button class="msg ${m.read ? '' : 'new'}"><img src="${ch.portrait || MH.art.portraitURL(ch)}"><span><b>${MH.esc(ch.name)}</b> <i>${MH.esc(MH.agoStr(m.t))}</i><br>${MH.esc(m.text)}</span></button>`);
-          row.onclick = () => { m.read = true; ph.updateHud(); ph.text(m.from, m.text); };
+        const threads = Object.entries(MH.state.threads || {}).filter(([id, l]) => MH.CHAR[id] && l.length).sort((a, b) => b[1][b[1].length - 1].t - a[1][a[1].length - 1].t);
+        if (!threads.length) tb.appendChild(h('<p class="muted small">No messages yet. Villagers with phones text you now and then — or text them first from Contacts.</p>'));
+        threads.forEach(([id, l]) => {
+          const ch = MH.CHAR[id], m = l[l.length - 1];
+          const unread = (MH.state.texts || []).filter((x) => x.from === id && !x.read);
+          const row = h(`<button class="msg ${unread.length ? 'new' : ''}"><img src="${ch.portrait || MH.art.portraitURL(ch)}"><span><b>${MH.esc(ch.name)}</b>${unread.length ? ` <em class="ub">${unread.length}</em>` : ''} <i>${MH.esc(MH.agoStr(m.t))}</i><br>${m.from === 'player' ? 'You: ' : ''}${MH.esc(m.text.slice(0, 90))}</span></button>`);
+          row.onclick = () => { unread.forEach((x) => (x.read = true)); ph.updateHud(); ph.text(id); };
           tb.appendChild(row);
         });
       } else {

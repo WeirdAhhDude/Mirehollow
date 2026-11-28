@@ -179,8 +179,8 @@
       '- CHASES: a villager can start chasing the player when it fits — the player stole something and bolted, insulted them and ran, a bandit going after a target, or a playful game of tag: set "chase":{"who":"<id>","kind":"brawl|mugging|playful"}. The scene ends and they run after the player; if they catch them, the scene picks up again (often as a fight).',
       '- Sometimes the player can\'t just walk away: they\'re cornered, held by the arm, blocked in, or (playfully) trapped in a hug that won\'t end or made to finish their slice of pie first. Then set "no_leave":{"by":"<id>","why":"<short reason, e.g. Gristle is blocking the way>"}; set "no_leave":false when they let the player go. If the scene shows the player *tries to leave* while held, react to it.',
       '- MINIGAMES: villagers can challenge the player — or accept the player\'s challenge — to a game: Connect 4, a memory card duel, a math duel, rock-paper-scissors, or a quiz (about a book they sold the player, or town trivia). Set "minigame":{"with":"<id>","game":"connect4|memory|math|rps|quiz","stakes":<coins 0-30>,"topic":"<book key for quizzes>"} and the game is played right after your lines; you hear the result next turn. Brenda and Dr. Penelope love games and are very good; the Mayor loves trivia; Chuckles loves rock-paper-scissors. Refusing is fine too.',
-      '- DRAGGING: a villager may grab the player and drag them somewhere (to the bakery to taste something, home, away from danger, into the bandits\' cave…) — set "drag":{"by":"<id>","to":"<place key or home>"}; the player ends up there with them.',
-      '- The Hollow Gang (Rook, Gristle, Snitch) are bandits: they extort, steal, threaten and may mug a player who looks weak or alone. Mortimer Vale and Vesper are genuinely malevolent (bullying, manipulation, cruel rumours) but subtle. Play them as real villains, not cartoons who back down at once.',
+      '- DRAGGING: a villager may grab the player and drag them somewhere (to the bakery to taste something, home, into their own house, away from danger, into the bandits\' cave…) — set "drag":{"by":"<id>","to":"<place key, home (the player\'s house) or a villager\'s home key like lilycottage, honeycomb, coop, gatorgrove, den, stilthouse, cabin, hideout>","inside":true}; the player ends up there with them. If the place is a building, they end up INSIDE it, even when it\'s closed or the middle of the night (set "inside":false to stay outside). Inviting the player into someone\'s house works the same way.',
+      '- The Hollow Gang (Rook, Gristle, Snitch) are bandits: they extort, steal, threaten and may mug a player who looks weak or alone. Mortimer Vale and Vesper are genuinely malevolent (bullying, manipulation, cruel rumours) but subtle. Play them as real villains, not cartoons who back down at once. Sukuna (rare) is something else entirely: pure malevolence with no heart, not gruff-but-soft like Kira. She may cut down anyone who annoys her or simply stands in her way (a brutal fight, or "hurt_player" 15-30), mocks pain and never apologises. Gojo (rare) is the strongest being around, breezy and bored; attacks never touch him. Gertie\'s four brothers (Brick, Crunch, Snap, Jawbreaker) are hugely overprotective of her.',
       '- Dr. Penelope invents working gadgets (jetpacks, a Black Hole Sniper 3000, teleporters, invisibility cloaks, gravity boots, translator collars, healing gizmos…). If she gives or builds one for the player, put it in "give_player" with a clear name.',
       AI.contentRules(),
       '',
@@ -195,7 +195,7 @@
       ' "quest":{"from":"<id>","title":"<short>","task":"<what the player must do, one sentence>","type":"fetch|deliver|visit|talk|other","item":"<item to bring or deliver>","target":"<villager id or place key>","reward":0}, "quest_done":["<quest id>"],',
       ' "ally_attacks":[{"by":"<id>","target":"<id>","move":"<short>","strength":"light|heavy|finisher"}], "enemy_attack":"<short>", "surrender":["<id>"], "fight_over":false,',
       ' "minigame":{"with":"<id>","game":"connect4|memory|math|rps|quiz","stakes":0,"topic":""},',
-      ' "no_leave":{"by":"<id>","why":"<short>"}, "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "chase":{"who":"<id>","kind":"brawl|mugging|playful"}, "drag":{"by":"<id>","to":"<place key or home>"}, "hurt_player":0, "end":false}',
+      ' "no_leave":{"by":"<id>","why":"<short>"}, "come":false, "fight":{"with":"<id>","kind":"spar|brawl|mugging"}, "chase":{"who":"<id>","kind":"brawl|mugging|playful"}, "drag":{"by":"<id>","to":"<place key or home>","inside":true}, "hurt_player":0, "end":false}',
       'Field rules: bond = change in each villager\'s feelings toward the player this turn (-10..10; usually -2..+3, bigger only for big moments). reputation = what the PLAYER\'s behaviour this turn says about them (-3..3 per trait, mostly 0; violent = physical aggression). witness = one sentence describing anything notable the player visibly did that an onlooker would gossip about, else "". memory = only for genuinely memorable moments. coins = change to the player\'s money (negative when they pay; only what they can afford). take_from_player only for items actually in the pocket. label = a new short relationship label (e.g. "friends", "rivals", "crush", "dating", "grudging respect") only when it truly changes.',
       'invite_reply: REQUIRED whenever the scene says the player is inviting someone — each invitee answers in character (attitude, schedule and personality decide). plans: only when a villager clearly agrees to meet the player at a specific place and time (where = one of: ' + placeKeys() + ', or "home" for the player\'s house). quest: only when a villager actually asks the player for a favour this turn; reward = coins they will pay (5-60, fitting their means); fetch needs "item", deliver needs "item" and "target" (villager id), visit needs "target" (a place key), talk needs "target" (villager id). quest_done: only ids from OPEN QUESTS. end = true only if the whole conversation is over. Omit empty fields.',
     ].filter((x) => x !== '').join('\n');
@@ -248,6 +248,8 @@
     if (fear >= 6) lines.push(MH.social.isTough(id)
       ? `Knows the player is violent (${fear >= 15 ? 'a real menace' : 'has hurt people'}): wary, guarded and ready to stand up to them — won't be pushed around.`
       : `Is AFRAID of the player (they're known to be violent${fear >= 15 ? ' — truly dangerous' : ''}): flinches, keeps their distance, stammers or placates, may refuse to be alone with them or flee.`);
+    const tx = MH.phone && MH.phone.recentText(id);
+    if (tx && !(MH.chat.convo && MH.chat.convo.phone)) lines.push('Recent text messages with the player (they remember these — stay consistent with any plans made):\n' + tx);
     const mems = MH.social.memoriesFor(id, full ? 8 : 4);
     if (mems.length) {
       lines.push('Memories:');
@@ -278,6 +280,8 @@
       `Player health: ${Math.round(MH.fight ? MH.fight.hp() : 100)}/100${(MH.fight && MH.fight.hp() < 40) ? ' (visibly hurt, bruised)' : ''}.` + (P.weapon && MH.WEAPONS[P.weapon] ? ` They carry a ${MH.WEAPONS[P.weapon].name.toLowerCase()}${MH.WEAPONS[P.weapon].lethal ? ' (a real weapon — people notice)' : ''}.` : ''),
       (P.flyUntil || 0) > MH.absMinutes() ? 'The player is wearing a roaring jetpack (Penelope made it).' : '',
       P.training ? `The player has been training at the Jade Dojo (level ${P.training}/5).` : '',
+      MH.sim && MH.sim.chicksAroundPlayer && MH.sim.chicksAroundPlayer() ? `${MH.sim.chicksAroundPlayer()} of Clucky's little chicks are running circles around the player's feet, peeping (small children, ambient; they don't talk).` : '',
+      (() => { const sn = P.sneak, R = sn && MH.world.rooms[sn.room]; if (!R || MH.roomOf(MH.player) !== sn.room) return ''; const late = MH.hour() >= 22 || MH.hour() < 6; return sn.invited ? `The player is inside ${R.name.replace(/^inside /, '')} with permission (they let themselves in as a close friend).` : `⚠ The player SNUCK INTO ${R.name.replace(/^inside /, '')} without being invited${late ? ', in the middle of the night' : ''}. Whoever lives here did NOT let them in — react to that (surprise, fear, anger, or amusement, depending on who they are and how they feel about the player).`; })(),
       P.translator ? 'The player wears Penelope\'s translator collar: MUTE villagers\' actions come with their translated thoughts in [square brackets].' : '',
     ].filter(Boolean).join('\n');
   }
@@ -316,15 +320,19 @@
     if (convo.phone) {
       const e = MH.npcById[present[0]];
       const where = e ? (e.hidden ? 'at home / indoors at ' + ((MH.world.locations[e.insideLoc] || {}).name || 'their place') : MH.world.placeAt(e.x, e.y).name) : 'somewhere';
-      parts.splice(1, 0, `📱 THIS IS A TEXT-MESSAGE CONVERSATION ON THE PHONE. ${MH.CHAR[present[0]].name} is NOT with the player — they are ${where}. Write short texts (emoji welcome, lowercase is fine); *actions* describe what they do where they are. No physical contact, no handing things over, no fights, no dragging, nobody joins. Invitations and plans work as usual.`);
+      const pw = MH.world.placeAt(MH.player.x, MH.player.y).name;
+      parts.splice(1, 0, `📱 THIS IS A TEXT-MESSAGE CONVERSATION ON THE PHONE. ${MH.CHAR[present[0]].name} is NOT with the player: ${MH.CHAR[present[0]].name} is ${where}, the player is at ${pw}. They are typing messages to each other on their phones, and ${MH.CHAR[present[0]].name} knows it. Write it as real texts: short messages, usually 1-3 separate texts in a row, emoji and lowercase welcome, in their own texting style. No *actions* the player could see (at most something like "*sends a selfie*" or "*voice message: ...*"). No physical contact, no handing things over, no fights, no dragging, nobody joins. Earlier texts in the transcript are what they already said to each other: stay consistent with them (plans, promises, times). Invitations and plans work as usual. If they agree to come over to where the player is right now, set "come":true and they will head over.`);
     }
     present.forEach((id) => parts.push(charCard(id, present, true), ''));
     const nearby = (convo.nearby || []).filter((id) => !present.includes(id));
+    if (convo.solo && !present.length) {
+      parts.push('🎭 SOLO SCENE: nobody is in a conversation with the player. They are on their own, doing or saying something out loud to the world. Answer with the NARRATOR: 1-2 short narrator lines ({"who":"narrator"}) in the game\'s ambient voice (second person, wry, vivid: what happens, how the surroundings react, e.g. "Two pigeons take off. Somewhere, a window slams shut."). Villagers listed below are around (with their distance); those close enough to notice can react: if one of them would actually come over (curious, outraged, worried, tempted by an offer, wants to join in), put them in "join" and they walk over and may speak their first line in this same turn. Loud or outrageous acts and tempting offers draw more people; quiet ones may draw nobody. Fill "witness"/"reputation"/"memory" for anyone who saw it. If nobody would come, nobody joins.');
+    }
     if (nearby.length) {
-      parts.push('NEARBY (not in the conversation yet; may overhear and join):');
+      parts.push(convo.solo && !present.length ? 'AROUND THE PLAYER (not talking to them; distance in tiles — ~5 is close, 20+ only hears loud things):' : 'NEARBY (not in the conversation yet; may overhear and join):');
       nearby.forEach((id) => {
         const ch = MH.CHAR[id], n = MH.social.npc(id), e = MH.npcById[id];
-        parts.push(`- ${ch.name} (id: ${id}): ${ch.title}. ${e && e.asleep ? 'Asleep. ' : ''}Attitude to player ${MH.social.attitude(id)}. Feelings about those present: ${present.map((p) => (MH.CHAR[p] ? MH.CHAR[p].name + ' ' + (n.rel[p] || 0) : '')).join(', ')}.`);
+        parts.push(`- ${ch.name} (id: ${id}): ${ch.title}${ch.species ? ', ' + ch.species : ''}. ${convo.solo && e ? Math.round(MH.distTiles(e, MH.player)) + ' tiles away. ' : ''}${e && e.asleep ? 'Asleep. ' : ''}Attitude to player ${MH.social.attitude(id)}. Feelings about those present: ${present.map((p) => (MH.CHAR[p] ? MH.CHAR[p].name + ' ' + (n.rel[p] || 0) : '')).join(', ')}.`);
       });
       parts.push('');
     }
@@ -455,16 +463,22 @@
     }
     out.questDone = (Array.isArray(raw.quest_done) ? raw.quest_done : raw.quest_done ? [raw.quest_done] : []).map(String).slice(0, 4);
     out.fight = null; out.drag = null;
+    out.come = !!(convo && convo.phone && raw.come && raw.come !== 'false');
     if (raw.fight && typeof raw.fight === 'object' && !(convo && convo.phone)) {
       const w = AI.resolveId(raw.fight.with || raw.fight.who || raw.fight.opponent);
       if (w && w !== 'narrator' && present.has(w)) out.fight = { with: w, kind: /spar|friend|train/i.test(raw.fight.kind) ? 'spar' : /mug|rob/i.test(raw.fight.kind) ? 'mugging' : 'brawl' };
     }
     if (raw.drag && typeof raw.drag === 'object' && !(convo && convo.phone)) {
       const by = AI.resolveId(raw.drag.by || raw.drag.who);
-      let to = String(raw.drag.to || raw.drag.where || '').toLowerCase().trim().replace(/^the /, '');
-      if (/home|house|player/.test(to)) to = 'home';
+      let to = String(raw.drag.to || raw.drag.where || '').toLowerCase().trim().replace(/^the /, '').replace(/^in_/, '');
+      const byCh = MH.CHAR[by];
+      const own = /^(my|their|her|his|own)( own)? (house|home|place|room|cave|den|hut|cottage)$/.test(to);
+      const whose = to.match(/^([\w .-]+?)'?s (house|home|place|cave|den|hut|cottage)$/);
+      if (own && byCh && MH.world.rooms[byCh.home]) to = byCh.home;
+      else if (whose && !/^(the )?player$/.test(whose[1]) && AI.resolveId(whose[1]) && MH.world.rooms[MH.CHAR[AI.resolveId(whose[1])].home || '']) to = MH.CHAR[AI.resolveId(whose[1])].home;
+      else if (/^(home|house|player|player'?s (house|home)|your (house|home))$/.test(to)) to = 'home';
       if (to !== 'home' && !MH.world.locations[to]) to = Object.keys(MH.world.locations).find((k) => k !== 'sky' && !k.startsWith('in_') && (MH.world.locations[k].name.toLowerCase().includes(to) || (to.length > 2 && to.includes(k)))) || '';
-      if (by && by !== 'narrator' && present.has(by) && to) out.drag = { by, to };
+      if (by && by !== 'narrator' && present.has(by) && to) out.drag = { by, to, inside: raw.drag.inside !== false };
     }
     out.hurt = convo && convo.phone ? 0 : MH.clamp(Math.round(Number(raw.hurt_player) || 0), 0, 30);
     out.allyAttacks = (Array.isArray(raw.ally_attacks) ? raw.ally_attacks : []).slice(0, 4).map((a) => ({ by: AI.resolveId(a && a.by), target: AI.resolveId(a && a.target), strength: /finish|knock|ko/i.test(a && a.strength) ? 'finisher' : /heavy|hard|big/i.test(a && a.strength) ? 'heavy' : 'light' })).filter((a) => a.by && present.has(a.by));

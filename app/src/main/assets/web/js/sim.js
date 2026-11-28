@@ -6,6 +6,7 @@
   const sim = (MH.sim = { target: null, smalltalkTimer: 20, approachTimer: 60, vibeTimer: 25, folkTimer: 8, approaching: null, pairCool: {}, lastVibe: '' });
 
   // ------------------------------------------------------------ days
+  sim.RARE_TEST_DAY = 11; // "Day 12" on screen — remove when done testing
   sim.currentGathering = function () {
     const d = MH.weekday(), h = MH.hour();
     return MH.GATHERINGS.find((g) => g.day === d && h >= g.from && h < g.to) || null;
@@ -104,9 +105,10 @@
     const ap = sim.activePlan(id);
     if (ap) return { mode: 'plan', loc: ap.loc, plan: ap };
     if (MH.fight && MH.fight.isHurt(MH.npcById[id]) && id !== 'owl') return { mode: 'out', loc: 'clinic', hurt: true };
-    if (ch.visitor && !MH.state.today[ch.visitor]) return { mode: 'away', loc: 'sky' };
+    const testDay = MH.state.time.day === sim.RARE_TEST_DAY; // TEST (player asked): Gojo & Sukuna on Day 12
+    if (ch.visitor && !MH.state.today[ch.visitor] && !(testDay && ch.rare)) return { mode: 'away', loc: 'sky' };
     if (id === 'scarecrow') return { mode: 'out', loc: MH.state.today.scarecrowSpot || 'paddies' };
-    if (id === 'gojo' || id === 'sukuna') { const cl = MH.state.today.clash; if (cl && h >= cl.from && h < cl.to) return { mode: 'out', loc: cl.loc, clash: true }; }
+    if (id === 'gojo' || id === 'sukuna') { const cl = MH.state.today.clash || (testDay ? { loc: 'scrub', from: 15, to: 17 } : null); if (cl && h >= cl.from && h < cl.to) { if (!MH.state.today.clash) MH.state.today.clash = cl; return { mode: 'out', loc: cl.loc, clash: true }; } }
     const g = MH.GATHERINGS.find((x) => x.day === d && h >= x.from && h < x.to && x.who.includes(id));
     if (g) return { mode: 'out', loc: g.at, gathering: g.name };
     let sched = ch.schedule;
@@ -194,7 +196,8 @@
         if (e.ch.visitor) {
           const s = MH.world.randomSpot(p.loc); e.setTile(s.tx, s.ty); e.hidden = false; MH.render.burst(e.x, e.y - 20, 'sparkle', 14);
           const where = MH.world.locations[p.loc] ? MH.world.locations[p.loc].name : 'town';
-          if (e.ch.rare) { if (MH.distTiles(e, MH.player) < 30 && !MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(e.id === 'gojo' ? 'The air goes very still. Somewhere close, someone is humming and crunching a candy.' : 'Every bird in the area goes silent at once. Something terrible is nearby.'); } }
+          if (e.ch.rare && MH.state.time.day === sim.RARE_TEST_DAY && !MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(`(Test day) ${e.ch.name} has appeared near ${where}.`); }
+          else if (e.ch.rare) { if (MH.distTiles(e, MH.player) < 30 && !MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(e.id === 'gojo' ? 'The air goes very still. Somewhere close, someone is humming and crunching a candy.' : 'Every bird in the area goes silent at once. Something terrible is nearby.'); } }
           else {
           const msg = e.id === 'nimbus' ? `A huge cloud drifts down over ${where}. Nimbus is visiting!` : e.id === 'solaris' ? `The whole sky turns golden — Solaris has come down to visit, near ${where}!` : `${e.ch.name} has shown up near ${where}.`;
           if (!MH.state.today.announced[e.id]) { MH.state.today.announced[e.id] = true; sim.vibeNow(msg); MH.social.log({ kind: 'sys', text: '✨ ' + msg }); }
@@ -1144,8 +1147,8 @@
     const R = MH.world.rooms[it.room], b = it.b, inside = sim.residentsOf(b.id);
     const awake = inside.filter((e) => !sim.sleepsNow(e.id));
     const night = MH.hour() >= 22 || MH.hour() < 6;
-    const friend = !night && !closed && awake.find((e) => MH.social.attitude(e.id) >= 35);
     const closed = !R.private && !MH.world.isOpen(R);
+    const friend = !night && !closed && awake.find((e) => MH.social.attitude(e.id) >= 35);
     const hint = (closed ? `Closed (opens ${R.open[0]}:00). ` : '') + (!inside.length ? 'Nobody seems to be inside. The door isn\'t locked…' : awake.length ? 'You can hear someone moving around inside.' : 'All dark and quiet. Someone is snoring.');
     const h = (html) => { const t2 = document.createElement('template'); t2.innerHTML = html.trim(); return t2.content.firstElementChild; };
     const body = h(`<div class="menu"><p class="muted">${hint}</p>${inside.length ? '<button class="btn" data-a="knock">🚪 Knock</button>' : ''}${friend ? `<button class="btn" data-a="go">🏠 Go in — ${MH.esc(friend.ch.name)} won't mind</button>` : ''}<button class="btn ghost" data-a="sneak">🤫 ${inside.length ? 'Sneak in' : 'Let yourself in'}</button></div>`);
